@@ -8,4 +8,4 @@
 /**
  * Privacy tier tag carried by every message in the system. Enforced at the model router (see §16).
  */
-export type PrivacyTier = 'local_only' | 'cloud_eligible' | 'cloud_any';
+export type PrivacyTier = "local_only" | "cloud_eligible" | "cloud_any";

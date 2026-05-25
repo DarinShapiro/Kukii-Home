@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentihome.io/schemas/v1/events/vlm-request.schema.json",
+  "title": "VLMRequest",
+  "description": "Request to the VLM router. Assembled by the triage worker from EnrichedEvent + context. See §09.",
+  "type": "object",
+  "required": ["request_id", "event_id", "frames", "prompt", "privacy_tier"],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "event_id": { "type": "string", "minLength": 1 },
+    "trace_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "type": "string" }
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Pre-assembled prompt including persona, context, rules, identity hints."
+    },
+    "world_state": {
+      "type": "object",
+      "description": "Snapshot of HA-derived world state at event time.",
+      "additionalProperties": true
+    },
+    "rules_in_scope": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Top-K rules that may fire (retrieved via hybrid SQL+ANN)."
+    },
+    "preferred_backend": {
+      "type": "string",
+      "description": "Optional backend affinity hint (e.g. 'local-ollama', 'cloud-anthropic')."
+    },
+    "privacy_tier": {
+      "type": "string",
+      "enum": ["local_only", "cloud_eligible", "cloud_any"]
+    },
+    "max_latency_ms": { "type": "integer", "minimum": 100 }
+  }
+}

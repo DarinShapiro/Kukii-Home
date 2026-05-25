@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentihome.io/schemas/v1/events/action-event.schema.json",
+  "title": "ActionEvent",
+  "description": "Dispatched device action or notification. Published to the ACTIONS stream by services/core. See §15.",
+  "type": "object",
+  "required": ["action_id", "action_type", "event_id"],
+  "additionalProperties": false,
+  "properties": {
+    "action_id": { "type": "string", "minLength": 1 },
+    "event_id": { "type": "string", "description": "Source event that triggered this action." },
+    "trace_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "action_type": {
+      "type": "string",
+      "enum": [
+        "notify_push",
+        "notify_speak",
+        "ask",
+        "ha_service_call",
+        "memory_write",
+        "session_open",
+        "session_close"
+      ]
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["tier_0_silent", "tier_1_in_app", "tier_2_push", "tier_3_wake", "tier_4_emergency"]
+    },
+    "targets": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "message": { "type": "string" },
+    "evidence_ref": {
+      "type": "string",
+      "description": "URI of evidence frame/clip/montage."
+    },
+    "ha_service": {
+      "type": "object",
+      "description": "For action_type=ha_service_call.",
+      "additionalProperties": true,
+      "properties": {
+        "domain": { "type": "string" },
+        "service": { "type": "string" },
+        "entity_id": { "type": "string" },
+        "data": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "rules_fired": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "policy_gate_required": { "type": "boolean" }
+  }
+}

@@ -21,15 +21,15 @@ export interface TriggerEvent {
    * Which adapter/poller emitted this event.
    */
   source:
-    | 'adapter-rtsp-direct'
-    | 'adapter-agent-dvr'
-    | 'adapter-frigate'
-    | 'adapter-blueiris'
-    | 'adapter-synology'
-    | 'adapter-qnap'
-    | 'adapter-unifi'
-    | 'ha-poller'
-    | 'synthetic';
+    | "adapter-rtsp-direct"
+    | "adapter-agent-dvr"
+    | "adapter-frigate"
+    | "adapter-blueiris"
+    | "adapter-synology"
+    | "adapter-qnap"
+    | "adapter-unifi"
+    | "ha-poller"
+    | "synthetic";
   /**
    * Event timestamp from the camera/NVR (ISO 8601 UTC).
    */
@@ -41,15 +41,7 @@ export interface TriggerEvent {
   /**
    * What kind of trigger this is.
    */
-  event_type?:
-    | 'motion'
-    | 'person'
-    | 'vehicle'
-    | 'animal'
-    | 'package'
-    | 'doorbell'
-    | 'ai-event'
-    | 'synthetic';
+  event_type?: "motion" | "person" | "vehicle" | "animal" | "package" | "doorbell" | "ai-event" | "synthetic";
   /**
    * If the NVR/camera supplied an on-camera AI assessment, surface it (low-bar signal that VLM may confirm/override).
    */
@@ -68,7 +60,7 @@ export interface TriggerEvent {
   /**
    * Privacy tier (mirrors common/privacy-tier.schema.json — inlined here until Epic 02 introduces a robust $ref resolver in the codegen pipeline).
    */
-  privacy_tier: 'local_only' | 'cloud_eligible' | 'cloud_any';
+  privacy_tier: "local_only" | "cloud_eligible" | "cloud_any";
   /**
    * Retention policy for any frames/clips attached to this event.
    */

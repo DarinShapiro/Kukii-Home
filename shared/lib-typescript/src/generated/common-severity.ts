@@ -8,4 +8,4 @@
 /**
  * Rule severity level (see §10).
  */
-export type Severity = 'info' | 'warning' | 'alert';
+export type Severity = "info" | "warning" | "alert";

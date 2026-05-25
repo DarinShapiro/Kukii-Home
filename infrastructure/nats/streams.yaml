@@ -1,0 +1,173 @@
+# SentiHome — NATS JetStream stream + consumer declarations.
+#
+# Applied at boot by services/core (or by `nats stream add` for manual setup).
+# See: docs/architecture/03-event-bus-and-queueing.md
+#
+# Stream/consumer naming convention:
+#   stream:   UPPER_SNAKE                  (e.g. EVENTS, SESSIONS)
+#   subject:  lowercase.dot.namespaced     (e.g. vlm.urgent)
+#   consumer: stream + role                (e.g. EVENTS_triage, EVENTS_vlm_urgent)
+#
+# Retention policy notes (see §03):
+#   - vlm.* and sensor.bypass: short retention (events are time-sensitive,
+#     stale events should expire)
+#   - session.*, audit.*: long retention (forensic value)
+
+streams:
+  # ─────────────────────────────────────────────────────────────
+  # EVENTS — primary hot-path stream, four priority subjects
+  # ─────────────────────────────────────────────────────────────
+  - name: EVENTS
+    description: Camera + HA events flowing through the triage pipeline
+    subjects:
+      - 'sensor.bypass' # Tier-1 safety: smoke, CO, flood — no VLM
+      - 'vlm.urgent' # alert-tier events, sub-2s budget
+      - 'vlm.normal' # standard events
+      - 'vlm.background' # low-priority sweeps
+    retention: limits # discard policy: oldest first when limits hit
+    storage: file
+    max_age: 24h # events older than 24h are dropped
+    max_msgs: 1000000 # 1M event cap
+    max_msg_size: 1048576 # 1 MiB per event (frames go in object store, not bus)
+    duplicates: 30s # dedup window for triage worker
+
+  # ─────────────────────────────────────────────────────────────
+  # ACTIONS — outbound device-action dispatch stream
+  # ─────────────────────────────────────────────────────────────
+  - name: ACTIONS
+    description: Device actions dispatched to HA / notification surfaces
+    subjects:
+      - 'action.notify' # push / TTS / in-app
+      - 'action.device' # lights, locks, scenes, services
+      - 'action.ask' # conversational confirmation requests
+    retention: limits
+    storage: file
+    max_age: 7d # actions retained for audit + replay
+    max_msgs: 500000
+
+  # ─────────────────────────────────────────────────────────────
+  # SESSIONS — session lifecycle events (open/append/close)
+  # ─────────────────────────────────────────────────────────────
+  - name: SESSIONS
+    description: Multi-camera session lifecycle
+    subjects:
+      - 'session.opened'
+      - 'session.segment'
+      - 'session.closed'
+    retention: limits
+    storage: file
+    max_age: 30d
+    max_msgs: 200000
+
+  # ─────────────────────────────────────────────────────────────
+  # AUDIT — privacy egress + rule fires + identity decisions
+  # ─────────────────────────────────────────────────────────────
+  - name: AUDIT
+    description: Audit log (cloud egress, rule fires, identity decisions)
+    subjects:
+      - 'audit.cloud_egress'
+      - 'audit.rule_fire'
+      - 'audit.rule_dismiss'
+      - 'audit.identity_decision'
+    retention: limits
+    storage: file
+    max_age: 365d # 1yr default (see §16 retention)
+    max_msgs: 10000000 # 10M cap (older entries archived to cold storage)
+
+consumers:
+  # ─────────────────────────────────────────────────────────────
+  # EVENTS consumers
+  # ─────────────────────────────────────────────────────────────
+  - stream: EVENTS
+    name: triage
+    description: Triage worker — dedup, score, route to priority tier
+    filter_subject: 'vlm.*'
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 30s
+    max_deliver: 3
+    max_ack_pending: 100
+
+  - stream: EVENTS
+    name: sensor_bypass
+    description: Tier-1 safety bypass — direct to action dispatcher
+    filter_subject: 'sensor.bypass'
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 5s # safety events must ack fast
+    max_deliver: 5
+    max_ack_pending: 50
+
+  - stream: EVENTS
+    name: vlm_urgent_worker
+    description: VLM worker, urgent tier (2s budget)
+    filter_subject: 'vlm.urgent'
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 10s
+    max_deliver: 2
+    max_ack_pending: 5 # urgent events processed one-at-a-time per worker
+
+  - stream: EVENTS
+    name: vlm_normal_worker
+    description: VLM worker, normal tier
+    filter_subject: 'vlm.normal'
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 30s
+    max_deliver: 2
+    max_ack_pending: 20
+
+  - stream: EVENTS
+    name: vlm_background_worker
+    description: VLM worker, background tier
+    filter_subject: 'vlm.background'
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 120s
+    max_deliver: 1
+    max_ack_pending: 50
+
+  # ─────────────────────────────────────────────────────────────
+  # ACTIONS consumers
+  # ─────────────────────────────────────────────────────────────
+  - stream: ACTIONS
+    name: notify_dispatcher
+    description: Notification dispatcher (push, TTS, ask)
+    filter_subject: 'action.notify'
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 10s
+    max_deliver: 3
+
+  - stream: ACTIONS
+    name: ha_dispatcher
+    description: HA device action executor
+    filter_subject: 'action.device'
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 5s
+    max_deliver: 3
+
+  # ─────────────────────────────────────────────────────────────
+  # SESSIONS consumers
+  # ─────────────────────────────────────────────────────────────
+  - stream: SESSIONS
+    name: session_manager
+    description: Session/journey manager (memory write coordinator)
+    filter_subject: 'session.*'
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 30s
+
+  # ─────────────────────────────────────────────────────────────
+  # AUDIT consumers
+  # ─────────────────────────────────────────────────────────────
+  - stream: AUDIT
+    name: audit_archiver
+    description: Background archiver — writes audit events to SQL
+    filter_subject: 'audit.*'
+    deliver_policy: all
+    ack_policy: explicit
+    ack_wait: 60s
+    max_ack_pending: 1000 # high throughput, eventual consistency
