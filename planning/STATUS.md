@@ -2,10 +2,10 @@
 
 > **Resumption document** for agents continuing implementation work. This is a snapshot of where the code is, what's done, what's next, and the conventions established so far.
 
-**Last updated:** 2026-05-25
+**Last updated:** 2026-05-25 (Epic 6 closed)
 **Branch:** `main`
 **CI status:** ✅ green
-**Tests:** 130 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
+**Tests:** 197 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
 
 ---
 
@@ -31,12 +31,12 @@ cd SentiHome
 
 ## Progress summary
 
-| Status                       | Count            |
-| ---------------------------- | ---------------- |
-| Epics closed                 | 4 of 16 (25%)    |
-| Sub-issues closed            | 67 of 264 (~25%) |
-| Architecture sections stable | 23 of 23 (100%)  |
-| Foundation infrastructure    | Complete         |
+| Status                       | Count             |
+| ---------------------------- | ----------------- |
+| Epics closed                 | 6 of 16 (38%)     |
+| Sub-issues closed            | 104 of 264 (~39%) |
+| Architecture sections stable | 23 of 23 (100%)   |
+| Foundation infrastructure    | Complete          |
 
 ### Closed epics
 
@@ -46,14 +46,14 @@ cd SentiHome
 | #16 | Event Bus & Messaging               | 9/9        | NATS JetStream config (4 streams + 9 consumers), `sentihome_shared.bus.Bus` with schema-validated pub/sub + trace propagation, triage worker with dedup + tiered routing + backpressure load shedding |
 | #26 | NVR Adapter Layer                   | 19/19      | `NVRAdapter` ABC, 7 platform adapters (rtsp-direct, agent-dvr, frigate fully fleshed; blueiris partially; synology, qnap, unifi as v1.x skeletons), `AdapterRegistry` with env-driven bootstrap       |
 | #46 | Preprocessing & Detection           | 21/21      | Real OpenCV MOG2 motion detection with temporal/size/zone/environmental filtering, on-camera AI corroboration, in-memory metadata cache, `Detector` facade with stubbed ML model registry             |
+| #68 | VLM Router & Inference              | 13/13      | Multi-backend router (Ollama/vLLM/Cloud OpenAI-compatible), routing policy with privacy enforcement + affinity + cost/latency scoring, 3-state circuit breaker, fallback chain, telemetry, response repair |
+| #82 | Memory & Storage                    | 22/22      | SQLAlchemy ORM (11 tables across 5 memory layers), Alembic migration tooling, MemoryStore facade (sessions, hybrid rule retrieval, episodic, visit ledger, identity), retention + soft-delete + grace |
 
 ### Open epics (in dependency order)
 
 | #    | Epic                                       | Sub-issues | Notes                                                                                                                                                                 |
 | ---- | ------------------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #68  | VLM Router & Inference                     | #69-#81    | **Start here.** Multi-backend router; Ollama integration; circuit breaker. Schemas (`vlm-request.schema.json`, `vlm-response.schema.json`) already exist from Epic 2. |
-| #82  | Memory & Storage                           | #83-#104   | Postgres + Qdrant. Alembic migrations. SQL schemas for sessions/rules/identity/audit. Vector collections. Memory MCP server.                                          |
-| #105 | Rule Engine & Conversational Rule Creation | #106-#116  | Hybrid retrieval (SQL+ANN), conflict resolution, NL→rule parsing, default rule pack.                                                                                  |
+| #105 | Rule Engine & Conversational Rule Creation | #106-#116  | **Start here.** Hybrid retrieval already in MemoryStore; build conflict resolution, NL→rule parsing, default rule pack.                                               |
 | #117 | Action Dispatch & Alerting                 | #118-#133  | Tier 0–4 escalation, quiet hours, occupancy routing, ask flow, policy gate, remediation registry, deeper-assessment loop.                                             |
 | #134 | Home Assistant Integration                 | #135-#156  | `services/ha-agent` (read+write MCP), `ha-integration/` custom HA component (entities, services, events).                                                             |
 | #157 | Identity & Recognition                     | #158-#174  | Multi-modal identity, multi-camera fusion, stereo verification, temporal evidence accumulation, retroactive re-eval.                                                  |
@@ -90,8 +90,8 @@ SentiHome/
 │   ├── core/                Triage worker + adapter registry  (REAL)
 │   ├── preprocessor/        MOG2 motion + corroboration + cache  (REAL)
 │   ├── detector/            Model facade (YOLO/face/reid/pose stubs)  (FACADE+STUBS)
-│   ├── vlm-router/          Skeleton (no implementation yet)  (SKELETON)
-│   ├── memory/              Skeleton  (SKELETON)
+│   ├── vlm-router/          Multi-backend router + policy + breaker + telemetry  (REAL)
+│   ├── memory/              ORM + Alembic + MemoryStore facade  (REAL)
 │   ├── ha-agent/            Skeleton  (SKELETON)
 │   └── notify/              Skeleton  (SKELETON)
 │
@@ -288,7 +288,9 @@ These are captured in `docs/architecture/20-open-questions.md`; don't re-litigat
 | 2 (Event Bus)     | triage worker                                                                        | 23 + integration                 |
 | 3 (NVR Adapters)  | rtsp-direct, agent-dvr, frigate, blueiris, synology, qnap, unifi, registry, contract | 53                               |
 | 4 (Preprocessing) | motion, corroboration, cache, detector facade                                        | 31                               |
-| **Total**         |                                                                                      | **130 unit + integration suite** |
+| 5 (VLM Router)    | breaker, telemetry, policy, router, response_repair                                  | 39                               |
+| 6 (Memory)        | ORM models (all 11 tables), retention policy, MemoryStore facade                     | 30                               |
+| **Total**         |                                                                                      | **197 unit + integration suite** |
 
 ---
 
