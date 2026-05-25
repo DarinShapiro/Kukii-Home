@@ -2,10 +2,10 @@
 
 > **Resumption document** for agents continuing implementation work. This is a snapshot of where the code is, what's done, what's next, and the conventions established so far.
 
-**Last updated:** 2026-05-25 (Epic 7 closed)
+**Last updated:** 2026-05-25 (Epic 8 closed)
 **Branch:** `main`
 **CI status:** ✅ green
-**Tests:** 229 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
+**Tests:** 274 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
 
 ---
 
@@ -33,8 +33,8 @@ cd SentiHome
 
 | Status                       | Count             |
 | ---------------------------- | ----------------- |
-| Epics closed                 | 7 of 16 (44%)     |
-| Sub-issues closed            | 116 of 264 (~44%) |
+| Epics closed                 | 8 of 16 (50%)     |
+| Sub-issues closed            | 132 of 264 (~50%) |
 | Architecture sections stable | 23 of 23 (100%)   |
 | Foundation infrastructure    | Complete          |
 
@@ -49,13 +49,13 @@ cd SentiHome
 | #68  | VLM Router & Inference                     | 13/13      | Multi-backend router (Ollama/vLLM/Cloud OpenAI-compatible), routing policy with privacy enforcement + affinity + cost/latency scoring, 3-state circuit breaker, fallback chain, telemetry, response repair |
 | #82  | Memory & Storage                           | 22/22      | SQLAlchemy ORM (11 tables across 5 memory layers), Alembic migration tooling, MemoryStore facade (sessions, hybrid rule retrieval, episodic, visit ledger, identity), retention + soft-delete + grace      |
 | #105 | Rule Engine & Conversational Rule Creation | 11/11      | RuleEvaluator (all §10 conditions + temporal), ConflictResolver (scope+severity+suppression), heuristic NL RuleParser, DEFAULT_RULE_PACK with Tier-1 safety                                                |
+| #117 | Action Dispatch & Alerting                 | 16/16      | TierRouter (Tier 0-4) + EscalationEngine + Quiet hours/Occupancy/DND routing + last-responder mitigation + PolicyGate (auto/gated/blocked) + PreApproval + RemediationRegistry + DeeperAssessmentLoop + Explanation + AckTracker + Push/TTS/Ask notify dispatchers |
 
 ### Open epics (in dependency order)
 
 | #    | Epic                         | Sub-issues | Notes                                                                                                                                                                   |
 | ---- | ---------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #117 | Action Dispatch & Alerting   | #118-#133  | **Start here.** Tier 0–4 escalation, quiet hours, occupancy routing, ask flow, policy gate, remediation registry, deeper-assessment loop. Rule engine already complete. |
-| #134 | Home Assistant Integration   | #135-#156  | `services/ha-agent` (read+write MCP), `ha-integration/` custom HA component (entities, services, events).                                                               |
+| #134 | Home Assistant Integration   | #135-#156  | **Start here.** `services/ha-agent` (read+write MCP), `ha-integration/` custom HA component. Push/TTS in notify already invoke HA via injected caller — wire it. |
 | #157 | Identity & Recognition       | #158-#174  | Multi-modal identity, multi-camera fusion, stereo verification, temporal evidence accumulation, retroactive re-eval.                                                    |
 | #175 | Feedback-Driven Optimization | #176-#192  | Variant generator + replay engine + 4-phase rollout (silent → shadow → gradual → full) + rollback triggers.                                                             |
 | #193 | Observability & Diagnostics  | #194-#207  | Metrics taxonomy, time-series storage, distributed tracing, AI synthesis layer, replay tooling.                                                                         |
@@ -291,7 +291,8 @@ These are captured in `docs/architecture/20-open-questions.md`; don't re-litigat
 | 5 (VLM Router)    | breaker, telemetry, policy, router, response_repair                                          | 39                               |
 | 6 (Memory)        | ORM models (all 11 tables), retention policy, MemoryStore facade                             | 30                               |
 | 7 (Rule Engine)   | RuleEvaluator (12), ConflictResolver (6), RuleParser NL (7), default pack (2), lifecycle (4) | 32                               |
-| **Total**         |                                                                                              | **229 unit + integration suite** |
+| 8 (Action Dispatch) | dispatch (core: tier/quiet/occupancy/policy/remediation/escalation/ack/explanation) + notify (push/tts/ask) + integration | 45 unit + 4 integration          |
+| **Total**         |                                                                                              | **274 unit + integration suite** |
 
 ---
 
@@ -327,4 +328,4 @@ gh run watch "$RUN_ID" --repo DarinShapiro/SentiHome --exit-status
 
 ---
 
-**Next session — pick up at Epic 5 (#68 VLM Router & Inference).** Good luck.
+**Next session — pick up at Epic 9 (#134 Home Assistant Integration).** Good luck.
