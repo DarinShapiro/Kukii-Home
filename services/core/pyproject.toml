@@ -6,6 +6,9 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
     "sentihome-shared",
+    "sentihome-adapter-rtsp-direct",
+    "sentihome-adapter-agent-dvr",
+    "sentihome-adapter-frigate",
     "nats-py>=2.9.0",
     "pydantic>=2.9.0",
     "structlog>=24.4.0",

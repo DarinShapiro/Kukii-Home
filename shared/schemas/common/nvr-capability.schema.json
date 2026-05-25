@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentihome.io/schemas/v1/common/nvr-capability.schema.json",
+  "title": "NVRCapability",
+  "description": "Per-camera capability matrix advertised by an NVR adapter. Used by SentiHome core for routing decisions (which features are available where).",
+  "type": "object",
+  "required": ["camera_id", "preprocessing_mode"],
+  "additionalProperties": false,
+  "properties": {
+    "camera_id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string" },
+    "preprocessing_mode": {
+      "type": "string",
+      "enum": ["native", "built-in", "service", "direct"],
+      "description": "Where preprocessing runs for this camera. See §03.5."
+    },
+    "has_on_camera_ai": { "type": "boolean", "default": false },
+    "supported_events": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["motion", "person", "vehicle", "animal", "package", "doorbell", "ai-event"]
+      }
+    },
+    "max_resolution": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1 },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[width, height] of the main stream."
+    },
+    "fps": { "type": "integer", "minimum": 1 },
+    "ptz": { "type": "boolean", "default": false },
+    "audio": { "type": "boolean", "default": false },
+    "stream_profiles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Available stream profile names (e.g. 'main', 'substream', 'mobile')."
+    },
+    "rtsp_url": {
+      "type": "string",
+      "description": "Direct RTSP URL when available (omitted for service-mode adapters that proxy through a preprocessor)."
+    }
+  }
+}

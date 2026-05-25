@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentihome.io/schemas/v1/common/frame-window.schema.json",
+  "title": "FrameWindow",
+  "description": "Result of nvr.get_frame_window — selected frames + preprocessing metadata for a time range on a single camera.",
+  "type": "object",
+  "required": ["camera_id", "ts_start", "ts_end", "frames"],
+  "additionalProperties": false,
+  "properties": {
+    "camera_id": { "type": "string" },
+    "ts_start": { "type": "string", "format": "date-time" },
+    "ts_end": { "type": "string", "format": "date-time" },
+    "frames": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "required": ["uri", "timestamp"],
+        "additionalProperties": true,
+        "properties": {
+          "uri": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "width": { "type": "integer" },
+          "height": { "type": "integer" }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "motion_regions": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 4,
+            "maxItems": 4
+          }
+        },
+        "detections": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "preprocessing_mode": {
+          "type": "string",
+          "enum": ["native", "built-in", "service", "direct"]
+        },
+        "preprocessing_latency_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

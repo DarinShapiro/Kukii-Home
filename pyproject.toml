@@ -55,6 +55,13 @@ sentihome-vlm-router = { workspace = true }
 sentihome-memory = { workspace = true }
 sentihome-ha-agent = { workspace = true }
 sentihome-notify = { workspace = true }
+sentihome-adapter-rtsp-direct = { workspace = true }
+sentihome-adapter-agent-dvr = { workspace = true }
+sentihome-adapter-frigate = { workspace = true }
+sentihome-adapter-blueiris = { workspace = true }
+sentihome-adapter-synology = { workspace = true }
+sentihome-adapter-qnap = { workspace = true }
+sentihome-adapter-unifi = { workspace = true }
 
 # ────────────────────────────────────────────────────────────────
 # Linting & formatting (ruff)
@@ -94,6 +101,18 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S", "ARG"]
 "scripts/**" = ["T20"]  # scripts can use print
+# Adapter base class has methods with intentionally-unused args in default
+# `raise UnsupportedCapability` implementations; concrete subclasses use them.
+"shared/lib-python/src/sentihome_shared/adapter/base.py" = ["ARG002"]
+# Skeleton adapters (Synology/QNAP/UniFi) have intentionally-unused args in
+# placeholder methods that all raise AdapterError pending full implementation.
+"adapters/nvr-synology/src/**" = ["ARG002"]
+"adapters/nvr-qnap/src/**" = ["ARG002"]
+"adapters/nvr-unifi/src/**" = ["ARG002"]
+"adapters/nvr-blueiris/src/**" = ["ARG002"]
+"adapters/nvr-agent-dvr/src/**" = ["ARG002"]
+"adapters/nvr-frigate/src/**" = ["ARG002"]
+"adapters/nvr-rtsp-direct/src/**" = ["ARG002"]
 
 [tool.ruff.format]
 quote-style = "double"
