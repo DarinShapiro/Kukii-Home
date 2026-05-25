@@ -1,0 +1,67 @@
+name: Nightly e2e
+
+on:
+  schedule:
+    # 06:00 UTC daily
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: End-to-end tests (recorded fixtures)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history for any release-tagging logic
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.11.16"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Sync workspace
+        run: uv sync --all-packages --frozen
+
+      - name: Bring up dev stack (Docker)
+        run: |
+          if [[ -f "infrastructure/docker/dev.yml" ]]; then
+            docker compose -f infrastructure/docker/dev.yml up -d --wait || \
+              echo "::warning::Some services still building / not yet implemented"
+          fi
+
+      - name: Run e2e suite
+        run: |
+          if [[ -d "tests/e2e" ]] && [[ -n "$(find tests/e2e -name 'test_*.py' -type f 2>/dev/null)" ]]; then
+            uv run pytest tests/e2e -m e2e -v --tb=short
+          else
+            echo "::notice::No e2e tests yet (will populate as epics ship)"
+          fi
+
+      - name: Capture compose logs on failure
+        if: failure()
+        run: |
+          if command -v docker &> /dev/null && [[ -f "infrastructure/docker/dev.yml" ]]; then
+            docker compose -f infrastructure/docker/dev.yml logs > /tmp/compose-logs.txt
+          fi
+
+      - name: Upload logs artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-logs
+          path: /tmp/compose-logs.txt
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: |
+          if command -v docker &> /dev/null && [[ -f "infrastructure/docker/dev.yml" ]]; then
+            docker compose -f infrastructure/docker/dev.yml down -v
+          fi

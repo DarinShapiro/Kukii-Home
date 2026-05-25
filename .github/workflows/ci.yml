@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+  UV_VERSION: "0.11.16"
+  PNPM_VERSION: "11.3.0"
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Python: lint + unit tests
+  # ──────────────────────────────────────────────────────────────
+  python:
+    name: Python lint + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync workspace
+        run: uv sync --all-packages --frozen
+
+      - name: Ruff lint
+        run: uv run ruff check services/ adapters/ shared/lib-python/
+
+      - name: Ruff format check
+        run: uv run ruff format --check services/ adapters/ shared/lib-python/
+
+      # mypy intentionally disabled until services have real implementations
+      # - name: mypy
+      #   run: uv run mypy services/ adapters/ shared/lib-python/
+
+      - name: pytest (unit)
+        run: uv run pytest services/ adapters/ shared/lib-python/ -q -m "not slow and not integration and not e2e"
+
+  # ──────────────────────────────────────────────────────────────
+  # TypeScript: lint + typecheck + unit tests
+  # ──────────────────────────────────────────────────────────────
+  typescript:
+    name: TypeScript lint + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Prettier format check
+        run: pnpm format:check
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: TypeScript typecheck
+        run: pnpm typecheck
+
+      - name: vitest (unit)
+        run: pnpm -r test
+
+  # ──────────────────────────────────────────────────────────────
+  # Architecture doc validation
+  # ──────────────────────────────────────────────────────────────
+  docs:
+    name: Architecture docs sanity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify all architecture sections exist
+        run: |
+          set -e
+          expected=(
+            "01-overview" "02-high-level-architecture" "03-event-bus-and-queueing"
+            "03.5-nvr-adapter-layer" "04-model-router-and-inference" "05-event-schema"
+            "06-agent-orchestration" "07-tool-layer-mcp" "08-detection-pipeline"
+            "09-vlm-prompt-contract" "10-rule-schema-and-retrieval"
+            "10.5-feedback-driven-rule-optimization" "11-memory-model"
+            "12-recognition-and-identity" "12.5-dynamic-identity-refinement"
+            "13-camera-area-zone-model" "14-calibration" "15-alerting-and-actions"
+            "16-privacy-and-governance" "17-observability" "18-hardware-sizing"
+            "19-failure-modes" "20-open-questions"
+          )
+          for section in "${expected[@]}"; do
+            if [[ ! -f "docs/architecture/${section}.md" ]]; then
+              echo "::error::Missing architecture section: docs/architecture/${section}.md"
+              exit 1
+            fi
+          done
+          echo "✓ All 23 architecture sections present"
