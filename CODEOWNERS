@@ -1,0 +1,8 @@
+# SentiHome code owners
+# Everything defaults to the maintainer until the project grows a team.
+
+*       @DarinShapiro
+
+# Architecture docs require explicit review to prevent drift
+/docs/architecture/   @DarinShapiro
+/docs/ARCHITECTURE-CLARIFICATION.md   @DarinShapiro

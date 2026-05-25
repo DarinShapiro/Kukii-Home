@@ -1,0 +1,103 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv/
+venv/
+env/
+.python-version
+.uv/
+uv.lock
+
+# --- Node / TypeScript ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm
+.eslintcache
+.parcel-cache
+.next
+.nuxt
+.cache
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# --- Editors / IDEs ---
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Test artifacts ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.log
+.hypothesis/
+
+# --- Local data & secrets ---
+.env
+.env.local
+.env.*.local
+*.local
+secrets/
+credentials/
+*.pem
+*.key
+
+# --- Docker volumes / runtime data ---
+data/
+volumes/
+sentihome-data/
+*.sqlite
+*.db
+*.db-journal
+
+# --- ML model weights (large; managed separately) ---
+models/weights/
+*.onnx
+*.pt
+*.pth
+*.safetensors
+*.gguf
+
+# --- Recorded test fixtures (large; use Git LFS if needed) ---
+tests/fixtures/clips/*.mp4
+tests/fixtures/clips/*.mkv
+tests/fixtures/clips/*.h264
+
+# --- Generated artifacts (not committed) ---
+shared/lib-python/generated/
+shared/lib-typescript/generated/
