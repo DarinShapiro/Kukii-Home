@@ -67,6 +67,7 @@ extend-exclude = [
     "**/.venv/**",
     "**/build/**",
     "**/dist/**",
+    "**/node_modules/**",
 ]
 
 [tool.ruff.lint]

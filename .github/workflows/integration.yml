@@ -45,11 +45,8 @@ jobs:
         image: qdrant/qdrant:v1.12.4
         ports:
           - 6333:6333
-        options: >-
-          --health-cmd "wget -qO- http://localhost:6333/healthz"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        # No healthcheck — qdrant image doesn't ship wget/curl. Tests
+        # responsible for waiting on readiness via the qdrant client.
 
       redis:
         image: redis:7-alpine

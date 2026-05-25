@@ -74,7 +74,7 @@ jobs:
           cache: pnpm
 
       - name: pnpm install
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Prettier format check
         run: pnpm format:check
