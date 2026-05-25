@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
     "sentihome-shared",
+    "sentihome-memory",
     "sentihome-adapter-rtsp-direct",
     "sentihome-adapter-agent-dvr",
     "sentihome-adapter-frigate",

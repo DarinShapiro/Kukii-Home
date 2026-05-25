@@ -1896,6 +1896,7 @@ dependencies = [
     { name = "sentihome-adapter-agent-dvr" },
     { name = "sentihome-adapter-frigate" },
     { name = "sentihome-adapter-rtsp-direct" },
+    { name = "sentihome-memory" },
     { name = "sentihome-shared" },
     { name = "structlog" },
 ]
@@ -1909,6 +1910,7 @@ requires-dist = [
     { name = "sentihome-adapter-agent-dvr", editable = "adapters/nvr-agent-dvr" },
     { name = "sentihome-adapter-frigate", editable = "adapters/nvr-frigate" },
     { name = "sentihome-adapter-rtsp-direct", editable = "adapters/nvr-rtsp-direct" },
+    { name = "sentihome-memory", editable = "services/memory" },
     { name = "sentihome-shared", editable = "shared/lib-python" },
     { name = "structlog", specifier = ">=24.4.0" },
 ]
