@@ -1,0 +1,196 @@
+# SentiHome — Development docker-compose stack
+#
+# Brings up the full runtime locally with hot-reload-friendly bind mounts
+# and dev-friendly defaults. NOT FOR PRODUCTION USE.
+#
+# Usage:
+#   docker compose -f infrastructure/docker/dev.yml up
+#   docker compose -f infrastructure/docker/dev.yml down
+#   docker compose -f infrastructure/docker/dev.yml logs -f <service>
+#
+# Service implementations land in subsequent epics. Until then, this file
+# is the canonical declaration of which services exist, their network names,
+# port mappings, and dependency edges.
+
+name: sentihome-dev
+
+# ───────────────────────────────────────────────────────────────
+# Shared definitions (compose anchors)
+# ───────────────────────────────────────────────────────────────
+x-python-service: &python-service
+  build:
+    context: ../..
+    dockerfile: infrastructure/docker/python-service.Dockerfile
+  restart: unless-stopped
+  environment:
+    - SENTIHOME_ENV=dev
+    - NATS_URL=nats://nats:4222
+    - LOG_LEVEL=DEBUG
+    - PYTHONUNBUFFERED=1
+  volumes:
+    - ../../shared:/app/shared:ro
+    - ../../services:/app/services:ro
+    - ../../adapters:/app/adapters:ro
+  networks:
+    - sentihome
+
+# ───────────────────────────────────────────────────────────────
+# Infrastructure services
+# ───────────────────────────────────────────────────────────────
+services:
+  nats:
+    image: nats:2.11-alpine
+    container_name: sentihome-nats
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"   # client connections
+      - "8222:8222"   # monitoring
+    volumes:
+      - nats-data:/data
+    networks:
+      - sentihome
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: sentihome-postgres
+    environment:
+      POSTGRES_USER: sentihome
+      POSTGRES_PASSWORD: sentihome
+      POSTGRES_DB: sentihome
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - sentihome
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentihome"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: sentihome-qdrant
+    ports:
+      - "6333:6333"   # REST
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - sentihome
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: sentihome-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - sentihome
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ───────────────────────────────────────────────────────────────
+  # SentiHome services (implementation tracked in respective epics)
+  # ───────────────────────────────────────────────────────────────
+  # NOTE: All `command` directives below are placeholders that fail until
+  # their tracking epics ship. The compose file is correct; the service
+  # entry points raise NotImplementedError. This is intentional during scaffolding.
+
+  core:
+    <<: *python-service
+    container_name: sentihome-core
+    command: ["python", "-m", "sentihome_core"]
+    depends_on:
+      nats:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  preprocessor:
+    <<: *python-service
+    container_name: sentihome-preprocessor
+    command: ["python", "-m", "sentihome_preprocessor"]
+    depends_on:
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  detector:
+    <<: *python-service
+    container_name: sentihome-detector
+    command: ["python", "-m", "sentihome_detector"]
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  vlm-router:
+    <<: *python-service
+    container_name: sentihome-vlm-router
+    command: ["python", "-m", "sentihome_vlm_router"]
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  memory:
+    <<: *python-service
+    container_name: sentihome-memory
+    command: ["python", "-m", "sentihome_memory"]
+    depends_on:
+      nats:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  ha-agent:
+    <<: *python-service
+    container_name: sentihome-ha-agent
+    command: ["python", "-m", "sentihome_ha_agent"]
+    environment:
+      - SENTIHOME_ENV=dev
+      - NATS_URL=nats://nats:4222
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+      # User-supplied via .env file (not committed):
+      - HA_URL=${HA_URL:-http://homeassistant.local:8123}
+      - HA_TOKEN=${HA_TOKEN:-}
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  notify:
+    <<: *python-service
+    container_name: sentihome-notify
+    command: ["python", "-m", "sentihome_notify"]
+    depends_on:
+      nats:
+        condition: service_healthy
+
+networks:
+  sentihome:
+    name: sentihome-dev
+    driver: bridge
+
+volumes:
+  nats-data:
+  postgres-data:
+  qdrant-data:
+  redis-data:

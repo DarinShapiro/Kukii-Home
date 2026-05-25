@@ -1,0 +1,98 @@
+# SentiHome — Production docker-compose overrides
+#
+# Layer this on top of dev.yml for production deployment:
+#   docker compose -f infrastructure/docker/dev.yml \
+#                  -f infrastructure/docker/prod.yml \
+#                  up -d
+#
+# Differences from dev.yml:
+#  - LOG_LEVEL=INFO (was DEBUG)
+#  - Volume mounts removed (code is baked into the image, no bind mounts)
+#  - Restart policy stays unless-stopped but services use depends_on:condition:service_healthy
+#  - Resource limits applied per service
+#  - Healthchecks on SentiHome services (added once entry points implemented)
+#  - Image tags pinned to versions, not `latest`
+
+name: sentihome
+
+x-python-service-prod: &python-service-prod
+  environment:
+    - SENTIHOME_ENV=prod
+    - LOG_LEVEL=INFO
+    - PYTHONUNBUFFERED=1
+  volumes: []          # no bind mounts; code baked into image
+  restart: always
+  deploy:
+    resources:
+      limits:
+        memory: 2G
+      reservations:
+        memory: 256M
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: sentihome
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: sentihome
+    secrets:
+      - postgres_password
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  qdrant:
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  core:
+    <<: *python-service-prod
+
+  preprocessor:
+    <<: *python-service-prod
+    deploy:
+      resources:
+        limits:
+          memory: 4G       # heavier due to frame buffering
+
+  detector:
+    <<: *python-service-prod
+    deploy:
+      resources:
+        limits:
+          memory: 4G       # ML models in memory
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]   # if available
+
+  vlm-router:
+    <<: *python-service-prod
+
+  memory:
+    <<: *python-service-prod
+
+  ha-agent:
+    <<: *python-service-prod
+    environment:
+      - SENTIHOME_ENV=prod
+      - LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+      - HA_URL=${HA_URL}
+      - HA_TOKEN_FILE=/run/secrets/ha_token
+    secrets:
+      - ha_token
+
+  notify:
+    <<: *python-service-prod
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  ha_token:
+    file: ./secrets/ha_token.txt
