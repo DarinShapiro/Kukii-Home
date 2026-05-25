@@ -1,0 +1,21 @@
+[project]
+name = "sentihome-adapter-synology"
+version = "0.1.0"
+description = "SentiHome NVR adapter: synology"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "sentihome-shared",
+    "pydantic>=2.9.0",
+    "httpx>=0.28.0",
+]
+
+[project.scripts]
+sentihome-adapter-synology = "sentihome_adapter_synology.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sentihome_adapter_synology"]

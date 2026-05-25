@@ -1,0 +1,24 @@
+[project]
+name = "sentihome-core"
+version = "0.1.0"
+description = "SentiHome orchestration brain: triage, rule engine, action dispatcher"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "sentihome-shared",
+    "nats-py>=2.9.0",
+    "pydantic>=2.9.0",
+    "structlog>=24.4.0",
+    "anyio>=4.6.0",
+    "httpx>=0.28.0",
+]
+
+[project.scripts]
+sentihome-core = "sentihome_core.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sentihome_core"]

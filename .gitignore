@@ -25,7 +25,9 @@ venv/
 env/
 .python-version
 .uv/
-uv.lock
+
+# uv.lock IS committed (reproducible builds for applications)
+# uv.lock
 
 # --- Node / TypeScript ---
 node_modules/

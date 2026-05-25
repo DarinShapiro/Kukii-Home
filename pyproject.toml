@@ -1,0 +1,154 @@
+[project]
+name = "sentihome"
+version = "0.1.0"
+description = "Vision-intelligence and rule-engine layer for Home Assistant"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Darin Shapiro" }]
+
+# This is a workspace meta-project. Real dependencies live in the
+# individual workspace members under services/, adapters/, etc.
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/DarinShapiro/SentiHome"
+Documentation = "https://github.com/DarinShapiro/SentiHome/tree/main/docs"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.0",
+    "mypy>=1.11.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "datamodel-code-generator>=0.26.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "services/core",
+    "services/preprocessor",
+    "services/detector",
+    "services/vlm-router",
+    "services/memory",
+    "services/ha-agent",
+    "services/notify",
+    "adapters/nvr-rtsp-direct",
+    "adapters/nvr-agent-dvr",
+    "adapters/nvr-frigate",
+    "adapters/nvr-blueiris",
+    "adapters/nvr-synology",
+    "adapters/nvr-qnap",
+    "adapters/nvr-unifi",
+    "ha-integration",
+    "shared/lib-python",
+]
+
+[tool.uv.sources]
+# Internal workspace dependencies — uv resolves these to the local member.
+sentihome-shared = { workspace = true }
+sentihome-core = { workspace = true }
+sentihome-preprocessor = { workspace = true }
+sentihome-detector = { workspace = true }
+sentihome-vlm-router = { workspace = true }
+sentihome-memory = { workspace = true }
+sentihome-ha-agent = { workspace = true }
+sentihome-notify = { workspace = true }
+
+# ────────────────────────────────────────────────────────────────
+# Linting & formatting (ruff)
+# ────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [
+    "**/generated/**",
+    "**/.venv/**",
+    "**/build/**",
+    "**/dist/**",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "RUF",  # ruff-specific
+    "ASYNC", # async checks
+    "S",    # bandit (security)
+    "ARG",  # unused arguments
+    "PTH",  # use pathlib
+    "T20",  # no print statements (use logger)
+]
+ignore = [
+    "S101",  # allow `assert` (we use pytest)
+    "E501",  # line too long (ruff format handles this)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S", "ARG"]
+"scripts/**" = ["T20"]  # scripts can use print
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ────────────────────────────────────────────────────────────────
+# Type checking (mypy)
+# ────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_unimported = false  # too noisy for third-party libs without stubs
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+exclude = [
+    "build/",
+    "dist/",
+    "generated/",
+    ".venv/",
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# ────────────────────────────────────────────────────────────────
+# Testing (pytest)
+# ────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+testpaths = ["tests", "services", "adapters"]
+python_files = ["test_*.py", "*_test.py"]
+asyncio_mode = "auto"
+markers = [
+    "slow: tests >5s (excluded from PR run, included nightly)",
+    "e2e: requires real external dependencies (cameras, HA, cloud VLM)",
+    "integration: cross-service tests (require docker-compose stack)",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["services", "adapters", "ha-integration/custom_components", "shared/lib-python"]
+omit = ["*/tests/*", "*/generated/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
