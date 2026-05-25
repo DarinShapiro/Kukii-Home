@@ -113,6 +113,8 @@ ignore = [
 "adapters/nvr-agent-dvr/src/**" = ["ARG002"]
 "adapters/nvr-frigate/src/**" = ["ARG002"]
 "adapters/nvr-rtsp-direct/src/**" = ["ARG002"]
+# Detector model stubs (Epic 4) have unused args until real ONNX inference lands.
+"services/detector/src/**" = ["ARG002"]
 
 [tool.ruff.format]
 quote-style = "double"
