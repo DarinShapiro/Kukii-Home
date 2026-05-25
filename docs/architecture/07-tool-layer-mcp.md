@@ -18,6 +18,7 @@ Rule of thumb: if it's a network call to another service, it's a tool. If it's i
 ## HA agent — bidirectional MCP server (device orchestration)
 
 The HA agent is the single integration point for all of Home Assistant. It is **not** the automation engine — SentiHome is. Rather, HA provides:
+
 1. **Device state truth** (queried by SentiHome for world context)
 2. **Action execution** (SentiHome dispatches actions to HA services)
 3. **User experience** (dashboards, mobile app, optional HA automations)
@@ -33,23 +34,24 @@ HA is a living platform with access to two layers of value:
 
 **Layer 2 — Third-party service integrations.** HA connects to a vast ecosystem of external services. SentiHome gains access to all of them through the single HA agent interface, with no separate integrations required:
 
-| Service category | Examples | SentiHome use |
-|-----------------|---------|---------------|
-| Calendars | Google Calendar, Apple, Outlook, CalDAV | Proactive context priming, guest expectations, scheduled preparations |
-| Weather | OpenWeatherMap, Met.no, AccuWeather | Camera quality expectations, outdoor activity context, pre-actions |
-| Messaging | SMS, WhatsApp, Telegram | Guest confirmations, delivery notifications, alert delivery channel |
-| Email | Gmail, IMAP | Delivery tracking, service appointment confirmations |
-| Delivery tracking | UPS, FedEx, USPS, Amazon | Expected package arrival, known delivery driver |
-| Energy monitoring | Utility APIs, Tibber, Octopus | Schedule device actions in off-peak windows |
-| Music / media | Spotify, Sonos | Presence signal, party mode detection |
-| Occupancy / presence | Phone GPS, BLE beacons | Who's home, ETA, away mode |
-| Smart appliances | Pool, HVAC, irrigation | Proactive preparation based on calendar/weather |
-| Wearables | Apple Watch, Fitbit, Garmin, Oura (via HA Companion App) | Sleep state, heart rate, presence, activity — biometric triggers for rules |
-| Voice assistants | Alexa, Google Home | Additional alert surfaces |
+| Service category     | Examples                                                 | SentiHome use                                                              |
+| -------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Calendars            | Google Calendar, Apple, Outlook, CalDAV                  | Proactive context priming, guest expectations, scheduled preparations      |
+| Weather              | OpenWeatherMap, Met.no, AccuWeather                      | Camera quality expectations, outdoor activity context, pre-actions         |
+| Messaging            | SMS, WhatsApp, Telegram                                  | Guest confirmations, delivery notifications, alert delivery channel        |
+| Email                | Gmail, IMAP                                              | Delivery tracking, service appointment confirmations                       |
+| Delivery tracking    | UPS, FedEx, USPS, Amazon                                 | Expected package arrival, known delivery driver                            |
+| Energy monitoring    | Utility APIs, Tibber, Octopus                            | Schedule device actions in off-peak windows                                |
+| Music / media        | Spotify, Sonos                                           | Presence signal, party mode detection                                      |
+| Occupancy / presence | Phone GPS, BLE beacons                                   | Who's home, ETA, away mode                                                 |
+| Smart appliances     | Pool, HVAC, irrigation                                   | Proactive preparation based on calendar/weather                            |
+| Wearables            | Apple Watch, Fitbit, Garmin, Oura (via HA Companion App) | Sleep state, heart rate, presence, activity — biometric triggers for rules |
+| Voice assistants     | Alexa, Google Home                                       | Additional alert surfaces                                                  |
 
 **The principle:** SentiHome does not need its own calendar integration, weather API, or SMS gateway. HA already has them. The HA agent exposes them all through `ha.query()` and structured tools. Adding a new HA integration automatically makes it available to SentiHome's reasoning pipeline.
 
 **Concrete example — proactive pool preparation:**
+
 ```
 Proactive planning agent asks:
   ha.query("what's happening in the next 48 hours I should prepare for?")
@@ -139,6 +141,7 @@ ha.query(natural_language)
 Executes device commands on behalf of SentiHome rules. Called directly by the action dispatcher (§15), session manager, and attention mode manager. No LLM, no queue, sub-second execution.
 
 **Core device actions:**
+
 ```
 ha.illuminate_area(area_id, brightness?, color_temp?)
   Resolves area → lighting entity group internally
@@ -189,6 +192,7 @@ Always denied without explicit human confirmation:
 ```
 
 Policy violations return a structured MCP error:
+
 ```json
 {
   "error": "policy_gate",
@@ -244,6 +248,7 @@ nvr.switch_profile(camera_id, profile)
 ```
 
 **Implementations (v1 priority):**
+
 - `adapter-rtsp-direct` — no NVR, direct from cameras (SentiHome internal preprocessing)
 - `adapter-agent-dvr-service` — Agent DVR via OpenAPI 2.0
 - `adapter-frigate-builtin` — Frigate via MQTT + REST
@@ -343,38 +348,38 @@ Servers are independently deployable and restartable. The pipeline handles serve
 
 Each MCP server validates a bearer token on every call. Scopes are defined per tool:
 
-| Tool namespace | Scope required | Notes |
-|---------------|---------------|-------|
-| `ha.get_*` | `ha:read` | Any pipeline component |
-| `ha.query` | `ha:read` | Any pipeline component |
-| `ha.illuminate_*`, `ha.set_scene` | `ha:write:light` | Action dispatcher, attention mode manager |
-| `ha.lock`, `ha.unlock` | `ha:write:lock` | Action dispatcher only; unlock requires elevated scope |
-| `ha.call_service` | `ha:write:service:{domain}` | Scoped per HA domain |
-| `nvr.*` (read) | `nvr:read` | Any pipeline component on hot path |
-| `nvr.slew_ptz`, `nvr.switch_profile` | `nvr:write` | Action dispatcher, remediation registry |
-| `detector.*` | `detector:infer` | Any pipeline component on hot path |
-| `memory.write_*`, `memory.update_*` | `memory:write` | Action dispatcher, session manager |
-| `memory.retrieve_*`, `memory.get_*`, `memory.recall_*` | `memory:read` | Any pipeline component |
-| `notify.*` | `notify:send` | Action dispatcher only |
+| Tool namespace                                         | Scope required              | Notes                                                  |
+| ------------------------------------------------------ | --------------------------- | ------------------------------------------------------ |
+| `ha.get_*`                                             | `ha:read`                   | Any pipeline component                                 |
+| `ha.query`                                             | `ha:read`                   | Any pipeline component                                 |
+| `ha.illuminate_*`, `ha.set_scene`                      | `ha:write:light`            | Action dispatcher, attention mode manager              |
+| `ha.lock`, `ha.unlock`                                 | `ha:write:lock`             | Action dispatcher only; unlock requires elevated scope |
+| `ha.call_service`                                      | `ha:write:service:{domain}` | Scoped per HA domain                                   |
+| `nvr.*` (read)                                         | `nvr:read`                  | Any pipeline component on hot path                     |
+| `nvr.slew_ptz`, `nvr.switch_profile`                   | `nvr:write`                 | Action dispatcher, remediation registry                |
+| `detector.*`                                           | `detector:infer`            | Any pipeline component on hot path                     |
+| `memory.write_*`, `memory.update_*`                    | `memory:write`              | Action dispatcher, session manager                     |
+| `memory.retrieve_*`, `memory.get_*`, `memory.recall_*` | `memory:read`               | Any pipeline component                                 |
+| `notify.*`                                             | `notify:send`               | Action dispatcher only                                 |
 
 ---
 
 ## Latency budgets
 
-| Tool | Expected p50 | Hard timeout | On timeout |
-|------|-------------|-------------|------------|
-| `ha.get_snapshot` | < 10ms (cache hit) | 200ms | Proceed with stale snapshot, flag |
-| `ha.get_changes` | < 50ms | 500ms | Skip this poll cycle |
-| `ha.query` | 1–3s (LLM) | 8s | Return partial + flag |
-| `ha.illuminate_area` | < 200ms | 1s | Log failure, proceed without remediation |
-| `ha.call_service` | < 300ms | 2s | Retry once, then log |
-| `nvr.get_frame_window` (native mode) | < 100ms | 1s | Fall back to service mode if available |
-| `nvr.get_frame_window` (built-in mode) | < 200ms | 2s | Skip metadata, return frames only |
-| `nvr.get_frame_window` (service mode) | < 500ms | 5s | Skip enrichment, use raw frames |
-| `nvr.slew_ptz` | < 2s (mechanical) | 5s | Skip deeper assessment |
-| `detector.enrich` | < 500ms (GPU) | 1s | Proceed without enrichment |
-| `memory.retrieve_rules` | < 100ms | 300ms | Proceed with empty rule set, flag |
-| `notify.push` | < 1s | 5s | Retry via alternate channel |
+| Tool                                   | Expected p50       | Hard timeout | On timeout                               |
+| -------------------------------------- | ------------------ | ------------ | ---------------------------------------- |
+| `ha.get_snapshot`                      | < 10ms (cache hit) | 200ms        | Proceed with stale snapshot, flag        |
+| `ha.get_changes`                       | < 50ms             | 500ms        | Skip this poll cycle                     |
+| `ha.query`                             | 1–3s (LLM)         | 8s           | Return partial + flag                    |
+| `ha.illuminate_area`                   | < 200ms            | 1s           | Log failure, proceed without remediation |
+| `ha.call_service`                      | < 300ms            | 2s           | Retry once, then log                     |
+| `nvr.get_frame_window` (native mode)   | < 100ms            | 1s           | Fall back to service mode if available   |
+| `nvr.get_frame_window` (built-in mode) | < 200ms            | 2s           | Skip metadata, return frames only        |
+| `nvr.get_frame_window` (service mode)  | < 500ms            | 5s           | Skip enrichment, use raw frames          |
+| `nvr.slew_ptz`                         | < 2s (mechanical)  | 5s           | Skip deeper assessment                   |
+| `detector.enrich`                      | < 500ms (GPU)      | 1s           | Proceed without enrichment               |
+| `memory.retrieve_rules`                | < 100ms            | 300ms        | Proceed with empty rule set, flag        |
+| `notify.push`                          | < 1s               | 5s           | Retry via alternate channel              |
 
 ---
 

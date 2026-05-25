@@ -12,10 +12,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  PYTHON_VERSION: "3.12"
-  NODE_VERSION: "22"
-  UV_VERSION: "0.11.16"
-  PNPM_VERSION: "11.3.0"
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '22'
+  UV_VERSION: '0.11.16'
+  PNPM_VERSION: '11.3.0'
 
 jobs:
   # ──────────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          cache-dependency-glob: 'uv.lock'
 
       - name: Set up Python
         run: uv python install ${{ env.PYTHON_VERSION }}

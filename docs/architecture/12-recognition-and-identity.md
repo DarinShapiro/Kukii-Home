@@ -21,7 +21,7 @@ Quality gates:
   - Yaw/pitch ≤ ±45° (frontal enough for recognition)
   - Blur < 0.3 (not motion-blurred)
   - Occlusion < 0.2 (not heavily obscured)
-  
+
 Quality outcomes:
   - pass         → continue to embedding
   - fail         → flag `face_present_unresolved`, don't guess identity
@@ -56,27 +56,27 @@ Gallery entry: "Sarah (resident)"
     { vector, model_v: "arcface_r100", confidence_tier: "confirmed", ts },
     ...
   ]
-  
+
 Incoming embedding + context:
   vector, confidence_tier: "high|tentative|unresolved"
-  
+
 Match algorithm:
   1. Filter gallery to same model_version
   2. Cosine-similarity search: top-K candidates
   3. Apply thresholds per confidence tier:
-  
+
   Incoming: "high" (good geometry)
     → threshold 0.60 for confirmed match
     → threshold 0.55 for tentative claim ("Sarah? (0.72)")
     → below 0.55 → unknown, embed only
-    
+
   Incoming: "tentative" (marginal geometry)
     → threshold 0.70 for confirmed match
     → do not make tentative claims from marginal inbound quality
-    
+
   Incoming: "unresolved" (failed quality gates)
     → embed only, no identity claim; flag for manual review
-  
+
 Output: identity_claim: "sarah" | null
         confidence: 0.0–1.0
         similarity: 0.72
@@ -84,12 +84,12 @@ Output: identity_claim: "sarah" | null
 
 **Illustrative thresholds** (site-calibrated per §14):
 
-| Scenario | Threshold | Rationale |
-|----------|-----------|-----------|
-| Resident face detection | 0.60 | High stakes: false positive (wrongly alert for resident = annoying) mild. False negative (miss a resident) acceptable cost. |
-| Unknown person, day | 0.65 | Medium stakes: facial recognition on a stranger needs higher confidence. Daylight, full face. |
-| Unknown person, night/profile | 0.72 | Low confidence inbound; need very high gallery match to claim identity. |
-| Service worker (expected) | 0.62 | Access profile + temporal context lowers threshold slightly. |
+| Scenario                      | Threshold | Rationale                                                                                                                   |
+| ----------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Resident face detection       | 0.60      | High stakes: false positive (wrongly alert for resident = annoying) mild. False negative (miss a resident) acceptable cost. |
+| Unknown person, day           | 0.65      | Medium stakes: facial recognition on a stranger needs higher confidence. Daylight, full face.                               |
+| Unknown person, night/profile | 0.72      | Low confidence inbound; need very high gallery match to claim identity.                                                     |
+| Service worker (expected)     | 0.62      | Access profile + temporal context lowers threshold slightly.                                                                |
 
 **No guessing.** If match score is below threshold, output `face_present_unresolved` + embedding. The VLM and reasoner get the context and can decide if it matters.
 
@@ -110,7 +110,7 @@ Multi-frame reduces noise and increases reliability for low-res or angled captur
 
 ## Body re-ID (in-session only)
 
-Body re-ID (re-identification) uses appearance features (clothing, gait, height, build) to match a subject across frames *within a single session or short time window*. Unlike face embedding, body embeddings drift quickly (change clothes, lighting changes) so cross-day use is unreliable.
+Body re-ID (re-identification) uses appearance features (clothing, gait, height, build) to match a subject across frames _within a single session or short time window_. Unlike face embedding, body embeddings drift quickly (change clothes, lighting changes) so cross-day use is unreliable.
 
 ### When re-ID is used
 
@@ -128,12 +128,12 @@ Pose estimation (OpenPose / MediaPipe)
     ├── keypoints for height-from-skeleton
     ├── gait classification
     └── posture signal
-    
+
 Body appearance features
     ├── Color histogram (clothing)
     ├── Texture (patterns)
     └── Shape features (build)
-    
+
 Re-ID embedding model (OSNet or similar)
     │
     ▼
@@ -168,7 +168,7 @@ New segment arrives on different camera within 30s window
 
 ## Cross-day composite identity
 
-Cross-day identity (same person on day 2 vs. day 1) is inherently uncertain — clothing changes, pose differs, time gaps are large. Rather than trying to achieve high certainty, the system surfaces *all available evidence* and lets the reasoner and user decide.
+Cross-day identity (same person on day 2 vs. day 1) is inherently uncertain — clothing changes, pose differs, time gaps are large. Rather than trying to achieve high certainty, the system surfaces _all available evidence_ and lets the reasoner and user decide.
 
 ### Identity resolution record
 
@@ -177,7 +177,7 @@ Every memory object referencing a subject carries this:
 ```
 IdentityResolution:
   resolved_id: "carlos_pool_service" | null
-  
+
   candidate_ids: [
     {
       actor_id: "carlos_pool_service",
@@ -190,7 +190,7 @@ IdentityResolution:
       evidence: []
     }
   ],
-  
+
   evidence_sources: [
     {
       source: "face",
@@ -218,7 +218,7 @@ IdentityResolution:
       notes: "gait classification inconclusive; lighting/angle different"
     }
   ],
-  
+
   resolution_method: "composite",
   resolution_confidence: 0.78,
   asserted_by: "model",
@@ -248,7 +248,7 @@ Expected: Carlos (pool service)
   Behavior: arrival 10:15am (Carlos usually 10–11am, so consistent)
   Height: 174cm (Carlos ~175cm, within tolerance)
   Gait: normal walking (Carlos's baseline also normal)
-  
+
 Composite: 0.78 confidence → "likely Carlos, but unusual vehicle (might borrowed car)"
 
 Output: identity_claim: "carlos"; confidence: 0.78; notes: "face + behavior match; different vehicle"
@@ -295,7 +295,7 @@ When a new person is detected consistently and the system is uncertain:
 ```
 "I've seen a new person at your front door 2 times in the last week.
  I'm not confident about their identity yet.
- 
+
  Options:
  • They're [dropdown: resident, regular visitor, service worker, neighbor, other]
  • I can remember their face if you name them
@@ -391,15 +391,16 @@ Face embeddings can drift over time due to aging, weight changes, facial hair, s
 KnownActor: Sarah
   gallery_embeddings: [created 2024-01, created 2024-06, created 2025-03]
   behavioral_profile: { observed_arrival_window, observed_areas, ... }
-  
+
 Comparison: new detection vs. existing gallery
   Similarity to oldest embedding: 0.68
   Similarity to newest embedding: 0.72
-  
+
 Trend: decreasing similarity over time (drift detected)
 ```
 
 Thresholds:
+
 - If new match is valid (≥ 0.60 confidence) but drift detected → re-enrollment prompt after N hits
 - If new match drops below threshold but user confirms identity → add as new enrollment (new time period)
 
@@ -408,9 +409,9 @@ Thresholds:
 ```
 "I've detected Sarah several times, but recent detections are
  less confident than before.
- 
+
  This can happen with lighting changes, styling changes, or aging.
- 
+
  Would you like me to update my reference images for Sarah?
  [Yes] [No, keep old] [Skip this month]"
 ```
@@ -430,16 +431,16 @@ PetActor:
   id: "max_golden_retriever"
   species: "dog"
   breed: "Golden Retriever"
-  
+
   gallery:
     face_embeddings: [{ vector, model_v, source_frame_ref }]
     coat_pattern: "image descriptor"
     height_estimate_cm: 65
-    
+
   home_areas: [backyard, interior]
   alert_if_detected_in: [front_yard, street]
     reason: "Max should not be unsupervised outside the back fence"
-    
+
   last_known_location: {
     area: backyard,
     confirmed_at: "2026-05-23T10:00Z"
@@ -464,7 +465,7 @@ Detection: Dog in frame
        Frame from: front_yard
        Max should be: backyard
        Gate sensor: no recent open
-       
+
        → Likely escaped, high alert (S16)
 ```
 

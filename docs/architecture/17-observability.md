@@ -8,6 +8,7 @@
 ## Principle: Observability is part of the product
 
 Observability is not a post-hoc monitoring layer. It's integrated into every decision:
+
 - Every detection decision cites evidence + confidence + rules fired
 - Every cloud egress decision is audited and explainable
 - Every optimization variant is tested before rollout
@@ -21,6 +22,7 @@ Observability is not a post-hoc monitoring layer. It's integrated into every dec
 ### Intelligence metrics (how well the system understands)
 
 **Rule performance:**
+
 ```
 Per rule (per area, per camera, per time range):
   - Fire count (how often triggered)
@@ -37,6 +39,7 @@ Per rule (per area, per camera, per time range):
 ```
 
 **Detection quality (fast detector):**
+
 ```
 Per detector model (YOLO, face, pose, re-ID):
   - Inference latency: p50, p95, p99
@@ -49,6 +52,7 @@ Per detector model (YOLO, face, pose, re-ID):
 ```
 
 **Identity confidence:**
+
 ```
 Per identified person / per camera / per day:
   - Face match confidence (histogram of 0.0-1.0)
@@ -64,6 +68,7 @@ Per identified person / per camera / per day:
 ```
 
 **VLM reasoning quality:**
+
 ```
 Per VLM call (per area, per camera, per rule):
   - Inference latency: p50, p95, p99 per backend (local vs cloud)
@@ -75,6 +80,7 @@ Per VLM call (per area, per camera, per rule):
 ```
 
 **User feedback patterns (the ground truth signal):**
+
 ```
 Per user / per rule / per area:
   - Dismissal count by reason (false alarm, duplicate, wrong rule, already handled)
@@ -88,6 +94,7 @@ Per user / per rule / per area:
 ```
 
 **Optimization feedback:**
+
 ```
 Per rule variant (from §10.5):
   - Phase duration (silent → shadow → gradual → full)
@@ -105,6 +112,7 @@ Per rule variant (from §10.5):
 ### Operational metrics (how well the system runs)
 
 **Pipeline health:**
+
 ```
 Per worker (triage, detector, VLM, reasoner, action dispatcher):
   - Queue depth (events waiting)
@@ -118,6 +126,7 @@ Per worker (triage, detector, VLM, reasoner, action dispatcher):
 ```
 
 **Resource utilization:**
+
 ```
 Compute:
   - GPU utilization (% busy)
@@ -145,6 +154,7 @@ Network:
 ```
 
 **Component health:**
+
 ```
 Each critical backend (per §04, §06):
   - Last successful contact (timestamp)
@@ -170,6 +180,7 @@ Event bus:
 ```
 
 **Data governance:**
+
 ```
 Cloud egress audit (per §16):
   - Bytes sent to cloud (per type: frames, detection JSON, episodic)
@@ -186,6 +197,7 @@ Data freshness:
 ```
 
 **Cost tracking:**
+
 ```
 Per month:
   - Cloud VLM API calls (count + cost)
@@ -321,24 +333,24 @@ AI SYNTHESIS LAYER REASONING:
        b) Detector: YOLO v5, not tuned for small dog forms
        c) Multi-camera fusion: disabled (only 1 camera covers backyard)
        d) Time-of-day correlation: peaks at 18:00-20:00 (peak activity hours)
-     
+
   2. Confidence assessment:
      - High confidence in root cause: low threshold + detector weakness
      - Medium confidence in multi-camera hypothesis (no data yet)
      - Low confidence in seasonal factors (only 30 days data)
-  
+
   3. Impact estimation:
      - Current impact: 17 false positives in 30 days = 0.57 FP/day
      - User burden: ~3-4 dismissals per week
      - System cost: wasted GPU cycles, false escalations to HA
-  
+
   4. Recommendation generation (ranked by impact):
      a) Raise confidence threshold from 0.5 → 0.65
         - Estimated FP reduction: 40-50% (remove 0.6-0.7 band)
         - Risk: slight FN increase (may miss edge cases)
         - Cost: none
         - Time to implement: 5 minutes
-     
+
      b) Run feedback optimization (variant testing on archived clips)
         - Test 18 variants (resolution, frame interval, preprocessing, multi-subject)
         - 7-day silent testing, then shadow, then gradual rollout
@@ -346,13 +358,13 @@ AI SYNTHESIS LAYER REASONING:
         - Risk: optimization could overfit to recent pattern
         - Cost: GPU + storage for 7 days test
         - Time to implement: 2 hours (system does this automatically)
-     
+
      c) Add side camera to multi-camera fusion
         - Gait biometric confirmation would reduce FP to <20%
         - Risk: requires camera installation + calibration
         - Cost: camera hardware + setup time
         - Time to implement: 1 day
-  
+
   5. Explanation & transparency:
      - Rule is learning from user feedback correctly (67% dismissals)
      - System is doing its job (detecting motion, alerting)
@@ -360,33 +372,33 @@ AI SYNTHESIS LAYER REASONING:
      - User trust preserved (honest about false positives)
 
 RESPONSE TO USER:
-  "Your dog escape rule is firing too much because the confidence 
-   threshold (0.5) is catching a lot of marginal detections from 
-   the backyard camera. YOLO detects motion, but without a second 
-   angle to confirm the dog is actually escaping (vs just playing), 
+  "Your dog escape rule is firing too much because the confidence
+   threshold (0.5) is catching a lot of marginal detections from
+   the backyard camera. YOLO detects motion, but without a second
+   angle to confirm the dog is actually escaping (vs just playing),
    it guesses low.
 
-   I recommend [HIGHEST IMPACT] running automated optimization right 
-   now — I'll test 18 variants of preprocessing and frame selection 
-   against the 25 archived clips from the last month, especially the 
-   17 you dismissed. The test takes 7 days in the background, and if 
-   a variant catches dogs escaping without false alarms, I'll gradually 
+   I recommend [HIGHEST IMPACT] running automated optimization right
+   now — I'll test 18 variants of preprocessing and frame selection
+   against the 25 archived clips from the last month, especially the
+   17 you dismissed. The test takes 7 days in the background, and if
+   a variant catches dogs escaping without false alarms, I'll gradually
    roll it out over 2 weeks.
 
-   Or [FASTER] raise the threshold from 0.5 to 0.65 right now. You'll 
+   Or [FASTER] raise the threshold from 0.5 to 0.65 right now. You'll
    miss some edge cases, but you'll cut false alarms by ~40%.
 
-   Or [LONG-TERM] if you have a second camera that can see the backyard 
+   Or [LONG-TERM] if you have a second camera that can see the backyard
    exit, I can fuse gait biometrics and cut false alarms to <20%.
 
    Which would you prefer? I can start optimization immediately."
 
-USER: "Run the optimization, but let me know if it starts being too 
+USER: "Run the optimization, but let me know if it starts being too
        conservative and missing real escapes."
 
-AI: "Got it. I'm starting a 7-day silent test against your 25 clips. 
-    I'll show you the top 5 variants and their metrics before rollout. 
-    And I'll monitor: if FN (missed escapes) ever goes up, I'll pause 
+AI: "Got it. I'm starting a 7-day silent test against your 25 clips.
+    I'll show you the top 5 variants and their metrics before rollout.
+    And I'll monitor: if FN (missed escapes) ever goes up, I'll pause
     the rollout and alert you."
 
 [View optimization progress] [View variant performance] [Pause]
@@ -423,9 +435,9 @@ synthesis_context = {
     }
   },
   "user_feedback": [
-    {"timestamp": "2026-05-23T15:22Z", "action": "dismiss", 
+    {"timestamp": "2026-05-23T15:22Z", "action": "dismiss",
      "reason": "false alarm", "confidence": 0.72},
-    {"timestamp": "2026-05-22T18:11Z", "action": "confirm", 
+    {"timestamp": "2026-05-22T18:11Z", "action": "confirm",
      "confidence": 0.91},
     # ... 23 more feedback entries
   ],
@@ -495,7 +507,7 @@ synthesis_output = {
     ],
     "severity": "medium"  # impacts user experience, not safety
   },
-  
+
   "recommendations": [
     {
       "rank": 1,
@@ -511,9 +523,9 @@ synthesis_output = {
       },
       "rollout_safety": "7d silent → 7d shadow → 2w gradual",
       "rollback_triggers": ["FN > 0.1", "FP < 0.15"],
-      "explanation": "I'll test 18 variants of preprocessing, frame selection, 
-                     and detector tuning against your 25 archived clips. 
-                     Variants that eliminate false alarms without missing 
+      "explanation": "I'll test 18 variants of preprocessing, frame selection,
+                     and detector tuning against your 25 archived clips.
+                     Variants that eliminate false alarms without missing
                      real escapes get gradually rolled out."
     },
     {
@@ -530,7 +542,7 @@ synthesis_output = {
       },
       "rollout_safety": "immediate",
       "rollback_triggers": ["user_reports FN", "rule_dismissal still > 0.50"],
-      "explanation": "Remove the 0.6-0.7 confidence band. Cuts false alarms 
+      "explanation": "Remove the 0.6-0.7 confidence band. Cuts false alarms
                      by ~40%, but may miss edge cases."
     },
     {
@@ -545,11 +557,11 @@ synthesis_output = {
         "hardware": "possibly none (if side camera already exists)"
       },
       "rollout_safety": "requires manual calibration first",
-      "explanation": "If you have another camera that sees the backyard exit, 
+      "explanation": "If you have another camera that sees the backyard exit,
                      gait biometrics confirm the dog is really leaving."
     }
   ],
-  
+
   "monitoring": {
     "watch_metrics": ["dismiss_rate", "fp_on_similar_rules", "gpu_utilization"],
     "alert_if": "dismiss_rate stays > 0.50 for 7 more days",
@@ -641,12 +653,14 @@ Example timeline for dog_escape variant:
 ### Real-time feedback (seconds to hours)
 
 **User dismissal/confirmation:**
+
 - User dismisses alert → dismiss_count ↑, feedback recorded
 - System recalculates rule precision estimate
 - If dismiss rate exceeds threshold (>0.50), surface recommendation to user
 - Recommendation: adjust threshold, run optimization, or review rule logic
 
 **Pattern detection (within hours):**
+
 - Clustering dismissals: are they all at same time? same location? same confidence band?
 - If cluster found, suggest rule refinement
 - Example: "Last 4 dog escapes (all dismissed) were between 18:00-20:00. Your dog is playful at that hour, not escaping. Should I silence the rule then?"
@@ -654,6 +668,7 @@ Example timeline for dog_escape variant:
 ### Medium-term feedback (days to weeks)
 
 **Optimization feedback (from §10.5):**
+
 - User provides ground truth (this was a miss, this was a false alarm)
 - System generates variants and tests against archived clips
 - Variant performance tracked: FP, FN, cost per variant
@@ -661,6 +676,7 @@ Example timeline for dog_escape variant:
 - Rollout safety gates ensure no regressions
 
 **Rule evolution (crowdsourced from dismissals):**
+
 - Cluster dismissal reasons: "False alarm", "Already handled", "Wrong alert"
 - If "False alarm" cluster grows, suggest rule threshold adjustment
 - If "Already handled" cluster grows, suggest rule scope narrowing (e.g., only fire once per day)
@@ -669,6 +685,7 @@ Example timeline for dog_escape variant:
 ### Long-term feedback (months)
 
 **Seasonal learning:**
+
 - Compare metrics across quarters: Q1 (winter), Q2 (spring), Q3 (summer), Q4 (fall)
 - Does "person at door" fire more in summer (deliveries peak)?
 - Does "dog escape" fire more in spring/fall (mild weather)?
@@ -676,12 +693,14 @@ Example timeline for dog_escape variant:
 - Example: raise dog_escape threshold in spring, lower in winter
 
 **Cross-year drift detection:**
+
 - Compare this year's metrics to last year's
 - If FN trending up, detector may need retraining
 - If FP trending up, rule may need adjustment
 - If latency trending up, system resources may need upgrade
 
 **User preference learning:**
+
 - Which recommendations does user accept?
 - Which rules does user never dismiss (high trust)?
 - Which areas does user configure most (high engagement)?
@@ -703,7 +722,7 @@ RECENT ACTIVITY:
     ✓ 14:22 — Person at front door (mail carrier, 0.92 confidence)
     ✓ 13:45 — Dog in backyard (Buddy, 0.98 confidence)
     ? 08:30 — Unknown person in garage (low light, 0.41 confidence, no alert)
-    
+
 RULES WORKING WELL (high trust):
   ✓ "Delivery detection" — 3 confirmed, 0 false alarms this month
   ✓ "Known resident arrivals" — 28 confirmed, 0 misses this month
@@ -832,7 +851,7 @@ When user opens "edit rule" dialog, pre-populate with diagnostics:
 Current performance (last 30 days):
   Precision: 0.33 (67% false positives)
   Recall: 0.25 (75% false negatives)
-  
+
 Suggested improvements:
   • Raise threshold: 0.5 → 0.65 (est. +40% precision)
   • Add spatial constraint: only fire in backyard, not front porch
@@ -853,7 +872,7 @@ Example: VLM offline
   - Degradation: fall back to detector-only rules
   - Observability output: "VLM unavailable; alerts will use rule matching only"
   - User sees: honest alert ("rule match, no VLM confidence")
-  - Operator sees: "VLM latency offline; circuit breaker open; 
+  - Operator sees: "VLM latency offline; circuit breaker open;
                    detector-only rules engaged; expect higher FP rate"
 ```
 
@@ -924,11 +943,13 @@ AI Chat:
 ## Example: Feedback loop in action
 
 **Day 1 (2026-05-23):**
+
 - User reports: "My dog escaped at 15:22 but system didn't alert"
 - System logs feedback: `missed_detection(timestamp=15:22, area=backyard, gravity=high)`
 - Observability records: rule didn't fire (confidence below threshold)
 
 **Day 2 (2026-05-24):**
+
 - System initiates optimization (§10.5)
 - Generates 18 variants: different thresholds, preprocessing, frame intervals
 - Starts silent testing on 25 archived clips from this area + rule
@@ -937,28 +958,33 @@ AI Chat:
 - ... (17 more variants)
 
 **Day 3-9 (2026-05-25 to 2026-05-31):**
+
 - Silent phase: both current rule and variants run in parallel
 - Variants A & B outperform current rule on archived clips
 - Synthesis layer monitors metrics: FP, FN, latency, cost per variant
 - User continues normal operation (sees no change)
 
 **Day 10 (2026-06-01):**
+
 - Shadow phase begins: Variant A now fires alerts (marked "shadow")
 - User sees: "System preview: this new variant would have caught your dog escape"
 - User feedback: "Yes, this variant looks better"
 - Synthesis output: "Variant A: 58% FP (down from 67%), 2% FN (down from 3%)"
 
 **Day 11-17 (2026-06-02 to 2026-06-08):**
+
 - Gradual rollout: Variant A at 10% → 25% → 50% traffic
 - Metrics stable across cohorts: no unexpected regressions
 - Observability dashboard shows: "Variant A rolling out, 58% FP (target met)"
 
 **Day 18 (2026-06-09):**
+
 - Variant A at 100%: now the default rule
 - User feedback continues: "Much better, fewer false alarms"
 - System archives old rule + variant testing results
 - Seasonal learning enabled: monitor FP/FN across months
 
 **Ongoing:**
+
 - System continues learning: if FP increases next spring (peak dog activity), seasonal adjustment kicks in
 - User trust increased: system caught the miss, improved automatically, never repeated it

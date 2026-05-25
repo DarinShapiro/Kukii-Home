@@ -152,16 +152,16 @@ The two-step is the **fallback for weaker backends**, not the primary design. Th
 
 ## Framework by component
 
-| Component | Framework | Rationale |
-|-----------|-----------|-----------|
-| Hot path pipeline | Plain async Python | Zero framework overhead; LLMs are async function calls; full control over parallelism and error handling |
-| Session/journey manager | LangGraph | Explicit state machine with defined transitions; long-running stateful graph; LLM called only at specific state nodes |
-| Attention mode loop | Plain async Python | Tight sampling loop; no framework needed |
-| Sequence completion watch | Plain async Python | Short-lived; deterministic phase transitions |
-| Proactive planning agent | LangGraph or plain async | Latency tolerant; multi-step reasoning over HA ecosystem; tool use natural |
-| Journey close / summary | LangGraph or plain async | Latency tolerant; tool use acceptable here |
-| Report generation | LangGraph or plain async | Multi-step synthesis; latency tolerant |
-| Rule authoring / NL query | LangGraph | Interactive; tool use natural; latency tolerant |
+| Component                 | Framework                | Rationale                                                                                                             |
+| ------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Hot path pipeline         | Plain async Python       | Zero framework overhead; LLMs are async function calls; full control over parallelism and error handling              |
+| Session/journey manager   | LangGraph                | Explicit state machine with defined transitions; long-running stateful graph; LLM called only at specific state nodes |
+| Attention mode loop       | Plain async Python       | Tight sampling loop; no framework needed                                                                              |
+| Sequence completion watch | Plain async Python       | Short-lived; deterministic phase transitions                                                                          |
+| Proactive planning agent  | LangGraph or plain async | Latency tolerant; multi-step reasoning over HA ecosystem; tool use natural                                            |
+| Journey close / summary   | LangGraph or plain async | Latency tolerant; tool use acceptable here                                                                            |
+| Report generation         | LangGraph or plain async | Multi-step synthesis; latency tolerant                                                                                |
+| Rule authoring / NL query | LangGraph                | Interactive; tool use natural; latency tolerant                                                                       |
 
 **CrewAI:** appropriate for background analytical tasks where LLM-mediated role collaboration adds value. Wrong choice for any latency-sensitive path — its LLM-as-manager pattern adds 2–4 roundtrips before work starts.
 
@@ -194,7 +194,7 @@ data and journey_score thresholds
 
 ## Proactive planning agent
 
-A scheduled agent that reasons *forward* rather than reacting to events. It queries the HA agent's full ecosystem view to anticipate what's coming, prepare the environment, and pre-arm context objects before they're needed.
+A scheduled agent that reasons _forward_ rather than reacting to events. It queries the HA agent's full ecosystem view to anticipate what's coming, prepare the environment, and pre-arm context objects before they're needed.
 
 ### Why it exists
 
@@ -202,11 +202,11 @@ The reactive pipeline handles what's happening now. The proactive agent handles 
 
 ### Schedule
 
-| Run | Trigger | Purpose |
-|-----|---------|---------|
-| Nightly sweep | 11pm or configurable | 48h lookahead — calendar, weather, energy windows |
+| Run              | Trigger                       | Purpose                                                     |
+| ---------------- | ----------------------------- | ----------------------------------------------------------- |
+| Nightly sweep    | 11pm or configurable          | 48h lookahead — calendar, weather, energy windows           |
 | Morning briefing | First presence detected + 6am | Today's summary — expected visitors, deliveries, conditions |
-| On-demand | User request | "What should I know about this weekend?" |
+| On-demand        | User request                  | "What should I know about this weekend?"                    |
 
 ### What it queries
 
@@ -233,6 +233,7 @@ The agent checks `ha.list_capabilities()` first so it only asks about services t
 ### What it produces
 
 **SituationalContexts** — pre-armed before the event starts:
+
 ```
 "BBQ party Saturday 4pm — ~12 guests expected.
  Unknown faces at front door and backyard are likely guests, not suspicious.
@@ -240,6 +241,7 @@ The agent checks `ha.list_capabilities()` first so it only asks about services t
 ```
 
 **Scheduled device actions** — via HA write-side MCP:
+
 ```
 Pool heater → 82°F, scheduled Thursday 9pm (off-peak, 48h before party)
 Irrigation  → skip Saturday morning (guests arriving, weather warm)
@@ -247,6 +249,7 @@ Lighting scene → "party" preset Saturday 4pm
 ```
 
 **TransientIntents** — watches for expected but unconfirmed events:
+
 ```
 "Notify if pool hasn't reached 80°F by Saturday noon"
 "Notify when first guest arrives Saturday"
@@ -254,6 +257,7 @@ Lighting scene → "party" preset Saturday 4pm
 ```
 
 **Morning briefing** — injected into the day's world state context:
+
 ```
 "Today: grocery delivery expected 2–4pm (Amazon Fresh).
  Pool service (Carlos) scheduled 10am.
@@ -296,13 +300,13 @@ The reactive pipeline doesn't know or care whether a SituationalContext was crea
 
 Every LLM call on the hot path has an enforced timeout. Exceeded timeout = take conservative action, log the failure, continue.
 
-| Stage | Timeout | On timeout |
-|-------|---------|------------|
-| Fast detector | 500ms | Skip enrichment, proceed with raw detections |
-| Context assembly (parallel) | 300ms | Proceed with partial context, flag in output |
-| VLM call (primary) | 8s local / 15s cloud | Log, escalate to human or take conservative action |
-| VLM call (deeper assessment) | 6s | Skip second pass, act on first result |
-| Action dispatch | 2s | Retry once, then log failure |
+| Stage                        | Timeout              | On timeout                                         |
+| ---------------------------- | -------------------- | -------------------------------------------------- |
+| Fast detector                | 500ms                | Skip enrichment, proceed with raw detections       |
+| Context assembly (parallel)  | 300ms                | Proceed with partial context, flag in output       |
+| VLM call (primary)           | 8s local / 15s cloud | Log, escalate to human or take conservative action |
+| VLM call (deeper assessment) | 6s                   | Skip second pass, act on first result              |
+| Action dispatch              | 2s                   | Retry once, then log failure                       |
 
 ---
 

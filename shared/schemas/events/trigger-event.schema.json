@@ -44,7 +44,16 @@
     "event_type": {
       "type": "string",
       "description": "What kind of trigger this is.",
-      "enum": ["motion", "person", "vehicle", "animal", "package", "doorbell", "ai-event", "synthetic"]
+      "enum": [
+        "motion",
+        "person",
+        "vehicle",
+        "animal",
+        "package",
+        "doorbell",
+        "ai-event",
+        "synthetic"
+      ]
     },
     "on_camera_ai_opinion": {
       "type": "object",

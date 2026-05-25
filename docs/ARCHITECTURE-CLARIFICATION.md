@@ -9,18 +9,21 @@
 ### What SentiHome Owns
 
 ✅ **Detection & Vision**
+
 - YOLO object detection
 - Face recognition + re-ID
 - Multi-camera fusion
 - Identity confidence scoring
 
 ✅ **Rule Definition & Execution**
+
 - Conversational rule creation ("Alert me when the mailman arrives")
 - Rule storage in SentiHome database
 - Deterministic rule evaluation (fire based on conditions)
 - Action dispatch to device services
 
 ✅ **Intelligence & Learning**
+
 - VLM reasoning
 - Feedback-driven optimization
 - Identity learning across time
@@ -28,6 +31,7 @@
 - Seasonal learning
 
 ✅ **Memory & State**
+
 - Session management
 - Episodic memory
 - Identity gallery
@@ -37,6 +41,7 @@
 ### What Home Assistant Owns
 
 ✅ **World State (Input to SentiHome)**
+
 - Device state (is door locked? is alarm armed?)
 - Calendar events
 - Weather
@@ -45,6 +50,7 @@
 - **Queried by SentiHome when evaluating rule conditions**
 
 ✅ **Action Execution (Output from SentiHome)**
+
 - Notifications (push, SMS, email)
 - Speaker TTS
 - Lights (on/off, brightness, color)
@@ -55,12 +61,14 @@
 - **Called by SentiHome via REST API or MCP**
 
 ✅ **User Experience**
+
 - Dashboard (web UI)
 - Mobile app (Companion)
 - Push notifications
 - Voice interface (Assist)
 
 ✅ **Ecosystem Integration**
+
 - Integrations (Zigbee, Z-Wave, Matter, Thread, MQTT, WiFi devices)
 - Third-party services (Spotify, Sonos, Google Home, etc.)
 - Calendar (Google, Apple, Outlook)
@@ -73,14 +81,14 @@
 
 ```
 User (to SentiHome):
-  "Let me know when the mailman arrives. 
+  "Let me know when the mailman arrives.
    Unlock the front door and announce it over the Sonos."
 
 SentiHome LLM:
   Parses intent:
     - Trigger: person at door + identity matches "mailman"
     - Actions: [unlock, announce]
-  
+
   Creates rule in SentiHome:
     {
       rule_id: "rule_mailman_001",
@@ -91,13 +99,13 @@ SentiHome LLM:
       ],
       actions: [
         { type: "unlock", device: "front_door" },  // → calls HA service
-        { type: "announce", device: "sonos_kitchen", 
+        { type: "announce", device: "sonos_kitchen",
           message: "Mailman has arrived" }  // → calls HA service
       ]
     }
-  
+
   Returns to user:
-    "Rule created. Testing on recent clips... Works on 12/14 mailman 
+    "Rule created. Testing on recent clips... Works on 12/14 mailman
      visits. Ready to deploy? [Yes] [Edit] [Delete]"
 
 User:
@@ -112,24 +120,24 @@ Mailman arrives (real-time):
 
 SentiHome detector:
   - Person detected at door (YOLO)
-  
+
 SentiHome VLM:
   - Confirms: "mailman, 0.92 confidence"
-  
+
 SentiHome rule engine:
   - Matches rule: trigger ✓, conditions ✓
   - Fires rule
-  
+
 SentiHome action dispatcher:
   - Calls HA: POST /api/services/lock/unlock
     { entity_id: "front_door" }
   - Calls HA: POST /api/services/sonos/play_media
     { entity_id: "sonos_kitchen", message: "Mailman has arrived" }
-  
+
 Home Assistant:
   - Executes unlock
   - Executes Sonos announcement
-  
+
 User:
   ✓ Front door unlocks
   ✓ Sonos announces: "Mailman has arrived"
@@ -140,12 +148,14 @@ User:
 ## What This Is NOT
 
 ❌ **SentiHome does not:**
+
 - Create YAML automations in HA
 - Use HA's automation engine for rules
 - Define triggers in HA UI
 - Depend on HA blueprints
 
 ❌ **HA automations are not:**
+
 - The primary way SentiHome rules execute
 - How conversational rules work
 - Coupled to SentiHome detection events
@@ -176,6 +186,7 @@ Action:   Send security team notification
 ```
 
 But these are **add-ons**, not the core mechanism. The core is:
+
 - **SentiHome rules** execute automatically based on detections
 - **HA automations** are optional, user-defined enhancements
 

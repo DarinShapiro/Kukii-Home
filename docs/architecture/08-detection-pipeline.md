@@ -36,6 +36,7 @@ Before any GPU-intensive enrichment runs, motion detection gates the pipeline. W
 ### Why robust motion detection matters
 
 Naive motion detection (pixel difference > threshold) triggers false positives constantly:
+
 - Lighting changes (clouds, dawn/dusk, headlights)
 - Wind moving trees, plants, flags
 - Rain, snow, insects near camera
@@ -103,18 +104,18 @@ Once motion gates the pipeline, the detector serves two roles:
 
 ## Models
 
-| Model | Purpose |
-|-------|---------|
-| YOLO / RT-DETR | Object detection — class, bbox, track_id |
-| SCRFD / RetinaFace | Face detection |
-| ArcFace / AdaFace | Face recognition — gallery match |
-| OSNet (et al.) | Body re-ID embedding (in-session only) |
-| Pose estimation | Keypoints — intent, gait, height-from-skeleton |
-| Appearance attributes | Clothing colors, held object, hood up, bag |
-| Plate OCR | Vehicles |
-| Pet face recognition | Known pets — escape detection (S16) |
+| Model                          | Purpose                                                  |
+| ------------------------------ | -------------------------------------------------------- |
+| YOLO / RT-DETR                 | Object detection — class, bbox, track_id                 |
+| SCRFD / RetinaFace             | Face detection                                           |
+| ArcFace / AdaFace              | Face recognition — gallery match                         |
+| OSNet (et al.)                 | Body re-ID embedding (in-session only)                   |
+| Pose estimation                | Keypoints — intent, gait, height-from-skeleton           |
+| Appearance attributes          | Clothing colors, held object, hood up, bag               |
+| Plate OCR                      | Vehicles                                                 |
+| Pet face recognition           | Known pets — escape detection (S16)                      |
 | Drowning / distress classifier | Pose + motion pattern, pool safety (see Attention modes) |
-| Stillness classifier | Motionless person detection — any area |
+| Stillness classifier           | Motionless person detection — any area                   |
 
 ---
 
@@ -124,11 +125,11 @@ Default: 8 frames per clip. Preferred: detector-guided selection — frames wher
 
 **Three sampling strategies depending on context:**
 
-| Context | Strategy |
-|---------|----------|
-| One-shot event | Fixed budget (8 frames), detector-guided selection |
-| Sequence completion watch | Adaptive interval = elapsed_sequence_time / target_frames; multiple VLM calls across phases (see Sequence completion watch section) |
-| AttentionMode (continuous) | Fixed fps commanded to fast detector; VLM called on anomaly flag or on ambient cadence |
+| Context                    | Strategy                                                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| One-shot event             | Fixed budget (8 frames), detector-guided selection                                                                                  |
+| Sequence completion watch  | Adaptive interval = elapsed_sequence_time / target_frames; multiple VLM calls across phases (see Sequence completion watch section) |
+| AttentionMode (continuous) | Fixed fps commanded to fast detector; VLM called on anomaly flag or on ambient cadence                                              |
 
 The adaptive interval for sequence watches means the sampling naturally spreads out as a sequence runs longer — dense sampling at the start, sparser as time accumulates. This prevents budget waste on long uneventful windows while keeping resolution high during the action-dense early phase.
 
@@ -150,6 +151,7 @@ False-positive recognition (labeling a stranger as Sarah) is worse than no label
 - Pet recognition below threshold → `animal_present_unresolved`
 
 Tier thresholds (illustrative):
+
 - Face: ≥ 0.55 → confirmed, 0.40–0.55 → tentative (`Sarah? (0.72)`), < 0.40 → unknown
 - Plate: full read required for identity claim; partials logged but not matched
 
@@ -175,6 +177,7 @@ Tight high-res crops of unknown or attention-worthy subjects sent alongside full
 ## Throughput & GPU sharing with VLM
 
 Fast detector and VLM compete for GPU. Options:
+
 - Time-slice on a single GPU (detector gets low-latency priority; VLM batches)
 - Dedicated detector GPU (lighter card) + VLM GPU
 - Detector runs CPU-side for lightweight models (YOLO small) with GPU fallback for face recognition
@@ -220,15 +223,15 @@ The VLM enriches the alert narrative and provides context — it does not gate t
 ```
 AttentionMode:
   id, label: "pool_occupied"
-  
+
   activation:
     trigger: person detected in pool_area
     conditions: any person (including children)
-    
+
   deactivation:
     no person detected for 5 min
     or explicit user cancel
-    
+
   monitoring:
     camera_fps: 2–4fps continuous  ← vs event-driven normally
     specialized_models:
@@ -236,26 +239,26 @@ AttentionMode:
       - stillness_timer             ← motionless in water > Ns
       - distress_pose               ← arms above water, head submerged
     vlm_cadence: every 30s ambient; immediate on anomaly flag
-    
+
   alert:
     anomaly_sla: < 15s from onset
     output_class: urgent_alert
     bypass_queue: true
     targets: all_household + emergency_contacts
-    
+
   context_enrichment:
     vlm_note: "swimming alone" | "children present" | "unsupervised" | "service worker"
 ```
 
 ### Known attention mode scenarios
 
-| Area | Activation trigger | What to watch for | Specialized model | SLA |
-|------|-------------------|-------------------|------------------|-----|
-| Pool | Any person detected | Drowning, distress, motionless in water | Drowning detector, stillness timer | < 15s |
-| Pool | Child detected, no adult co-present | Unsupervised swim session | Age estimation + adult absence | < 30s |
-| Any area | Person motionless > N min | Medical emergency, fall | Stillness + pose | < 30s |
-| Driveway | Child playing near road | Child proximity to moving vehicle | Vehicle + child proximity | < 10s |
-| Stairs / bathroom | Elderly resident detected | Fall | Fall detection + pose | < 20s |
+| Area              | Activation trigger                  | What to watch for                       | Specialized model                  | SLA   |
+| ----------------- | ----------------------------------- | --------------------------------------- | ---------------------------------- | ----- |
+| Pool              | Any person detected                 | Drowning, distress, motionless in water | Drowning detector, stillness timer | < 15s |
+| Pool              | Child detected, no adult co-present | Unsupervised swim session               | Age estimation + adult absence     | < 30s |
+| Any area          | Person motionless > N min           | Medical emergency, fall                 | Stillness + pose                   | < 30s |
+| Driveway          | Child playing near road             | Child proximity to moving vehicle       | Vehicle + child proximity          | < 10s |
+| Stairs / bathroom | Elderly resident detected           | Fall                                    | Fall detection + pose              | < 20s |
 
 ### Interaction with KnownActor and SituationalContext
 
@@ -291,6 +294,7 @@ The fast detector must support being commanded into higher-cadence mode for a sp
 A lighter variant of AttentionMode for scenarios where the alert is triggered by an **absent behavior** rather than a detected anomaly. Instead of watching for something that happens, the system watches for something that doesn't happen within a time window.
 
 Pattern:
+
 ```
 Trigger event detected (e.g. dog squat)
         │
@@ -305,6 +309,7 @@ Open sequence watch: observe camera for N seconds
 ```
 
 Differs from AttentionMode:
+
 - Short-lived (60–120s vs. open-ended)
 - Lower resource cost — no continuous specialized model, just sustained clip sampling
 - Not life-safety — outputs are `notify` or `log`, never `urgent_alert`
@@ -337,6 +342,7 @@ Phase 3 — Departure confirmation (1 VLM call)
 ```
 
 **Why departure-time ground check is more reliable than watching the pickup action:**
+
 - The pickup motion is small, fast, and angle-dependent
 - The deposit's presence or absence on the ground after departure is a cleaner binary signal
 - VLM reasoning: "subject has left frame — is there anything left on the ground where the dog squatted?"
@@ -344,6 +350,7 @@ Phase 3 — Departure confirmation (1 VLM call)
 **Total VLM calls:** 1 (confirm) + 1–3 (active watch, interval-sampled) + 1 (departure check) = 3–5 calls for a typical sequence. Budget is proportional to sequence length, not fixed.
 
 Current scenarios using this pattern:
+
 - S18 — dog walker doesn't pick up (squat detected → watch for pickup → no pickup = notify)
 
 The same mechanism applies anywhere expected follow-through needs to be verified: delivery driver leaves package vs. takes it back, contractor closes gate after entering, visitor checks for mail vs. opens mailbox.

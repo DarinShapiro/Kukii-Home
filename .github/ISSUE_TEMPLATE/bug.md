@@ -11,11 +11,13 @@ assignees: ''
 ## What should happen
 
 ## Reproduction
+
 1.
 2.
 3.
 
 ## Environment
+
 - SentiHome version:
 - NVR adapter mode:
 - HA version:

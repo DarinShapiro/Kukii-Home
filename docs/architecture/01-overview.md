@@ -9,7 +9,8 @@
 
 **SentiHome** is a home AI system that watches camera streams and Home Assistant device state to detect what matters, remember patterns, and act intelligently — without constant false alarms and without invading privacy.
 
-Core idea: Turn raw sensor feeds into *trusted intelligence* by combining:
+Core idea: Turn raw sensor feeds into _trusted intelligence_ by combining:
+
 - **Visual reasoning** (understanding what cameras see)
 - **Behavioral memory** (learning who's who, what's normal)
 - **Home automation integration** (knowing what devices can do and executing safely)
@@ -32,15 +33,15 @@ Not for: non-technical users, renters without LAN access, those demanding zero-c
 
 ### Canonical scenarios
 
-| Scenario | SentiHome advantage |
-|----------|-------------------|
-| **Pool safety (S15, S20)** | Continuous monitoring + immediate drowning detection (< 15s). Not safe to rely on periodic human checks. |
-| **Unexpected visitor (S1)** | Knows which residents are home, whether guest is expected, whether face matches known profiles. Explains why alert fired. |
-| **Package theft prevention (S8)** | Detects package delivery + dwell time (package sits 30min = likely stolen). Human verification via app. |
-| **Dog escape (S16)** | Recognizes pet + detects in unauthorized area + triggers alert before they're hit by car. Critical for family safety. |
-| **Repeated unwanted visitors (S17)** | Tracks visit frequency + pattern over weeks. Distinguishes "persistent annoyance" from "potential threat." |
-| **Security at night (S18, S2)** | Unknown person at night outside quiet hours → escalate faster than daytime. Respects sleep but acts urgently. |
-| **Elderly fall detection** | Slow-motion alert for elderly parent motionless on floor. Alert goes to children, not emergency services immediately. |
+| Scenario                             | SentiHome advantage                                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| **Pool safety (S15, S20)**           | Continuous monitoring + immediate drowning detection (< 15s). Not safe to rely on periodic human checks.                  |
+| **Unexpected visitor (S1)**          | Knows which residents are home, whether guest is expected, whether face matches known profiles. Explains why alert fired. |
+| **Package theft prevention (S8)**    | Detects package delivery + dwell time (package sits 30min = likely stolen). Human verification via app.                   |
+| **Dog escape (S16)**                 | Recognizes pet + detects in unauthorized area + triggers alert before they're hit by car. Critical for family safety.     |
+| **Repeated unwanted visitors (S17)** | Tracks visit frequency + pattern over weeks. Distinguishes "persistent annoyance" from "potential threat."                |
+| **Security at night (S18, S2)**      | Unknown person at night outside quiet hours → escalate faster than daytime. Respects sleep but acts urgently.             |
+| **Elderly fall detection**           | Slow-motion alert for elderly parent motionless on floor. Alert goes to children, not emergency services immediately.     |
 
 ---
 
@@ -70,6 +71,7 @@ Not for: non-technical users, renters without LAN access, those demanding zero-c
 - Device actions → direct HA MCP (no cloud round-trip latency)
 
 **When cloud is used (optional):**
+
 - VLM inference if local GPU saturated (explicit user permission)
 - Backup / disaster recovery (encrypted, user-controlled)
 - Advanced analytics (historical pattern queries, reports)
@@ -95,6 +97,7 @@ Not for: non-technical users, renters without LAN access, those demanding zero-c
 This is the inverse of most security products. A Ring doorbell at high sensitivity sends 20 false alerts for every real doorbell press. SentiHome prefers silence to noise — the cost of an unnecessary alert (annoyance, trust erosion) outweighs the benefit of catching everything.
 
 **Mechanisms:**
+
 - High confidence thresholds on the hot path (0.90+ for Tier 2+ alerts)
 - Conversational confirmation for borderline events ("Was that Sarah?")
 - Graduated escalation (silent log → in-app → push → wake → siren) with multiple exit ramps
@@ -162,7 +165,7 @@ This is the inverse of most security products. A Ring doorbell at high sensitivi
 
 ## Key insight: VLM as a reasoning tool, not automation
 
-SentiHome uses vision models to *understand* what's in frames, but the system treats VLM outputs as *information for the user*, not *directives for action*.
+SentiHome uses vision models to _understand_ what's in frames, but the system treats VLM outputs as _information for the user_, not _directives for action_.
 
 ```
 Traditional security camera:
@@ -186,22 +189,22 @@ The goal is not autonomous agents that lock doors and call police. The goal is a
 
 ## Glossary
 
-**Term** | **Definition**
----------|---------------
-**AttentionMode** | Sustained high-cadence monitoring for life-safety (e.g., "pool occupied" → 4fps continuous). Bypasses normal event queuing.
-**Episodic memory** | Curated, significant records of past sessions/events. Queryable by SQL (structured) or semantic search (vector).
-**Gallery entry** | Raw biometric data (face embedding, plate, pet face). May be linked to a KnownActor.
-**Home Assistant (HA)** | Smart home hub running automations, integrations, AI add-ons. SentiHome's source of truth for device state.
-**Identity resolution** | Probabilistic claim about who a detected person/vehicle is. Includes confidence + evidence sources + alternatives.
-**KnownActor** | A recognized entity (resident, service worker, pet, vehicle) with access profiles, behavioral models, and visit history.
-**MemoryMCP** | MCP server providing read/write access to all memory layers (rules, sessions, episodic, identity).
-**MCP** | Model Context Protocol. RPC interface to external services (HA agent, DVR, detector, memory, notifications).
-**PTZ** | Pan-tilt-zoom camera. Can move and zoom; treated as virtual static cameras at each preset position.
-**Remediation registry** | Deterministic lookup table: (confidence_limiting_factor + area_resource) → action (turn on lights, slew PTZ).
-**SituationalContext** | Temporal world knowledge that reframes reasoning (e.g., "Halloween trick-or-treat tonight" changes what's suspicious).
-**TransientIntent** | User-expressed, short-lived watch (e.g., "notify when Bob arrives"). Self-expires; fire-once semantics.
-**VLM** | Vision language model. Takes annotated frames + context + rules → outputs structured decision (criticality, confidence, rules_fired, action).
-**VLM prompt contract** | Standardized input format (image budget, prompt caching, context structure) and output schema (decision JSON).
-**World frame** | Shared coordinate system (origin, axes, units) for all spatial reasoning. Cameras + zones registered relative to this frame.
-**Zone** | Precise spatial region — either 2D (image-space polygon) or 3D (world-space volume). Tied to a camera or set of cameras.
-**Journey / session** | Multi-camera tracking of a subject from entry to exit. Accumulates segments, journey_score, and rules_fired over time.
+| **Term**                 | **Definition**                                                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AttentionMode**        | Sustained high-cadence monitoring for life-safety (e.g., "pool occupied" → 4fps continuous). Bypasses normal event queuing.                   |
+| **Episodic memory**      | Curated, significant records of past sessions/events. Queryable by SQL (structured) or semantic search (vector).                              |
+| **Gallery entry**        | Raw biometric data (face embedding, plate, pet face). May be linked to a KnownActor.                                                          |
+| **Home Assistant (HA)**  | Smart home hub running automations, integrations, AI add-ons. SentiHome's source of truth for device state.                                   |
+| **Identity resolution**  | Probabilistic claim about who a detected person/vehicle is. Includes confidence + evidence sources + alternatives.                            |
+| **KnownActor**           | A recognized entity (resident, service worker, pet, vehicle) with access profiles, behavioral models, and visit history.                      |
+| **MemoryMCP**            | MCP server providing read/write access to all memory layers (rules, sessions, episodic, identity).                                            |
+| **MCP**                  | Model Context Protocol. RPC interface to external services (HA agent, DVR, detector, memory, notifications).                                  |
+| **PTZ**                  | Pan-tilt-zoom camera. Can move and zoom; treated as virtual static cameras at each preset position.                                           |
+| **Remediation registry** | Deterministic lookup table: (confidence_limiting_factor + area_resource) → action (turn on lights, slew PTZ).                                 |
+| **SituationalContext**   | Temporal world knowledge that reframes reasoning (e.g., "Halloween trick-or-treat tonight" changes what's suspicious).                        |
+| **TransientIntent**      | User-expressed, short-lived watch (e.g., "notify when Bob arrives"). Self-expires; fire-once semantics.                                       |
+| **VLM**                  | Vision language model. Takes annotated frames + context + rules → outputs structured decision (criticality, confidence, rules_fired, action). |
+| **VLM prompt contract**  | Standardized input format (image budget, prompt caching, context structure) and output schema (decision JSON).                                |
+| **World frame**          | Shared coordinate system (origin, axes, units) for all spatial reasoning. Cameras + zones registered relative to this frame.                  |
+| **Zone**                 | Precise spatial region — either 2D (image-space polygon) or 3D (world-space volume). Tied to a camera or set of cameras.                      |
+| **Journey / session**    | Multi-camera tracking of a subject from entry to exit. Accumulates segments, journey_score, and rules_fired over time.                        |

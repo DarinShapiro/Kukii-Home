@@ -4,9 +4,9 @@ TypeScript frontend code: custom Home Assistant cards and an optional standalone
 
 ## Subprojects
 
-| Folder | Purpose | Stack |
-|--------|---------|-------|
-| [`ha-cards/`](ha-cards/) | Custom HA Lovelace cards (camera grid, alerts, identity gallery, optimization status) | Lit + TypeScript + Vite |
+| Folder                                       | Purpose                                                                                                                                   | Stack                     |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| [`ha-cards/`](ha-cards/)                     | Custom HA Lovelace cards (camera grid, alerts, identity gallery, optimization status)                                                     | Lit + TypeScript + Vite   |
 | [`operator-dashboard/`](operator-dashboard/) | Standalone web dashboard for operators (deep diagnostics, AI chat synthesis, replay tooling) — optional; falls back to HA if not deployed | React + TypeScript + Vite |
 
 ## Why two surfaces?

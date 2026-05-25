@@ -34,7 +34,7 @@ HA service execution:
 
 ## Confidence tiers & escalation
 
-The VLM output `criticality` field routes decisions through escalation tiers. Each tier determines *what surfaces are activated* and *who gets notified*.
+The VLM output `criticality` field routes decisions through escalation tiers. Each tier determines _what surfaces are activated_ and _who gets notified_.
 
 ```
 VLM output:
@@ -53,12 +53,12 @@ Action:
   - NOT pushed to user (no app notifications)
   - NOT voice alert
   - NOT device actions (no lights, no speaking)
-  
+
 Surface:
   - visible in in-app history only
   - included in nightly digest if relevant
   - queryable later ("show me all package deliveries from May")
-  
+
 Use case: routine expected events, low novelty
 ```
 
@@ -72,12 +72,12 @@ Action:
   - NO push to phone
   - NO voice alert
   - NO device actions
-  
+
 Surface:
   - in-app activity stream / timeline
   - notification tray (when app open)
   - accessible within 5 min after event
-  
+
 Use case: expected events, moderate confidence, doesn't need immediate interrupt
 ```
 
@@ -91,18 +91,18 @@ Action:
   - haptic feedback (phone vibrate)
   - optional sound (silent, low vibration, bells)
   - 60s timeout → expire unread
-  
+
 Content:
   "Unknown person at front door
    Confidence: 92%
    Evidence: Package delivery driver detected (no known plate)
    [View] [Dismiss] [Call police]"
-  
+
 Surface:
   - lock screen notification
   - app badge
   - (click → launch app → stream + clip)
-  
+
 Routing:
   - respect quiet hours (push silent 11pm–7am unless urgent)
   - who's home check (see Routing section below)
@@ -119,16 +119,16 @@ Action:
   - phone call ringdown (silent mode disabled)
   - text to primary contact + secondary
   - voice announcement via home speakers
-  
+
 Content (voice):
-  "Alert: Unknown person attempted entry at garage door. 
+  "Alert: Unknown person attempted entry at garage door.
    Police recommended. Press 1 to confirm, 2 for false alarm."
-  
+
 Surface:
   - cannot be dismissed (notification "sticks")
   - visible to all household members
   - confirmation required to acknowledge
-  
+
 Routing:
   - wake sleeping residents (if home)
   - escalate to Tier 4 if no response in 60s
@@ -144,16 +144,16 @@ Action:
   - activate emergency lights (strobing exterior lights)
   - call 911 (with pre-recorded message)
   - lockdown (lock exterior doors; optional)
-  
+
 Human override:
   - "False alarm" button (press within 30s to abort)
   - Cancel 911 call (if local LE already dispatched, too late)
-  
+
 Surface:
   - audible in entire home
   - visible to household + emergency contacts (via app push + SMS)
   - logged for legal liability (never deleted)
-  
+
 Use case: immediate life-safety threat
 ```
 
@@ -197,7 +197,7 @@ During quiet hours:
   Tier 2 → silent push (badge only, no sound/vibration)
   Tier 3 → wake call (sound enabled, despite quiet hours)
   Tier 4 → automated emergency (always audible)
-  
+
 Exception: TransientIntent with force_audio: true overrides quiet hours
   (e.g., "notify me immediately if the gate opens" at any hour)
 ```
@@ -208,17 +208,17 @@ Exception: TransientIntent with force_audio: true overrides quiet hours
 System knows who's home via:
   - HA occupancy sensors (phone GPS, Bayesian occupancy)
   - Explicit user state (manual "I'm leaving" button in app)
-  
+
 Routing decision:
   Alert with criticality: "alert"
-  
+
   Who's home?
     If no one home → escalate to Tier 3 (wake call) immediately
                     (push won't be seen; call gets immediate attention)
-    
+
     If someone home → Tier 2 push first
                      escalate to Tier 3 if unread after 60s
-    
+
     If mixed (some home, some away) → push to both
                                        call to away residents only
 ```
@@ -233,14 +233,14 @@ Solution: explicit delegation + confirmation
 
 Flow:
   Alert received by resident_1 + resident_2 simultaneously
-  
+
   resident_1 views alert (app opens)
   → alert changes to "resident_1 is reviewing"
-  
+
   resident_2 sees: "resident_1 is reviewing" (de-prioritize locally)
-  
+
   resident_1 dismisses → marked as "resident_1 dismissed, no action needed"
-  
+
   If 5min passes without explicit resolution → escalate to resident_2:
     "resident_1 didn't respond; can you check this?"
 ```
@@ -253,7 +253,7 @@ Resident profile includes:
   vacation_mode: false (if true, escalate all tiers +1)
   emergency_only: false (if true, suppress Tier 2, allow Tier 3+)
   preferred_contact: phone_push | phone_call | sms | in_app_only
-  
+
 Rule-level routing override:
   Rule can specify: "always call resident_1, push to resident_2"
   "do_not_alert_these_residents": []
@@ -270,24 +270,24 @@ VLM output:
   criticality: "warning"
   confidence: 0.72
   limiting_factor: "face_oblique"
-  
+
 Reasoner decision:
   → This is borderline. Confidence is OK but limiting factor suggests uncertainty.
   → Use conversational confirmation (ask) before pushing notification
-  
+
 Action:
   notify.ask(
     question: "Was that Sarah at the front door?",
     evidence_clip: clip_uri,
     response_callback_id: "ask_xyz123"
   )
-  
+
   Possible responses:
     ✓ "Yes, that was Sarah" → create confirmation alert, bump confidence to 0.95
     ✗ "No, that was someone else" → alert as "unknown person", confidence unchanged
     ? "Not sure" → resolve to "unknown", suggest rule edit
     [timeout 60s] → default to "unknown person", send low-tier warning
-    
+
   Alert sent only after user responds or timeout
   Pipeline waits for response (session held open)
 ```
@@ -315,7 +315,7 @@ No gate, fire immediately:
   - Notifications (push, SMS, email)
   - Session opens / memory writes
   - PTZ slew / profile switch (observation actions)
-  
+
 Examples:
   - "lights on in backyard" (to illuminate for better camera view)
   - "speak: visitor detected" (via home speaker)
@@ -328,25 +328,25 @@ Examples:
 These require one of:
   1. Pre-approval rule (rule text includes "turn on lights if low_light")
   2. User confirmation via ask() → response recorded
-  
+
 Gated actions:
   - Lock any door (potential trap / lockout)
   - Unlock any door (potential security breach)
   - Trigger security automation (armed state changes)
   - Adjust alarm system
   - Activate siren (audible to neighborhood)
-  
+
 Example:
   VLM: "Face recognition low-confidence. Subject approaching door.
         Recommend: lock door if low-light."
-  
+
   Dispatcher sees: ha.lock(front_door) requested
-  
+
   Policy check:
     - Is there a pre-approved rule? No.
     - → surface as ask: "Lock the front door?"
     - User response needed before action executes
-    
+
   Action on response:
     ✓ User confirms → lock executed
     ✗ User denies → no lock; note dismissal; learn from it
@@ -361,10 +361,10 @@ These require out-of-band human action (not even ask will execute):
   - Unlock all doors at once (potential catastrophic lockout)
   - Siren activation (audible emergency; legal liability)
   - Garage door open (potential injury if mechanism broken)
-  
+
 Behavior:
   VLM or rule requests action → policy returns:
-  
+
   {
     "error": "policy_block",
     "action": "siren_activate",
@@ -372,7 +372,7 @@ Behavior:
     "suggest": "user calls 911; police disable siren on arrival",
     "fallback": "send urgent alert to household + emergency contacts"
   }
-  
+
   System instead:
     - sends urgent Tier 4 alert to residents
     - residents can manually activate siren if needed
@@ -389,13 +389,13 @@ Example rule (user writes):
    AND no one home:
    illuminate back_door lights + lock all doors
    (because low confidence + occupancy check means suspicious)"
-  
+
   Dispatcher sees: ha.lock(all_doors) + illuminate requested
-  
+
   Policy check:
     Lock is gated; look for pre-approval → found (this rule authorizes it)
     All conditions met (night, face_low_confidence, no one home) → YES
-    
+
   Execute: locks engage
   Log: "Pre-approved rule XYZ auto-locked doors due to suspicious activity"
 ```
@@ -413,11 +413,11 @@ Why:
   • Face recognition: no match to known residents/visitors
   • Behavior: lingering (3min in entry zone)
   • Time: 22:45 (unusual hour for unexpected visitors)
-  
+
 Rules fired:
   + Rule "Alert on unknown person at night" (severity: alert)
   + Rule "Linger detection" (severity: warning)
-  
+
 Confidence:
   Unknown person: 87%
     Evidence: face not in gallery, new appearance
@@ -440,7 +440,7 @@ User clicks [Edit Rule]
     - temporal conditions (suppress after 10pm)
     - target residents (don't alert resident_3)
     - actions (don't lock, just notify)
-    
+
 → Save → rule updated
 → Next similar event uses new rule
 ```
@@ -457,7 +457,7 @@ Push notification:
   - body: "Unknown visitor, 87% confidence"
   - badge count: increments per unread alert
   - sound: configurable (on/off per alert type, quiet hours aware)
-  
+
 Tap → opens app → stream view of camera + clip
 ```
 
@@ -468,11 +468,11 @@ Triggered for:
   - Tier 3 events (when household needs to wake up immediately)
   - Explicit "speak" action in rule
   - TransientIntent with voice: true
-  
+
 Example:
-  "Alert: person detected at front door. 
+  "Alert: person detected at front door.
    Confidence 92%. Consider reviewing the camera."
-   
+
 Speakers:
   - primary (bedroom); see Routing section for quiet-hours handling
   - selected zones (if rule specifies areas)
@@ -485,7 +485,7 @@ Per-resident feed:
   - chronological list of all detected events
   - filters: by area, by rule, by confidence, by status
   - infinite scroll (queryable by date range)
-  
+
 Quick actions:
   - tap to view clip + enrichment
   - edit rule
@@ -499,11 +499,11 @@ Wall-mounted display (if present):
   - shows live stream during presence
   - shows recent alerts in passive mode
   - VoiceOver / accessibility support
-  
+
 Garage/entry displays:
   - "Package arrived" when delivery detected
   - "Gate open, check it" when motion detected post-dark
-  
+
 Integration:
   - HA can push state changes to displays
   - SentiHome sends alerts via notify.push → HA → display
@@ -520,19 +520,19 @@ Timeline:
   t=0: Alert generated
   t=5s: User views notification (opens clip)
   t=20s: User dismisses or acknowledges
-  
+
 Feedback options:
   [✓ Correct alert] → rule was right, improve its recall
   [✗ False alarm] → rule was wrong, reduce its firing rate
   [? Not sure] → borderline, request more evidence
   [Edit rule] → opens rule editor
-  
+
 Data collected:
   - response_latency (how long before user responded)
   - feedback_type (correct/wrong/unsure)
   - user_action (dismissed/acknowledged/acted)
   - dwell_time_on_clip (how long user watched)
-  
+
 Aggregated:
   - Rule accuracy metrics (FP rate, FN rate)
   - Alert fatigue tracking (users dismissing N% of alerts)

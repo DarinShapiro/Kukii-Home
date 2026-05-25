@@ -20,7 +20,7 @@ x-python-service-prod: &python-service-prod
     - SENTIHOME_ENV=prod
     - LOG_LEVEL=INFO
     - PYTHONUNBUFFERED=1
-  volumes: []          # no bind mounts; code baked into image
+  volumes: [] # no bind mounts; code baked into image
   restart: always
   deploy:
     resources:
@@ -57,19 +57,19 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G       # heavier due to frame buffering
+          memory: 4G # heavier due to frame buffering
 
   detector:
     <<: *python-service-prod
     deploy:
       resources:
         limits:
-          memory: 4G       # ML models in memory
+          memory: 4G # ML models in memory
         reservations:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]   # if available
+              capabilities: [gpu] # if available
 
   vlm-router:
     <<: *python-service-prod

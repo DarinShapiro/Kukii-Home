@@ -4,15 +4,15 @@ Pluggable NVR adapters. Each adapter translates between a specific NVR platform 
 
 ## Adapters (v1 priority order)
 
-| Adapter | Mode | Status | Notes |
-|---------|------|--------|-------|
+| Adapter                                | Mode                     | Status    | Notes                                                                        |
+| -------------------------------------- | ------------------------ | --------- | ---------------------------------------------------------------------------- |
 | [`nvr-rtsp-direct/`](nvr-rtsp-direct/) | Direct (internal native) | v1 target | No NVR; consumes RTSP directly from cameras. The long-term recommended path. |
-| [`nvr-agent-dvr/`](nvr-agent-dvr/) | Service | v1 target | Agent DVR via OpenAPI 2.0; the original design choice |
-| [`nvr-frigate/`](nvr-frigate/) | Built-in | v1 target | Best fit for HA ecosystem; consumes Frigate's MQTT + REST |
-| [`nvr-blueiris/`](nvr-blueiris/) | Service | v1 target | Biggest external user base; uses ha-blueiris for events + RTSP |
-| [`nvr-synology/`](nvr-synology/) | Service | v1.x | Surveillance Station Web API v3.11 + webhooks |
-| [`nvr-qnap/`](nvr-qnap/) | Service | v1.x | QVR Pro OpenAPI with frame-level access |
-| [`nvr-unifi/`](nvr-unifi/) | Service | v1.x | Official UniFi Protect API |
+| [`nvr-agent-dvr/`](nvr-agent-dvr/)     | Service                  | v1 target | Agent DVR via OpenAPI 2.0; the original design choice                        |
+| [`nvr-frigate/`](nvr-frigate/)         | Built-in                 | v1 target | Best fit for HA ecosystem; consumes Frigate's MQTT + REST                    |
+| [`nvr-blueiris/`](nvr-blueiris/)       | Service                  | v1 target | Biggest external user base; uses ha-blueiris for events + RTSP               |
+| [`nvr-synology/`](nvr-synology/)       | Service                  | v1.x      | Surveillance Station Web API v3.11 + webhooks                                |
+| [`nvr-qnap/`](nvr-qnap/)               | Service                  | v1.x      | QVR Pro OpenAPI with frame-level access                                      |
+| [`nvr-unifi/`](nvr-unifi/)             | Service                  | v1.x      | Official UniFi Protect API                                                   |
 
 ## Adapter contract
 

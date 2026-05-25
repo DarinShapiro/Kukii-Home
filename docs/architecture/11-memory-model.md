@@ -92,6 +92,7 @@ Session:
 ```
 
 **Correlation rules for appending a new segment:**
+
 - Re-ID cosine similarity ≥ threshold, AND
 - Spatial plausibility — adjacency graph confirms transit was possible in Δt, AND
 - Recency window (~5 min)
@@ -99,14 +100,15 @@ Session:
 Reject geometrically impossible matches even with high re-ID score.
 
 **Two reasoning cadences:**
-- *Incremental:* each segment updates `journey_score`; alert when journey-scoped rules cross threshold
-- *On close:* silence timeout or known egress → full episodic write (see below)
+
+- _Incremental:_ each segment updates `journey_score`; alert when journey-scoped rules cross threshold
+- _On close:_ silence timeout or known egress → full episodic write (see below)
 
 ---
 
 ## Episodic memory
 
-The curated, queryable record of what has happened. Not a raw event log — that's a separate append-only store (time-series DB or object store). Episodic is the *significant* subset.
+The curated, queryable record of what has happened. Not a raw event log — that's a separate append-only store (time-series DB or object store). Episodic is the _significant_ subset.
 
 ### What triggers an episodic write
 
@@ -172,7 +174,7 @@ KnownActor:
   id, label: "Carlos (pool service)" | "mail carrier" | "Amazon driver"
   gallery_refs: [→GalleryEntry]
   relationship: household | regular_visitor | service | delivery | unknown_recurring
-  
+
   access_profile: [{
     areas_allowed: [driveway, side_yard, backyard, pool_area],
     areas_flagged: [garage_interior, front_door_entry],
@@ -181,7 +183,7 @@ KnownActor:
     expected_pattern: "transit front→side→back, dwell at pool 30–90min"
     notes: "bi-weekly pool service"
   }]
-  
+
   visit_ledger: →VisitLedger   ← see below
   behavioral_profile: →BehavioralProfile
 ```
@@ -189,6 +191,7 @@ KnownActor:
 The access profile is injected into the reasoner's working memory alongside the scene. The VLM reasons about whether observed behavior fits — explicit `still_suspicious` lists are not needed; the VLM persona handles that.
 
 **Context stacking over access profiles:**
+
 - SituationalContext can temporarily expand an actor's allowed areas without modifying the standing profile
 - A TransientIntent ("pool guy coming today, unscheduled") overrides the scheduled time window for that visit
 - When the context/intent expires, the standing access profile applies again
@@ -259,13 +262,13 @@ SituationalContext:
   active_window: { start, end }
     or { recurring: "Oct-31 17:00–21:00" }
   scope: { areas[], trigger_types[] }
-  
+
   behavioral_expectations: [
     "groups of unknown children in costumes approaching front door is normal",
     "repeated door approaches by different groups throughout the evening is expected",
     "unknown faces at the front door are not individually suspicious tonight"
   ]
-  
+
   learned_from: { episode_ids[], user_confirmations[] }
   recurrence: { annual: true, key_date: "Oct-31" }
   confidence: 0.0–1.0
@@ -274,6 +277,7 @@ SituationalContext:
 **What it does NOT contain:** a `still_suspicious` list. The VLM persona reasons about anomalies within the stated context — prescribing exceptions would duplicate the model's judgment in a more brittle form.
 
 **Learning lifecycle:**
+
 - Year 1: user asserts context mid-event → system creates it, applies for rest of window
 - Episodic memory records the context alongside all events that evening
 - Year 2: calendar (HA) says Halloween → system finds matching episodic record → proposes context proactively in the morning
@@ -306,22 +310,23 @@ TransientIntent:
 
 **TTL inference from natural language:**
 
-| Phrasing | Inferred TTL |
-|----------|-------------|
-| "when Bob arrives" | fire-once, 24h ceiling |
-| "today" / no qualifier, daytime | end of day |
-| "this week" | 7 days |
-| "if the Amazon truck comes" | fire-once, end of day |
-| "for the next 2 hours" | explicit 2h |
-| "keep watching until I say stop" | until cancelled |
+| Phrasing                         | Inferred TTL           |
+| -------------------------------- | ---------------------- |
+| "when Bob arrives"               | fire-once, 24h ceiling |
+| "today" / no qualifier, daytime  | end of day             |
+| "this week"                      | 7 days                 |
+| "if the Amazon truck comes"      | fire-once, end of day  |
+| "for the next 2 hours"           | explicit 2h            |
+| "keep watching until I say stop" | until cancelled        |
 
-**Confirmation:** when created, the system confirms what it understood and when it will expire — *"Got it — I'll watch for Bob's car in the driveway or out front. I'll stop watching tomorrow morning unless you tell me sooner."*
+**Confirmation:** when created, the system confirms what it understood and when it will expire — _"Got it — I'll watch for Bob's car in the driveway or out front. I'll stop watching tomorrow morning unless you tell me sooner."_
 
 **Triage priority boost:** events matching an active TransientIntent jump to `vlm.normal` or `vlm.urgent` even if they would otherwise be `vlm.background`.
 
-**Identity resolution at creation:** if the referenced subject ("Bob's car") is not in the gallery, the system says so: *"I don't have a plate for Bob on file — I'll flag any vehicle that stops out front. Want to add his plate now?"*
+**Identity resolution at creation:** if the referenced subject ("Bob's car") is not in the gallery, the system says so: _"I don't have a plate for Bob on file — I'll flag any vehicle that stops out front. Want to add his plate now?"_
 
 **Expiry handling:**
+
 - Fire-once: expires immediately on first match, no further noise
 - Expired unfired: surfaces in daily digest ("Watched for Bob's car — never arrived") or active notification if the original intent was high-priority
 - Inverse intents ("don't bother me for the next hour") are also supported — suppression with an explicit expiry
@@ -350,8 +355,9 @@ VisitLedger:
 ```
 
 **Escalation logic uses two dimensions:**
-- *Frequency:* 3 unanswered visits in one day = different severity than 3 across 3 weeks
-- *Persistence:* visits spread over weeks signal something different than a burst
+
+- _Frequency:_ 3 unanswered visits in one day = different severity than 3 across 3 weeks
+- _Persistence:_ visits spread over weeks signal something different than a burst
 
 A single user dismiss with context ("not interested, don't alert again") sets `suppress_until` rather than just dropping the count.
 
@@ -359,13 +365,13 @@ A single user dismiss with context ("not interested, don't alert again") sets `s
 
 ## Stores
 
-| Store | What lives here | Why |
-|-------|----------------|-----|
-| Vector DB | Rule embeddings, face/reid/pet galleries, episodic summary embeddings, behavioral pattern embeddings | Semantic + ANN search |
-| SQL | Sessions, episodic records (structured), KnownActors, access profiles, visit ledgers, transient intents, situational contexts, calibration, audit log | Structured queries, joins, time-range filters |
-| Object store | Raw clips, annotated frames, montages, session stitches | Blob storage, cheap, content-addressed |
-| Time-series / append-only log | Raw event stream (every trigger, every detection) | High-write, queryable by time range, retention-managed separately |
-| In-memory cache | Hot sessions, active contexts, active intents | Sub-ms access during triage and reasoning |
+| Store                         | What lives here                                                                                                                                       | Why                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Vector DB                     | Rule embeddings, face/reid/pet galleries, episodic summary embeddings, behavioral pattern embeddings                                                  | Semantic + ANN search                                             |
+| SQL                           | Sessions, episodic records (structured), KnownActors, access profiles, visit ledgers, transient intents, situational contexts, calibration, audit log | Structured queries, joins, time-range filters                     |
+| Object store                  | Raw clips, annotated frames, montages, session stitches                                                                                               | Blob storage, cheap, content-addressed                            |
+| Time-series / append-only log | Raw event stream (every trigger, every detection)                                                                                                     | High-write, queryable by time range, retention-managed separately |
+| In-memory cache               | Hot sessions, active contexts, active intents                                                                                                         | Sub-ms access during triage and reasoning                         |
 
 ---
 
@@ -373,16 +379,16 @@ A single user dismiss with context ("not interested, don't alert again") sets `s
 
 Covered in depth in `16-privacy-and-governance.md`. Summary:
 
-| Data class | Default retention |
-|-----------|-----------------|
-| Household member embeddings | Indefinite |
-| Known visitor / actor | Indefinite while relationship active; user-deletable |
-| Unknown face embeddings | 30 days; promoted to indefinite if labeled |
-| Raw clips (all) | 14 days rolling (configurable) |
-| Episodic records (structured + summary) | 1 year (configurable) |
-| Raw event log | 90 days |
-| Transient intents (expired/fired) | 30 days (for digest and audit) |
-| Visit ledgers | Tied to subject retention class |
+| Data class                              | Default retention                                    |
+| --------------------------------------- | ---------------------------------------------------- |
+| Household member embeddings             | Indefinite                                           |
+| Known visitor / actor                   | Indefinite while relationship active; user-deletable |
+| Unknown face embeddings                 | 30 days; promoted to indefinite if labeled           |
+| Raw clips (all)                         | 14 days rolling (configurable)                       |
+| Episodic records (structured + summary) | 1 year (configurable)                                |
+| Raw event log                           | 90 days                                              |
+| Transient intents (expired/fired)       | 30 days (for digest and audit)                       |
+| Visit ledgers                           | Tied to subject retention class                      |
 
 ---
 

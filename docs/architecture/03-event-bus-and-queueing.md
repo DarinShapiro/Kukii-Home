@@ -40,14 +40,14 @@ Camera-side events are time-sensitive and push-capable — they use their native
 
 Different entity groups are polled at different cadences based on alert urgency and state change frequency:
 
-| Group | Entities | Cadence | Mechanism |
-|-------|----------|---------|-----------|
-| Safety-critical | Smoke, CO, flood, alarm state | 15s | `ha.get_changes` — targeted entity list |
-| Security | Locks, doors, windows, garage, gates | 30s | `ha.get_changes` — targeted entity list |
-| Presence | Who's home, occupancy sensors | 60s | `ha.get_changes` |
-| Ecosystem sweep | HA-native alerts, repairs, integration health | 60s | `ha.query("anything needing attention?")` — LLM-backed |
-| Context | Calendar, weather, scenes, modes | 5 min | `ha.get_changes` |
-| Inventory | All other entity states | 5 min | `ha.get_snapshot()` — full refresh |
+| Group           | Entities                                      | Cadence | Mechanism                                              |
+| --------------- | --------------------------------------------- | ------- | ------------------------------------------------------ |
+| Safety-critical | Smoke, CO, flood, alarm state                 | 15s     | `ha.get_changes` — targeted entity list                |
+| Security        | Locks, doors, windows, garage, gates          | 30s     | `ha.get_changes` — targeted entity list                |
+| Presence        | Who's home, occupancy sensors                 | 60s     | `ha.get_changes`                                       |
+| Ecosystem sweep | HA-native alerts, repairs, integration health | 60s     | `ha.query("anything needing attention?")` — LLM-backed |
+| Context         | Calendar, weather, scenes, modes              | 5 min   | `ha.get_changes`                                       |
+| Inventory       | All other entity states                       | 5 min   | `ha.get_snapshot()` — full refresh                     |
 
 The ecosystem sweep cadence (60s) uses the LLM-backed `ha.query()` to surface HA-native AI findings (Thread network assessments, integration-generated alerts, repair completions) as synthetic events. The poller doesn't need to understand Thread networking or any specific HA add-on — the HA agent's LLM layer translates.
 
@@ -160,12 +160,12 @@ Every event carries an idempotency key. Redelivered events (NATS redelivery on w
 
 Per-event TTLs — stale work is worse than no work:
 
-| Queue | TTL | Rationale |
-|-------|-----|-----------|
-| `sensor.bypass` | 30s | Safety alert must be acted on immediately or not at all |
-| `vlm.urgent` | 90s | "Someone at the door" is useless 2 minutes later |
-| `vlm.normal` | 5 min | Delivery confirmation can wait briefly |
-| `vlm.background` | 1 hour | Pattern mining, report generation |
+| Queue            | TTL    | Rationale                                               |
+| ---------------- | ------ | ------------------------------------------------------- |
+| `sensor.bypass`  | 30s    | Safety alert must be acted on immediately or not at all |
+| `vlm.urgent`     | 90s    | "Someone at the door" is useless 2 minutes later        |
+| `vlm.normal`     | 5 min  | Delivery confirmation can wait briefly                  |
+| `vlm.background` | 1 hour | Pattern mining, report generation                       |
 
 Expired events are logged with `expired: true` and event_id retained for audit.
 
@@ -190,6 +190,7 @@ Expired events are logged with `expired: true` and event_id retained for audit.
 - Consumer groups for the VLM worker pool
 
 Alternatives considered:
+
 - **Redis Streams** — viable if Redis is already in the stack; consumer groups work well; TTL per-message less clean
 - **RabbitMQ** — priority queues first-class, heavier ops burden
 - **MQTT alone** — HA's native protocol; no work-queue or replay semantics; use as ingress protocol only, bridge into NATS

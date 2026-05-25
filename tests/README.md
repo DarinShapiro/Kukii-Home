@@ -4,11 +4,11 @@ Cross-service integration and end-to-end tests. Unit tests live alongside the co
 
 ## Layout
 
-| Folder | Purpose |
-|--------|---------|
+| Folder                         | Purpose                                                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`integration/`](integration/) | Multi-service tests run against a docker-compose stack — e.g., "event flows from NVR adapter → triage → VLM → action dispatch → HA service call" |
-| [`e2e/`](e2e/) | Full system tests including real (or recorded) camera streams, real HA instance, real rule firings. Slowest tier; gated to nightly. |
-| [`fixtures/`](fixtures/) | Shared test fixtures: recorded RTSP clips, mock VLM responses, sample event payloads, identity gallery seed data |
+| [`e2e/`](e2e/)                 | Full system tests including real (or recorded) camera streams, real HA instance, real rule firings. Slowest tier; gated to nightly.              |
+| [`fixtures/`](fixtures/)       | Shared test fixtures: recorded RTSP clips, mock VLM responses, sample event payloads, identity gallery seed data                                 |
 
 ## Conventions
 

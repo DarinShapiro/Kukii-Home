@@ -11,7 +11,7 @@ The VLM is not a scene describer feeding a downstream reasoner. It receives fram
 
 **The VLM has no knowledge of HA, lighting devices, or any remediation actions.** It reports what it observes — including the factors limiting its confidence — and the action dispatcher owns the response to those factors. The VLM's job is honest observation and judgment, not knowing what to do about bad lighting.
 
-**Observation and evaluation are one unified act.** The VLM does not observe first and evaluate second. It evaluates the scene *through the lens of the rules and context it was given* in a single pass. Every output field reflects that evaluation:
+**Observation and evaluation are one unified act.** The VLM does not observe first and evaluate second. It evaluates the scene _through the lens of the rules and context it was given_ in a single pass. Every output field reflects that evaluation:
 
 - `confidence` is confidence in the **rule evaluation**, not raw image quality
 - `confidence_limiting_factors` are factors preventing a **confident rule evaluation** — relative to the rules in scope, not absolute image conditions. Low light may not limit confidence for a dwell-time rule but will for one requiring identity confirmation.
@@ -19,18 +19,18 @@ The VLM is not a scene describer feeding a downstream reasoner. It receives fram
 - `reasoning` explains the evaluation, not just the scene
 - `deeper_assessment_reason` describes what would allow a more confident **rule evaluation**
 
-The same scene with different rules in scope can produce different `confidence_limiting_factors`. The VLM is always answering: *"given what I was asked to look for, can I say with confidence whether it's happening?"*
+The same scene with different rules in scope can produce different `confidence_limiting_factors`. The VLM is always answering: _"given what I was asked to look for, can I say with confidence whether it's happening?"_
 
 ---
 
 ## Image budget
 
-| Element | Count | Resolution | Notes |
-|---------|-------|-----------|-------|
-| Full annotated frames | 4–8 | 768–1024px longest side | Detector-guided selection (best visibility per subject) |
-| Clean reference frames | 2–4 | Same | Sent alongside annotated; VLM uses both |
-| Subject crops | 1–2 per unknown subject | Up to 512px | Tight high-res crop for face/appearance detail |
-| Journey montage (session close only) | 1 per segment, max 12 | 512px | 1–2 best frames per camera segment |
+| Element                              | Count                   | Resolution              | Notes                                                   |
+| ------------------------------------ | ----------------------- | ----------------------- | ------------------------------------------------------- |
+| Full annotated frames                | 4–8                     | 768–1024px longest side | Detector-guided selection (best visibility per subject) |
+| Clean reference frames               | 2–4                     | Same                    | Sent alongside annotated; VLM uses both                 |
+| Subject crops                        | 1–2 per unknown subject | Up to 512px             | Tight high-res crop for face/appearance detail          |
+| Journey montage (session close only) | 1 per segment, max 12   | 512px                   | 1–2 best frames per camera segment                      |
 
 Frame count scales with sequence complexity. Standard event: 8 frames + crops. Sequence completion watch: 3–5 frames across phases (see §08). Journey close: up to 12 montage tiles.
 
@@ -163,23 +163,23 @@ The VLM returns a single JSON object. Downstream pipeline stages are determinist
 
 ### Field definitions
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| `alert_required` | bool | Primary decision signal for action dispatch |
-| `criticality` | enum | Maps to notification tier (see §15) |
-| `confidence` | float | Compared against rule `confidence_required`; gates action |
-| `confidence_limiting_factors` | enum[] | Why confidence is below ideal — action dispatcher maps these to remediations (see §06). VLM reports the problem; dispatcher owns the fix. |
-| `action` | enum | Exact output class (see §15 taxonomy). Never `device_action` — VLM has no HA knowledge. |
-| `draft_notification` | string | Human-readable text; cited to evidence |
-| `reasoning` | string | Audit trail; shown alongside alert so user can edit the rule |
-| `rules_fired` | string[] | Rule IDs that contributed to decision; required for explainability |
-| `deeper_assessment` | bool | Request one additional bounded pass (see §06) |
-| `deeper_assessment_reason` | string | Free-text description of what would resolve the gap — phrased in observational terms, not HA actions |
-| `journey_open` | bool | Signal to session manager to open/update a session |
-| `attention_mode` | string\|null | Attention mode to activate (see §08) |
-| `sequence_watch` | object\|null | Sequence completion watch to open (see §08) |
-| `subjects` | array | Relevant subjects for episodic memory and session tracking |
-| `scene_summary` | string | Written to episodic memory on session close |
+| Field                         | Type         | Purpose                                                                                                                                   |
+| ----------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `alert_required`              | bool         | Primary decision signal for action dispatch                                                                                               |
+| `criticality`                 | enum         | Maps to notification tier (see §15)                                                                                                       |
+| `confidence`                  | float        | Compared against rule `confidence_required`; gates action                                                                                 |
+| `confidence_limiting_factors` | enum[]       | Why confidence is below ideal — action dispatcher maps these to remediations (see §06). VLM reports the problem; dispatcher owns the fix. |
+| `action`                      | enum         | Exact output class (see §15 taxonomy). Never `device_action` — VLM has no HA knowledge.                                                   |
+| `draft_notification`          | string       | Human-readable text; cited to evidence                                                                                                    |
+| `reasoning`                   | string       | Audit trail; shown alongside alert so user can edit the rule                                                                              |
+| `rules_fired`                 | string[]     | Rule IDs that contributed to decision; required for explainability                                                                        |
+| `deeper_assessment`           | bool         | Request one additional bounded pass (see §06)                                                                                             |
+| `deeper_assessment_reason`    | string       | Free-text description of what would resolve the gap — phrased in observational terms, not HA actions                                      |
+| `journey_open`                | bool         | Signal to session manager to open/update a session                                                                                        |
+| `attention_mode`              | string\|null | Attention mode to activate (see §08)                                                                                                      |
+| `sequence_watch`              | object\|null | Sequence completion watch to open (see §08)                                                                                               |
+| `subjects`                    | array        | Relevant subjects for episodic memory and session tracking                                                                                |
+| `scene_summary`               | string       | Written to episodic memory on session close                                                                                               |
 
 ### `confidence_limiting_factors` enum
 
@@ -258,6 +258,7 @@ Return structured JSON: { summary, notable, propose_rule, rule_text? }
 When `supports_visual_reasoning: false` (see §04), the pipeline splits the call:
 
 **Call 1 — description only:**
+
 ```
 [minimal system prompt — no rules, no context]
 Describe what you see: subjects, locations, actions, attributes.
@@ -265,6 +266,7 @@ Return structured scene description JSON.
 ```
 
 **Call 2 — text reasoning (no images):**
+
 ```
 [full context + rules + persona]
 Scene description: {output of call 1}
@@ -316,10 +318,10 @@ Set-of-Mark vs. native label strategy: A/B per model. Qwen2.5-VL and InternVL be
 
 ## Model-specific variants
 
-| Backend | Notes |
-|---------|-------|
-| Qwen2.5-VL 72B (local) | Primary local target; strong visual reasoning; test SoM vs native labels |
-| InternVL2 (local) | Alternative; different annotation grounding behavior |
-| Claude (cloud) | Native structured output via tool-call response; prompt cache via `cache_control` |
-| GPT-4o (cloud) | `response_format: json_schema`; strong reasoning; higher cost |
-| Smaller local VLMs | `supports_visual_reasoning: false` → two-step fallback path |
+| Backend                | Notes                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| Qwen2.5-VL 72B (local) | Primary local target; strong visual reasoning; test SoM vs native labels          |
+| InternVL2 (local)      | Alternative; different annotation grounding behavior                              |
+| Claude (cloud)         | Native structured output via tool-call response; prompt cache via `cache_control` |
+| GPT-4o (cloud)         | `response_format: json_schema`; strong reasoning; higher cost                     |
+| Smaller local VLMs     | `supports_visual_reasoning: false` → two-step fallback path                       |

@@ -34,6 +34,7 @@ Local-first by default (privacy, latency, no cloud video bill). Explainable deci
 ```
 
 Two cadences:
+
 - **Reactive (sub-second)**: fast detector classifies, decides if VLM pass is needed.
 - **Deliberative (seconds)**: VLM produces structured scene JSON, reasoner LLM evaluates against retrieved rules and world state, picks action.
 
@@ -64,10 +65,11 @@ hit_count, last_fired, dismiss_count
 ```
 
 Key principles:
+
 - **Hybrid retrieval, not pure vector** — SQL filter on scope/temporal/conditions first, ANN-rank within.
 - **Rule lifecycle** — `dismiss_count` lets agent decay noisy rules and surface them for cleanup.
 - **Authoring sources**: natural-language from user (LLM normalizes to schema), agent-proposed from observed dismissal/alert patterns, default pack at setup.
-- **Areas vs. cameras**: rules attach to semantic *areas*, not cameras, so cam swaps don't break rules and multi-cam areas work naturally.
+- **Areas vs. cameras**: rules attach to semantic _areas_, not cameras, so cam swaps don't break rules and multi-cam areas work naturally.
 
 ## Journey / multi-camera reasoning
 
@@ -84,11 +86,13 @@ status: open | closed | escalated
 ```
 
 Correlation rules for appending a new event to a session:
+
 - Re-ID cosine similarity ≥ threshold, AND
 - **Spatial plausibility** — camera adjacency graph says transit was possible in Δt. Reject geometrically impossible matches even with high re-ID score.
 - Recency window (~5 min).
 
 Two-cadence reasoning:
+
 - **Incremental**: each new segment updates `journey_score`; alert when journey-scoped rules cross threshold (e.g., "≥3 perimeter cams, no entry approach, <4 min" = casing pattern).
 - **On close**: silence timeout or known egress → full VLM-over-stitched-montage pass for summary, filed in episodic memory.
 
@@ -109,6 +113,7 @@ Stitching = temporal montage, not concatenated video: 1–2 best frames per segm
 Quality gates matter — false-positive recognition (labeling stranger as Sarah) is worse than no label. Face too small/oblique/blurred → `face_present_unresolved`, not a guess.
 
 Annotation style:
+
 - Thin outline boxes (2px), semi-transparent face fills
 - Label `#2 Sarah ✓`, `#3 unknown ?`, `#4 Amazon ◷`
 - Color by trust tier: green=resident, blue=known-visitor, yellow=unknown-benign-pattern, red=unknown-attention
@@ -125,13 +130,14 @@ Annotation style:
   - Height estimate (clothing-invariant, ±3–5cm with calibrated cam)
   - Behavioral pattern (time, route, approach signature)
   - Cloth-changing re-ID models — tiebreaker only
-- Output is a **probability**, not a track ID. UX must reflect uncertainty: *"someone matching Tuesday's late-night visitor — same approach route, similar height, no face this time"* — not "the same stranger is back."
+- Output is a **probability**, not a track ID. UX must reflect uncertainty: _"someone matching Tuesday's late-night visitor — same approach route, similar height, no face this time"_ — not "the same stranger is back."
 - Human-in-the-loop labeling is the durable identity layer for unnamed-but-recurring individuals.
 - New-face memory bootstrapping: 3rd time same unknown embedding appears, agent prompts user to label.
 
 ## Camera calibration
 
 **Intrinsics + extrinsics + ground plane** unlock:
+
 - Real-world distances/speeds in prompts
 - Height as clothing-invariant identity feature
 - World-coordinate rule scopes (one rule covers all cams of an area)
@@ -139,6 +145,7 @@ Annotation style:
 - World-volume zones (height-aware: raccoon at ground vs. person at chest height)
 
 **Stereo on overlapping cam pairs** adds:
+
 - z-coordinate without ground assumption (climbing, on roof, on deck)
 - Near-deterministic cross-cam correlation in overlap zones (geometry beats re-ID)
 - Occlusion fusion
@@ -147,6 +154,7 @@ Annotation style:
 Realistic precision: ground-plane ±10–20cm at 5–15m; stereo depth ±15–30cm; height ±3–5cm averaged. Plenty for "approached the door / climbed the fence" reasoning, not biometric-grade.
 
 Calibration UX options (best → worst effort):
+
 1. Phone-AR walk — phone broadcasts ARKit/ARCore pose, cams capture it as fiducial, bundle-adjust everything.
 2. Landmark tagging on floor plan + cam images, solve PnP.
 3. Resident-walk auto-calibration — known-height residents walked over a week, solve from foot-tracks.
@@ -169,7 +177,7 @@ Continuous-parameter calibration is fragile. The practical pattern:
 - Confidence tiers: silent log → in-app notification → phone push → ring everyone → siren+lights.
 - Quiet-hours aware (same event more alertable at 2am than 2pm).
 - Who-to-wake routing: light-sleeper preference, who's home, who responded last time.
-- Conversational confirmation for ambiguous events: *"I see someone at the back fence, doesn't match anyone I know, been there 90 seconds. Should I turn the floods on?"*
+- Conversational confirmation for ambiguous events: _"I see someone at the back fence, doesn't match anyone I know, been there 90 seconds. Should I turn the floods on?"_
 - Autonomous defaults: lights/notifications yes; locks/sirens require policy pre-approval or human confirmation.
 - Every alert cites the rules that fired → directly editable by the user.
 

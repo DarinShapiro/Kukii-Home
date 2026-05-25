@@ -4,15 +4,15 @@ Long-running Python services that compose the SentiHome runtime. Each service is
 
 ## Services
 
-| Service | Architecture ref | Purpose |
-|---------|-----------------|---------|
-| [`core/`](core/) | §02, §06, §10, §15 | Triage worker, rule engine, action dispatcher — the orchestration brain |
-| [`preprocessor/`](preprocessor/) | §03.5, §08 | Motion gating + frame markup + fast-detector enrichment for service-mode NVR adapters |
-| [`detector/`](detector/) | §08 | Standalone fast-detector models (YOLO, face, re-ID, pose, OCR) — can be embedded in preprocessor or run separately |
-| [`vlm-router/`](vlm-router/) | §04 | Multi-backend model router; local Ollama + cloud fallback with circuit breaker |
-| [`memory/`](memory/) | §11, §12 | Memory MCP — vector DB, SQL, episodic, identity gallery, visit ledger |
-| [`ha-agent/`](ha-agent/) | §07 | Bidirectional MCP server: read-side LLM-backed HA synthesis + write-side device commands |
-| [`notify/`](notify/) | §15 | Notification dispatcher — push, voice/TTS, in-app, ask flows |
+| Service                          | Architecture ref   | Purpose                                                                                                            |
+| -------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| [`core/`](core/)                 | §02, §06, §10, §15 | Triage worker, rule engine, action dispatcher — the orchestration brain                                            |
+| [`preprocessor/`](preprocessor/) | §03.5, §08         | Motion gating + frame markup + fast-detector enrichment for service-mode NVR adapters                              |
+| [`detector/`](detector/)         | §08                | Standalone fast-detector models (YOLO, face, re-ID, pose, OCR) — can be embedded in preprocessor or run separately |
+| [`vlm-router/`](vlm-router/)     | §04                | Multi-backend model router; local Ollama + cloud fallback with circuit breaker                                     |
+| [`memory/`](memory/)             | §11, §12           | Memory MCP — vector DB, SQL, episodic, identity gallery, visit ledger                                              |
+| [`ha-agent/`](ha-agent/)         | §07                | Bidirectional MCP server: read-side LLM-backed HA synthesis + write-side device commands                           |
+| [`notify/`](notify/)             | §15                | Notification dispatcher — push, voice/TTS, in-app, ask flows                                                       |
 
 ## Conventions
 

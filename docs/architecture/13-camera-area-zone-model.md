@@ -7,7 +7,7 @@
 
 ## Core principle
 
-Rules, journeys, and alerts are written against *logical areas and zones*, not physical camera IDs. This decouples reasoning from hardware:
+Rules, journeys, and alerts are written against _logical areas and zones_, not physical camera IDs. This decouples reasoning from hardware:
 
 - Swap a camera → update the mapping, rules fire unchanged
 - Add a camera → assign to existing area/zone, no rule rewrites
@@ -26,19 +26,19 @@ The VLM never sees camera IDs or zone names — it sees `area_id` as context and
   "camera_id": "doorbell_main",
   "label": "Front Door (Main)",
   "description": "High-res doorbell camera, wide FOV",
-  
+
   "role": {
     "primary": "perimeter_security",
     "secondary": ["entrance_confirmation", "guest_alerting"],
     "sensitivity": "high"
   },
-  
+
   "location": {
     "position_coords": { "x": 0.5, "y": 0.0, "z": 2.1 },
     "direction": 180,
     "mounting": "fixed | ptz"
   },
-  
+
   "streams": {
     "main": {
       "profile": "2560×1920@15fps",
@@ -53,7 +53,7 @@ The VLM never sees camera IDs or zone names — it sees `area_id` as context and
       "purpose": "motion_trigger | continuous_monitoring"
     }
   },
-  
+
   "capabilities": {
     "ptz": false,
     "ir_night_vision": true,
@@ -63,7 +63,7 @@ The VLM never sees camera IDs or zone names — it sees `area_id` as context and
     "estimated_sensor_size": "1/2.7",
     "fov_horizontal_degrees": 155
   },
-  
+
   "detector_profile": {
     "face_detection_capable": true,
     "preferred_detector_model": "scrfd_500m",
@@ -71,10 +71,10 @@ The VLM never sees camera IDs or zone names — it sees `area_id` as context and
     "max_concurrent_tracks": 8,
     "max_frame_latency_ms": 500
   },
-  
+
   "attached_zones": ["entry_mat", "porch_stairs"],
   "attached_areas": ["front_door"],
-  
+
   "status": "active | inactive | maintenance",
   "last_online": "2026-05-23T14:33:22Z",
   "health": {
@@ -98,13 +98,13 @@ Semantic groupings that correspond to logical spaces in the home. An area can be
   "area_id": "front_door",
   "label": "Front Door",
   "description": "Front porch, doorbell, entry vestibule",
-  
+
   "containment": {
     "parent_area": null,
     "child_areas": ["entry_vestibule"],
     "zones": ["entry_mat", "porch_stairs", "porch_right"]
   },
-  
+
   "cameras": [
     {
       "camera_id": "doorbell_main",
@@ -117,14 +117,14 @@ Semantic groupings that correspond to logical spaces in the home. An area can be
       "blind_spots": []
     }
   ],
-  
+
   "security_profile": {
     "sensitivity": "high",
     "face_required_for_alert": true,
     "person_confidence_threshold": 0.75,
     "alert_targets": ["resident_1", "resident_2"]
   },
-  
+
   "access_profile": {
     "allowed_persons": [
       {
@@ -142,7 +142,7 @@ Semantic groupings that correspond to logical spaces in the home. An area can be
     "flagged_persons": [],
     "unattended_alert_threshold_minutes": 5
   },
-  
+
   "devices": {
     "locks": ["lock.front_door"],
     "lights": [
@@ -154,7 +154,7 @@ Semantic groupings that correspond to logical spaces in the home. An area can be
     "speakers": ["speaker.entry"],
     "gates": []
   },
-  
+
   "properties": {
     "interior": false,
     "ground_level": true,
@@ -178,6 +178,7 @@ backyard
 ```
 
 When writing rules, specificity works:
+
 - Rule on `backyard`: "person detected anywhere"
 - Rule on `pool_area`: "person in water (attention mode)"
 
@@ -200,14 +201,14 @@ Used for real-time per-frame decisions (framing, field of regard).
   "area_id": "front_door",
   "camera_id": "doorbell_main",
   "type": "image_space",
-  
+
   "polygon": [
     { "x": 0.1, "y": 0.6 },    ← normalized coords (0–1)
     { "x": 0.4, "y": 0.6 },
     { "x": 0.4, "y": 1.0 },
     { "x": 0.1, "y": 1.0 }
   ],
-  
+
   "properties": {
     "footfall_detector": true,
     "face_capture_zone": true,
@@ -226,9 +227,9 @@ Used for multi-camera reasoning and navigation logic. Requires camera calibratio
   "label": "Porch stairs",
   "area_id": "front_door",
   "type": "world_space",
-  
+
   "cameras": ["doorbell_main", "exterior_corner"],
-  
+
   "geometry": {
     "reference_frame": "site_frame",
     "floor_polygon": [
@@ -240,7 +241,7 @@ Used for multi-camera reasoning and navigation logic. Requires camera calibratio
     "height_range": { "min": 0.0, "max": 2.5 },
     "description": "Ground-plane zone covering porch stairs, ~0.5m wide × 0.6m deep, height up to head level"
   },
-  
+
   "projection_per_camera": {
     "doorbell_main": {
       "projected_polygon": [ ... ],  ← computed from calibration
@@ -248,7 +249,7 @@ Used for multi-camera reasoning and navigation logic. Requires camera calibratio
       "computed_at": "2026-04-15T10:30Z"
     }
   },
-  
+
   "properties": {
     "stair_zone": true,
     "fall_detection_enabled": true,
@@ -280,7 +281,7 @@ For life-safety scenarios (pools, stairs), height is critical:
       "alert_if_above_water": 1.8
     }
   },
-  
+
   "anomaly_detection": {
     "person_fully_submerged": {
       "trigger": "head_below_water_surface",
@@ -299,6 +300,7 @@ For life-safety scenarios (pools, stairs), height is critical:
 ## Adjacency graph
 
 Encodes which areas/zones are reachable from which, and travel time estimates. Used for:
+
 - Cross-session spatial plausibility (can subject reach camera 2 in elapsed time?)
 - Blind-spot transit (subject exited area A, next detection in area C; could they have passed through area B in the dark?)
 
@@ -338,7 +340,7 @@ Encodes which areas/zones are reachable from which, and travel time estimates. U
       "description": "Exit via side gate"
     }
   ],
-  
+
   "blind_spots": [
     {
       "from_area": "backyard",
@@ -362,7 +364,7 @@ Plausibility check:
   Path: front_door → entryway (3s) → living_room (2s) = ~5s expected
   Actual elapsed: 15s
   Result: geometrically plausible ✓ (15s > 5s, subject could have lingered)
-  
+
 Session opened: person detected at backyard, 14:00:00
 Segment 2: person detected at street, 14:00:08
 
@@ -433,14 +435,14 @@ Areas:
 Zones in image-space (doorbell_main):
   - entry_mat: polygon covering mat region (0.1–0.4, 0.6–1.0 normalized)
   - porch_stairs: below entry mat
-  
+
 Zones in world-space:
   - porch_stairs: 3D volume on ground plane, reachable by doorbell_main + exterior_corner
 
 Adjacency:
   front_door → entryway (door open, ~3s)
   entryway → living_room (hallway, ~2s)
-  
+
 Rules written against this:
   "Alert if unknown person detected in entry_mat" (area: front_door)
   "Don't alert if person is Carlos (access profile: Thu 10am–2pm, areas: [porch, backyard])"

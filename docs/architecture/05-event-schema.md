@@ -35,7 +35,7 @@ Breaking schema changes increment major version. Clients declare accepted versio
   "camera_id": "doorbell_main",
   "area_id": "front_door",
   "ts": "2026-05-23T14:33:22.456Z",
-  
+
   "trigger_kind": "motion | face | package | vehicle | person | custom_class",
   "confidence": 0.87,
   "track_id_primary": 42,
@@ -44,20 +44,20 @@ Breaking schema changes increment major version. Clients declare accepted versio
     "zone_id": "entry_mat" | null,
     "region": "top-left | center | bottom"
   },
-  
+
   "clip": {
     "clip_uri": "s3://clips/doorbell/20260523T143322_track42.mp4",
     "duration_ms": 5000,
     "frame_count": 8,
     "fps": 8
   },
-  
+
   "triage_context": {
     "dedup_key": "SHA256(source+camera_id+round(ts,5s)+track_id)",
     "session_ref": "session-abc123" | null,
     "coalesced": false
   },
-  
+
   "privacy_tier": "local_only | can_cache | cloud_eligible",
   "world_state_snapshot_ref": "snapshot-20260523T143300"
 }
@@ -72,18 +72,18 @@ Breaking schema changes increment major version. Clients declare accepted versio
   "event_id": "ha-poll-{hash}",
   "source": "ha_poller",
   "source_kind": "sensor | lock | presence | ecosystem_alert | automation | device",
-  
+
   "entity_id": "lock.back_door",
   "area_id": "back_door",
   "zone_id": null,
   "ts": "2026-05-23T14:33:22.456Z",
-  
+
   "state_change": {
     "previous_state": "locked",
     "current_state": "unlocked",
     "changed_attribute": null
   },
-  
+
   "metadata": {
     "entity_name": "Back Door Lock",
     "device_class": "lock",
@@ -93,7 +93,7 @@ Breaking schema changes increment major version. Clients declare accepted versio
       "last_activity": "door_opened"
     }
   },
-  
+
   "significance": "high | normal | low",
   "world_state_snapshot_ref": "snapshot-20260523T143300",
   "privacy_tier": "local_only"
@@ -112,7 +112,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
   "event_id": "camera-doorbell-20260523T143322-track42",
   "enrichment_ts": "2026-05-23T14:33:25.100Z",
   "enrichment_latency_ms": 2644,
-  
+
   "objects": [
     {
       "track_id": 42,
@@ -122,7 +122,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
       "center": [275, 375],
       "area_coverage": 0.18,
       "visibility": "frontal | profile | partial_occlusion",
-      
+
       "face": {
         "detected": true,
         "bbox": [120, 210, 320, 380],
@@ -131,7 +131,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
         "pose": { "yaw": 5, "pitch": -8, "roll": 0 },
         "blur": 0.15,
         "landmarks": 68,
-        
+
         "recognition": {
           "embedding": "base64:...",
           "embedding_model": "arcface_r100",
@@ -143,7 +143,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
           "identity_claim": "sarah_resident | unknown"
         }
       },
-      
+
       "body": {
         "reid_embedding": "base64:...",
         "reid_model": "osnet_x1_0",
@@ -158,7 +158,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
         "height_estimate_cm": 175,
         "posture": "upright | bending | crouching | stretching"
       },
-      
+
       "attributes": {
         "clothing_color": ["dark_blue", "white"],
         "clothing_type": ["shirt", "jeans"],
@@ -173,7 +173,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
       }
     }
   ],
-  
+
   "vehicles": [
     {
       "track_id": 43,
@@ -182,7 +182,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
       "bbox": [500, 100, 800, 350],
       "color": "silver",
       "make_model": "Toyota Camry",
-      
+
       "plate": {
         "detected": true,
         "ocr_text": "ABC1234" | "ABC12?4",
@@ -192,14 +192,14 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
       }
     }
   ],
-  
+
   "animals": [
     {
       "track_id": 44,
       "class": "dog",
       "confidence": 0.89,
       "bbox": [50, 300, 180, 450],
-      
+
       "face_recognition": {
         "detected": true,
         "embedding": "base64:...",
@@ -210,17 +210,17 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
         },
         "identity_claim": "max_golden_retriever | unknown_dog"
       },
-      
+
       "behavior": "standing | sitting | running | playing | eating | resting | distress"
     }
   ],
-  
+
   "annotations": {
     "rendered_image_uri": "s3://annotated/doorbell/20260523T143322_track42_ann.jpg",
     "clean_crop_uri": "s3://crops/doorbell/20260523T143322_track42_clean.jpg",
     "tight_face_crop_uri": "s3://crops/doorbell/20260523T143322_face.jpg"
   },
-  
+
   "scene_context": {
     "lighting": "good | dim | low_light | very_low_light",
     "weather": "clear | overcast | rain | snow",
@@ -228,7 +228,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
     "camera_motion": false,
     "obstruction": "none | partial | significant"
   },
-  
+
   "quality_flags": {
     "face_resolution_low": false,
     "face_oblique": false,
@@ -250,7 +250,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
   "schema_version": "1.0",
   "request_id": "vlm-req-uuid",
   "event_id": "camera-doorbell-20260523T143322-track42",
-  
+
   "frames": {
     "frame_uris": [
       "s3://annotated/doorbell/frame_1_ann.jpg",
@@ -265,21 +265,21 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
     "annotation_style": "thin_boxes_transparent_fills",
     "includes_clean": true
   },
-  
+
   "context": {
-    "enrichment": { /* enriched event payload above */ },
+    "enrichment": {
+      /* enriched event payload above */
+    },
     "world_state": {
       "current_time": "2026-05-23T14:33:22Z",
       "time_of_day": "afternoon",
       "occupancy": ["resident_1"],
       "alarm_state": "disarmed",
       "weather": "sunny, 72F",
-      "active_situational_contexts": [
-        "Birthday party today 3–6pm, ~10 guests expected"
-      ],
+      "active_situational_contexts": ["Birthday party today 3–6pm, ~10 guests expected"],
       "active_transient_intents": []
     },
-    
+
     "retrieved_rules": [
       {
         "rule_id": "rule-doorbell-guest-alert",
@@ -294,7 +294,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
         "conditions_matched": false
       }
     ],
-    
+
     "identity_candidates": [
       {
         "track_id": 42,
@@ -304,12 +304,10 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
         "access_profile": "temporary_guest"
       }
     ],
-    
-    "episodic_summaries": [
-      "Yesterday 4pm: Similar person visited, greeted by resident_1"
-    ]
+
+    "episodic_summaries": ["Yesterday 4pm: Similar person visited, greeted by resident_1"]
   },
-  
+
   "prompt": {
     "persona": "Home AI security assistant. Reason over visual observations and context.",
     "cached_prefix": "You are a home AI...[system instructions, persona, rule context]",
@@ -317,7 +315,7 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
     "temperature": 0,
     "model_hint": "supports_visual_reasoning: true"
   },
-  
+
   "privacy_tier": "local_only",
   "backend_preferred": "local | cloud | any",
   "timeout_ms": 8000
@@ -334,20 +332,18 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
   "event_id": "camera-doorbell-20260523T143322-track42",
   "response_ts": "2026-05-23T14:33:29.400Z",
   "latency_ms": 4278,
-  
+
   "observation": "Person in casual clothing at front door. Matches identity of guest expected for party. Greeting visitor.",
-  
+
   "decision": {
     "alert_required": true,
     "criticality": "alert | warning | info | no_action",
     "confidence": 0.91,
-    "confidence_limiting_factors": [
-      "face_partially_oblique"
-    ],
-    
+    "confidence_limiting_factors": ["face_partially_oblique"],
+
     "rules_fired": ["rule-doorbell-guest-alert"],
     "rules_suppressed": [],
-    
+
     "action": {
       "primary": "notify | escalate | ask | open_session | speak | none",
       "targets": ["resident_1"],
@@ -355,20 +351,20 @@ Output of `detector.enrich(frame_uris)`. This is appended to the trigger event a
       "evidence_clip": true,
       "evidence_uri": "s3://clips/doorbell/20260523T143322_track42.mp4"
     },
-    
+
     "deeper_assessment": false,
     "deeper_assessment_reason": null,
-    
+
     "journey": {
       "journey_open": false,
       "journey_reason": null,
       "priority_boost": null
     },
-    
+
     "attention_mode": null,
     "sequence_watch": null
   },
-  
+
   "backend": "ollama_local_5b",
   "model": "llava_1.5",
   "cached": false
@@ -388,19 +384,19 @@ Reasoner receives VLM response + triggered rules + world state and decides final
   "schema_version": "1.0",
   "event_id": "camera-doorbell-20260523T143322-track42",
   "vlm_response_id": "vlm-res-uuid",
-  
-  "vlm_output": { /* VLM response above */ },
+
+  "vlm_output": {
+    /* VLM response above */
+  },
   "rules_fired": [
     {
       "rule_id": "rule-doorbell-guest-alert",
       "severity": "alert",
-      "actions": [
-        {"type": "notify", "targets": ["resident_1"]}
-      ],
+      "actions": [{ "type": "notify", "targets": ["resident_1"] }],
       "scope": "camera"
     }
   ],
-  
+
   "policy_check": {
     "unlocks_required": false,
     "alarms_required": false,
@@ -416,7 +412,7 @@ Reasoner receives VLM response + triggered rules + world state and decides final
   "schema_version": "1.0",
   "event_id": "camera-doorbell-20260523T143322-track42",
   "decision_ts": "2026-05-23T14:33:30.100Z",
-  
+
   "final_action": {
     "type": "notify",
     "targets": ["resident_1"],
@@ -428,13 +424,13 @@ Reasoner receives VLM response + triggered rules + world state and decides final
       "annotation_uri": "s3://annotated/doorbell/20260523T143322_track42_ann.jpg"
     }
   },
-  
+
   "session": {
     "action": "open" | "update" | "close" | "none",
     "session_id": "session-abc123" | null,
     "subject_descriptor": "Guest at front door"
   },
-  
+
   "memory_writes": [
     {
       "store": "episodic",
@@ -448,9 +444,9 @@ Reasoner receives VLM response + triggered rules + world state and decides final
       "area": "front_door"
     }
   ],
-  
+
   "device_actions": [],
-  
+
   "audit": {
     "rules_evaluated": 2,
     "rules_fired": 1,
@@ -472,9 +468,9 @@ Sent when a session is opened, segments appended, or closed.
   "session_id": "session-abc123",
   "event_id": "camera-doorbell-20260523T143322-track42",
   "ts": "2026-05-23T14:33:30.100Z",
-  
+
   "action": "open | append_segment | escalate | close",
-  
+
   "segment": {
     "segment_id": "seg-1",
     "camera_id": "doorbell_main",
@@ -485,7 +481,7 @@ Sent when a session is opened, segments appended, or closed.
     "confidence": 0.91,
     "ts": "2026-05-23T14:33:22.456Z"
   },
-  
+
   "journey_state": {
     "journey_score": 2.1,
     "segment_count": 1,
@@ -507,10 +503,10 @@ Final message sent to notification delivery.
   "schema_version": "1.0",
   "action_id": "action-uuid",
   "event_id": "camera-doorbell-20260523T143322-track42",
-  
+
   "action_type": "push_notification | speak | sms | ask",
   "targets": ["resident_1"],
-  
+
   "content": {
     "title": "Guest arrival",
     "message": "Guest arrival detected at front door",
@@ -520,7 +516,7 @@ Final message sent to notification delivery.
       "thumbnail_uri": "s3://snapshots/doorbell/20260523T143322_track42.jpg"
     }
   },
-  
+
   "explanation": {
     "why": "Rule 'doorbell_guest_alert' matched: person at front door during party",
     "confidence": 0.91,
@@ -540,10 +536,10 @@ Carried on every event message:
 {
   "privacy_tier": "local_only | can_cache | cloud_eligible",
   "cloud_eligible_reason": "no resident faces | scene-only | enrichment only",
-  
+
   "preferred_backend": "local | cloud | any",
   "backend_capability_required": "supports_visual_reasoning | fast_inference | none",
-  
+
   "priority": "urgent | normal | background",
   "retention": {
     "delete_after_days": 30,

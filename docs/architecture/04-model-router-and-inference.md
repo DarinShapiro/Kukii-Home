@@ -27,10 +27,10 @@ The router selects the backend that satisfies the request. Callers don't know or
 
 This flag determines which prompt path the pipeline uses (see §06 and §09):
 
-| Flag value | Call pattern | When to use |
-|-----------|-------------|-------------|
-| `true` | Single VLM call: frames + full context + persona → decision JSON | Capable reasoning VLMs (Qwen2.5-VL 72B, InternVL2 72B, GPT-4o, Claude) |
-| `false` | Two-step: VLM describes → text LLM reasons | Smaller/weaker local vision models that reliably describe but don't reason over complex context |
+| Flag value | Call pattern                                                     | When to use                                                                                     |
+| ---------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `true`     | Single VLM call: frames + full context + persona → decision JSON | Capable reasoning VLMs (Qwen2.5-VL 72B, InternVL2 72B, GPT-4o, Claude)                          |
+| `false`    | Two-step: VLM describes → text LLM reasons                       | Smaller/weaker local vision models that reliably describe but don't reason over complex context |
 
 The flag is set per backend in the registry and tested on registration. It is not inferred at runtime.
 
@@ -44,7 +44,7 @@ BackendRecord:
   kind: vlm | chat | embed | text_reasoner
   location: local_host_A | local_host_B | cloud_anthropic | cloud_openai | ...
   model_id: "qwen2.5-vl:72b" | "claude-opus-4-7" | ...
-  
+
   capabilities: {
     supports_visual_reasoning: bool,
     max_images_per_call: int,
@@ -53,21 +53,21 @@ BackendRecord:
     structured_output: bool,
     structured_output_mode: "json_schema | json_mode | tool_call"
   }
-  
+
   slo: {
     p50_latency_ms, p95_latency_ms,
     max_concurrency, cost_per_call
   }
-  
+
   privacy_tier: "local | cloud_trusted | cloud_any"
   data_policy: "no_logging | retained_30d | ..."
-  
+
   health: {
     status: ok | degraded | down,
     last_check, last_error,
     circuit_breaker: { open: bool, retry_at }
   }
-  
+
   current_inflight: int
 ```
 
@@ -111,6 +111,7 @@ If no local backend can satisfy the request: conservative action + human notific
 ### 3. Local-first when healthy and not saturated
 
 Latency, cost, and offline resilience all favor local. Route local unless:
+
 - Local queue depth > threshold, OR
 - Local backends are degraded/down, OR
 - Event is explicitly `cloud-preferred`
@@ -122,6 +123,7 @@ When local is saturated and event is cloud-eligible: spill to cloud. Prioritize 
 ### 5. Cloud-preferred tasks
 
 Some tasks route to cloud by default regardless of local capacity:
+
 - Journey-close summaries (quality gap significant)
 - Rule normalization from natural language
 - `deeper_assessment` escalation on high-stakes ambiguous events

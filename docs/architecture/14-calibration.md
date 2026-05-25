@@ -34,7 +34,7 @@ Intrinsics:
     model: "fisheye | rational | radial_tangential",
     coefficients: [k1, k2, p1, p2, ...]
   }
-  
+
   Reprojection error: ±2–3 pixels (good quality)
 ```
 
@@ -48,7 +48,7 @@ Describes where the camera is located and oriented in world coordinates. Changes
 Extrinsics:
   rotation: 3×3 matrix (world-to-camera rotation)
   translation: (x, y, z) vector from site-frame origin to camera center
-  
+
   Example: doorbell camera
     position: (0.5m east, 0.0m north, 2.1m up) from site origin
     direction: 180° (facing south, toward street)
@@ -58,6 +58,7 @@ Extrinsics:
 ### Ground plane estimation
 
 For world-space zones on a floor, we need to project 3D floor points onto each camera's image. Ground plane is defined by:
+
 - Floor height `z = z_floor` (constant, e.g., 0.0m)
 - Normal vector pointing up (0, 0, 1)
 
@@ -72,7 +73,7 @@ Step 1: Apply camera extrinsics (world → camera frame)
 Step 2: Apply intrinsics (3D camera → 2D image)
   u = fx * (point_cam.x / point_cam.z) + cx
   v = fy * (point_cam.y / point_cam.z) + cy
-  
+
 Result: pixel location (u, v) where that floor point appears
 ```
 
@@ -94,7 +95,7 @@ Flow:
   4. User stands at known distances: "1 meter away", "3 meters away"
   5. App computes extrinsics from phone IMU + vision + taps
   6. Quick sanity check: "does projected corner match real corner?"
-  
+
 Accuracy: ±0.5m position, ±5° rotation (good for medium-stakes scenarios)
 Drift: Slow (weeks)
 ```
@@ -115,7 +116,7 @@ Flow:
        that best explains observed pixel-to-world correspondences
   5. Repeat for camera 2, 3, ...
   6. Cross-validate: "floor point (1.0, 2.0) should appear at pixel (X, Y) in cam1"
-  
+
 Accuracy: ±2–5cm position, ±2° rotation (excellent)
 Drift: Very slow (months)
 ```
@@ -133,13 +134,13 @@ Mechanism:
   2. System observes resident walking at known pace in frame
   3. Skeleton height estimate + walking speed → ground plane constraint
   4. Over multiple walks, triangulation → camera pose
-  
+
 Flow:
   1. System asks: "Walk past each camera at normal pace so I can learn your height?"
   2. User walks 2–3 times per camera
   3. System computes intrinsics/extrinsics incrementally
   4. Weekly re-calibration runs passively
-  
+
 Accuracy: ±0.3–0.5m position, ±3° rotation (good after 3–5 walks)
 Drift: Adaptive (detects and corrects drift)
 ```
@@ -157,6 +158,7 @@ Drift: Adaptive (detects and corrects drift)
 ## Extrinsic stability & re-calibration
 
 Once calibrated, extrinsics can drift due to:
+
 - Camera vibration (wind, door slam)
 - Physical relocation (even 1 cm)
 - Thermal expansion
@@ -169,17 +171,17 @@ Canary 1: Resident-height validation
   Regular resident walks past camera
   Skeleton-estimated height: typically 175cm ±2cm
   If estimate suddenly shifts to 172cm or 180cm → drift detected
-  
+
 Canary 2: Landmark reprojection
   Known floor landmark (e.g., corner of mat)
   Periodically check: does it still project to expected pixel?
   If pixel error > 3–5px → drift detected
-  
+
 Canary 3: Cross-camera consistency
   Two cameras observing same person
   World position estimated from cam1 vs cam2 disagree by > 0.3m?
   → one camera may have drifted
-  
+
 Action on drift detection:
   - Log warning
   - Suggest re-calibration in UI
@@ -195,12 +197,12 @@ When two cameras have overlapping fields of view, stereo enables **depth** (dist
 
 ### When stereo is worth it
 
-| Scenario | Benefit | ROI |
-|----------|---------|-----|
-| Pool drowning detection | Depth determines if person fully submerged | **Very high** — literal life-safety |
-| Fall detection on stairs | Height below expected floor → fall | High — medical emergency |
-| Two-camera front door | Verify person is at threshold vs. 2m back | Medium — improves face quality |
-| Driveway traffic | Depth distinguishes near vehicle from far | Low — less critical for driveway |
+| Scenario                 | Benefit                                    | ROI                                 |
+| ------------------------ | ------------------------------------------ | ----------------------------------- |
+| Pool drowning detection  | Depth determines if person fully submerged | **Very high** — literal life-safety |
+| Fall detection on stairs | Height below expected floor → fall         | High — medical emergency            |
+| Two-camera front door    | Verify person is at threshold vs. 2m back  | Medium — improves face quality      |
+| Driveway traffic         | Depth distinguishes near vehicle from far  | Low — less critical for driveway    |
 
 Pool + dual-camera stereo is **strongly recommended**; others are optional.
 
@@ -210,7 +212,7 @@ Pool + dual-camera stereo is **strongly recommended**; others are optional.
 Relative pose between camera 1 and camera 2:
   Rotation (relative): R
   Translation (baseline vector): t
-  
+
 Typical baseline for front-door stereo: 0.5–1.0m apart
 Typical baseline for pool stereo: 1–2m apart (to see depth underwater)
 
@@ -234,7 +236,7 @@ Solution:
   2. Measure actual offset: compare timestamp metadata cam1.ts vs cam2.ts
   3. Compensate: when triangulating, use frame from cam2 at time = cam1.ts + offset
   4. Acceptable offset: ±33ms (one frame at 30fps)
-  
+
 If sync offset > 100ms → stereo unusable; flag `stereo_unreliable`
 ```
 
@@ -249,15 +251,15 @@ Raw detections:
 
 Stereo triangulation:
   3D position of head: (1.2m, 3.4m, 0.8m) in world coords
-  
+
 Water surface: z = 0.9m
 Head is above water: z=0.8m < 0.9m? NO → head is fully submerged ✓
-  
+
 Distress pose check:
-  Arms above water: elbow y > water_surface? 
+  Arms above water: elbow y > water_surface?
   Yes → arms raised above water
   Head submerged + arms up → high drowning risk
-  
+
 Alert: URGENT
 ```
 
@@ -266,6 +268,7 @@ Alert: URGENT
 ## PTZ (pan-tilt-zoom) strategy
 
 PTZ cameras can move and zoom. Calibration enables:
+
 - Presets as virtual static cameras
 - Target re-acquisition after pan/tilt
 - Reliable zoom for long-distance identification
@@ -328,12 +331,12 @@ Duration: PTZ start → PTZ.settled_at + 100ms
 
 ## Expected precision by approach
 
-| Approach | Position accuracy | Rotation accuracy | Practical use | Re-calibration |
-|----------|-------------------|-------------------|---------------|-----------------|
-| Phone AR | ±0.5m | ±5° | Distance classification, rough zone projection | Weekly |
-| Landmark PnP | ±5cm | ±2° | Height extraction, stereo, precise zones | Monthly |
-| Resident walk | ±0.3m | ±3° | Height extraction, zones | Auto (daily) |
-| Manufacturer spec (no site cal.) | Unknown | Unknown | Only intrinsics; extrinsics assumed | Never |
+| Approach                         | Position accuracy | Rotation accuracy | Practical use                                  | Re-calibration |
+| -------------------------------- | ----------------- | ----------------- | ---------------------------------------------- | -------------- |
+| Phone AR                         | ±0.5m             | ±5°               | Distance classification, rough zone projection | Weekly         |
+| Landmark PnP                     | ±5cm              | ±2°               | Height extraction, stereo, precise zones       | Monthly        |
+| Resident walk                    | ±0.3m             | ±3°               | Height extraction, zones                       | Auto (daily)   |
+| Manufacturer spec (no site cal.) | Unknown           | Unknown           | Only intrinsics; extrinsics assumed            | Never          |
 
 ---
 

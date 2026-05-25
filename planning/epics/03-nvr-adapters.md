@@ -1,7 +1,7 @@
 # Epic 03: NVR Adapter Layer
 
 **Architecture refs:** §03.5
-**Components:** adapters/*, services/preprocessor, shared/protos
+**Components:** adapters/\*, services/preprocessor, shared/protos
 **Priority:** P0
 **Blocked by:** Epic 01, 02
 **Blocks:** Epic 04

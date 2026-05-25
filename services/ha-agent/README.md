@@ -7,6 +7,7 @@ Bidirectional MCP server for Home Assistant. Read side (LLM-backed synthesis ove
 ## Responsibilities
 
 ### Read side
+
 - `ha.get_snapshot()` — full entity state cache
 - `ha.get_changes(since_ts)` — delta queries
 - `ha.get_area_resources(area_id)` — observational capabilities per area
@@ -15,6 +16,7 @@ Bidirectional MCP server for Home Assistant. Read side (LLM-backed synthesis ove
 - `ha.query(natural_language)` — LLM-backed synthesis over HA state, native AI alerts, third-party services
 
 ### Write side
+
 - `ha.illuminate_area(...)`, `ha.darken_area(...)`, `ha.set_scene(...)`
 - `ha.lock(...)`, `ha.unlock(...)` (policy-gated)
 - `ha.call_service(domain, service, entity_id, data)` — general HA service call

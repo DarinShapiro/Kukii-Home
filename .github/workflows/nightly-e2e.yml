@@ -3,7 +3,7 @@ name: Nightly e2e
 on:
   schedule:
     # 06:00 UTC daily
-    - cron: "0 6 * * *"
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
-          version: "0.11.16"
+          version: '0.11.16'
           enable-cache: true
 
       - name: Set up Python

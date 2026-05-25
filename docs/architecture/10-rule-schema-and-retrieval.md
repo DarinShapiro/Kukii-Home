@@ -8,6 +8,7 @@
 ## Core principle: Rules live in SentiHome
 
 **Rules are NOT HA automations.** SentiHome is the rule engine:
+
 - Rules are created conversationally (user talks to LLM)
 - Rules fire based on SentiHome detections (people, animals, objects, identity)
 - Rules evaluate conditions against HA world state (but are owned by SentiHome)
@@ -26,14 +27,14 @@
   "embedding": [0.234, ..., 0.891],
   "scope": "area | camera | zone | journey | composite | global",
   "scope_ref": "area_id | camera_id | zone_id | null",
-  
+
   "temporal": {
     "active_hours": "08:00–22:00 | null",
     "active_days": ["Mon", "Tue", ...] | null,
     "exclusions": ["2026-05-23 09:00–10:30"],
     "ttl": "30d | null"
   },
-  
+
   "conditions": {
     "subject_type": "person | pet | vehicle | object | null",
     "subject_known": "known | unknown | specific_actor",
@@ -42,7 +43,7 @@
     "detections_required": ["dog", "person"] | null,
     "exclude_if_detected": ["owner_name"] | null
   },
-  
+
   "severity": "alert | warning | info",
   "actions": [
     {
@@ -52,10 +53,10 @@
       "evidence_required": true | false
     }
   ],
-  
+
   "confidence_required": 0.0–1.0,
   "deeper_assessment_if_low": true | false,
-  
+
   "lifecycle": {
     "created_by": "user | agent | system",
     "created_at": "2026-05-23T09:14:00Z",
@@ -70,6 +71,7 @@
 ```
 
 **Scope hierarchy (from most to least specific):**
+
 - **zone** — precise spatial region within an area (e.g., "front-door entrance mat")
 - **camera** — specific camera/viewpoint (e.g., "doorbell camera")
 - **area** — logical space (e.g., "front_door", "backyard")
@@ -83,9 +85,10 @@
 
 ### User natural language
 
-User says: *"Alert me if the dog is alone in the front yard"*
+User says: _"Alert me if the dog is alone in the front yard"_
 
 Pipeline:
+
 1. LLM normalizes to structured rule shape
 2. Extract scope (front_door area), conditions (dog, alone), severity (alert)
 3. Store with `created_by: user`
@@ -101,7 +104,7 @@ When the same rule fires repeatedly and the user dismisses it within 60 seconds 
   "scope": "area",
   "scope_ref": "front_yard",
   "temporal": { "active_hours": "10:00–18:00" },
-  "actions": [ { "type": "suppress", "target_rule_id": "..." } ]
+  "actions": [{ "type": "suppress", "target_rule_id": "..." }]
 }
 ```
 
@@ -143,6 +146,7 @@ Output: ordered list of firing rules (tied to context assembly, parallel stage)
 ```
 
 **Cost note:** Retrieval adds 50–100ms to context assembly. Store must support:
+
 - indexed temporal ranges (hours, days, TTL)
 - scope-based partitioning
 - fast vector similarity (HNSW or similar)
@@ -155,16 +159,19 @@ Output: ordered list of firing rules (tied to context assembly, parallel stage)
 ### Suppression and dismissal
 
 **Suppress (`suppress_until` timestamp):**
+
 - User explicitly silences a rule until a time
 - Set when user clicks "don't alert me about this for N hours"
 - Checked at retrieval time (SQL filter phase)
 
 **Dismiss counter:**
+
 - User dismisses an alert → `dismiss_count++`, `dismiss_count_24h++`
 - At 24h boundary, reset `dismiss_count_24h`
 - If `dismiss_count_24h >= 3`: automatically suppress for 4 hours or surface suppression rule proposal
 
 **Hit count & decay:**
+
 - Frequently firing rules boosted in ANN retrieval (relevance ranking)
 - Stale rules (last_fired > 30 days ago) deprioritized in retrieval
 - Rules with TTL: auto-delete at expiry
@@ -172,6 +179,7 @@ Output: ordered list of firing rules (tied to context assembly, parallel stage)
 ### Editability after firing
 
 After an alert fires, show the user:
+
 - Full rule text
 - Why it fired (which conditions matched)
 - Suggestions: suppress, edit, delete, keep
@@ -182,7 +190,7 @@ Editing creates a new rule version; old version marked `superseded_by`. No break
 
 ## Rule conflict resolution
 
-**Philosophy:** Resolve conflicts at rule *creation* time, not at evaluation time. Most conflicts auto-resolve through scope specificity. Only genuinely irreconcilable conflicts surface for user decision.
+**Philosophy:** Resolve conflicts at rule _creation_ time, not at evaluation time. Most conflicts auto-resolve through scope specificity. Only genuinely irreconcilable conflicts surface for user decision.
 
 ### Conflict detection (at creation)
 
@@ -211,12 +219,12 @@ When multiple rules fire on the same event:
 
 3. Scope resolution (specificity wins):
    zone > camera > area > journey > composite > global
-   
+
    Example:
      Global rule: "notify if unknown person detected"
      Area rule (front_door): "notify if unknown person detected"
      Zone rule (entry_mat): "suppress notification for 5 min after delivery"
-     
+
      → Zone rule applies (most specific), other rules de-prioritized
 
 4. Severity resolution (highest wins):
@@ -256,13 +264,13 @@ Rule A (global):
   "Alert if person detected in backyard"
   severity: warning
   action: notify
-  
+
 Rule B (area: backyard):
   "Don't alert on person in backyard 4pm–10pm Saturday"
   severity: suppress
   scope: area (backyard)
   temporal: Sat 4pm–10pm
-  
+
 Rule C (journey):
   "If person arrives at front door, notify resident_1"
   severity: alert
@@ -306,6 +314,7 @@ Rules are editable through:
 4. **Conflict resolution UI:** When hard conflict detected, prompt user to resolve
 
 Edit lifecycle:
+
 - Changes create `rule_version: 2` (immutable history)
 - Previous version marked `superseded_by: new_rule_id`
 - Retroactive rules: user can opt to re-evaluate past 24h events against new rule

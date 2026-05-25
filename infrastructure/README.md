@@ -4,10 +4,10 @@ Deployment and runtime infrastructure: Docker Compose stacks, NATS JetStream con
 
 ## Layout
 
-| Folder | Purpose |
-|--------|---------|
-| [`docker/`](docker/) | Docker Compose files for local dev and production deployment. Each service has its own Dockerfile in the service folder; this directory composes them. |
-| [`nats/`](nats/) | NATS JetStream stream + consumer definitions (see §03). Declared as YAML; applied via `nats` CLI. |
+| Folder                             | Purpose                                                                                                                                                                                            |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docker/`](docker/)               | Docker Compose files for local dev and production deployment. Each service has its own Dockerfile in the service folder; this directory composes them.                                             |
+| [`nats/`](nats/)                   | NATS JetStream stream + consumer definitions (see §03). Declared as YAML; applied via `nats` CLI.                                                                                                  |
 | [`db-migrations/`](db-migrations/) | SQL migrations for SentiHome's relational stores (sessions, rules, episodic metadata, audit log). Run with Alembic. Vector DB schemas live with the memory service since they're library-specific. |
 
 ## Deployment topologies

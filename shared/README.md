@@ -4,12 +4,12 @@ Cross-language shared artifacts: schemas, MCP protocol definitions, and lightwei
 
 ## Layout
 
-| Folder | Purpose |
-|--------|---------|
-| [`schemas/`](schemas/) | JSON Schema definitions for events, messages, configuration objects (see §05). Source of truth for cross-service contracts. |
-| [`protos/`](protos/) | MCP tool definitions for each MCP server (ha-agent, nvr-adapter, memory, notify). Used to generate client stubs in Python and TypeScript. |
-| [`lib-python/`](lib-python/) | Shared Python utilities — event bus clients, MCP helpers, logging, tracing, config loading. Distributed as an internal package. |
-| [`lib-typescript/`](lib-typescript/) | Shared TypeScript utilities — API client (generated from schemas), event types, formatting helpers. Distributed as an npm package. |
+| Folder                               | Purpose                                                                                                                                   |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| [`schemas/`](schemas/)               | JSON Schema definitions for events, messages, configuration objects (see §05). Source of truth for cross-service contracts.               |
+| [`protos/`](protos/)                 | MCP tool definitions for each MCP server (ha-agent, nvr-adapter, memory, notify). Used to generate client stubs in Python and TypeScript. |
+| [`lib-python/`](lib-python/)         | Shared Python utilities — event bus clients, MCP helpers, logging, tracing, config loading. Distributed as an internal package.           |
+| [`lib-typescript/`](lib-typescript/) | Shared TypeScript utilities — API client (generated from schemas), event types, formatting helpers. Distributed as an npm package.        |
 
 ## Why a `shared/` directory in a monorepo?
 

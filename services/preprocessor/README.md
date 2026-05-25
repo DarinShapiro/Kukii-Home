@@ -15,6 +15,7 @@ Motion-gated 24/7 preprocessing for service-mode NVR adapters. Consumes RTSP fro
 ## Mode
 
 This service is used by **service-mode** NVR adapters. It is bypassed for:
+
 - Built-in mode (Frigate provides its own preprocessing)
 - Native mode (preprocessing runs in-process inside the NVR; future)
 - Direct mode (no NVR — this service is invoked directly by RTSP adapter)

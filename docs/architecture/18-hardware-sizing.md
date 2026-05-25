@@ -54,11 +54,11 @@ Event breakdown:
   - Detector processes 100%: fast, deterministic (YOLO)
   - Triage deduplicates, scores: 70% deduplicated away
   - VLM processes remaining 30%: confidence reasoning, context
-  
+
 Concrete example:
   100 events/hour → 70 deduplicated away → 30 reach VLM
   30 events/hour × 2-3 sec/inference = 60-90 GPU-seconds/hour = 1.7-2.5% GPU utilization
-  
+
 Burst scenario:
   Peak 1 hour (guests arriving): 200 events → 60 reach VLM
   60 events × 2s = 120 GPU-seconds = 3.3% GPU utilization
@@ -96,6 +96,7 @@ Each role has specific compute/memory/storage needs. May run on same host or sep
 **Purpose:** Buffer incoming RTSP streams, provide frame archive for clips and replays.
 
 **Hardware profile:**
+
 ```
 CPU:      2-4 cores @ 2.5+ GHz (transcoding, RTSP demux)
 RAM:      4-8 GB (frame buffers, in-memory queue)
@@ -107,14 +108,15 @@ Typical: Intel N100 mini-PC ($150-250) or Raspberry Pi 4 ($100)
 ```
 
 **Storage sizing for DVR:**
+
 ```
 Raw frame storage:
   1 camera @ 1080p @ 10fps = 3 Mbps per camera
   4 cameras = 12 Mbps = ~5 TB/month (uncompressed)
-  
+
 H.264 compressed (typical):
   4 cameras = 500 Mbps = ~15 GB/day = 450 GB/month = 5.4 TB/year
-  
+
 With rolling 30-day retention:
   500 GB local SSD + cold storage on NAS
   Or: NAS with 8TB RAID-5 (plenty of headroom)
@@ -130,6 +132,7 @@ With rolling 30-day retention:
 **Purpose:** Real-time object detection on every frame (CPU or light GPU).
 
 **Hardware profile:**
+
 ```
 CPU:      4-8 cores @ 2.5+ GHz (YOLO is CPU-parallelizable)
 RAM:      8-16 GB (frame cache, embedding buffers)
@@ -142,6 +145,7 @@ Typical: Intel i5-12400 + RTX 4060 ($600-800) or CPU-only ($300-400)
 ```
 
 **Performance profile:**
+
 ```
 YOLO inference:
   - CPU-only: 25-40ms per 1080p frame (real-time at 5-10 fps)
@@ -165,6 +169,7 @@ Re-ID embedding:
 **Purpose:** Visual language model for high-confidence reasoning (Qwen2.5-VL, InternVL, etc.).
 
 **Hardware profile:**
+
 ```
 Typical VLM:
   - Model size: 2B-7B parameters
@@ -184,7 +189,7 @@ Inference latency by GPU:
     - RTX 3080: ~1.5s per image (10 images/min = 10% utilization)
     - RTX 4060 Ti: ~2s per image (30 images/min = optimal)
     - RTX 4080: ~0.8s per image (75 images/min)
-    
+
   Larger model: InternVL (26B parameters)
     - RTX 4080: ~3s per image (20 images/min = 7% utilization)
     - RTX 3080: Cannot fit (OOM)
@@ -199,6 +204,7 @@ Inference latency by GPU:
 **Purpose:** SQL (sessions, rules, logs) + vector embeddings (faces, re-ID).
 
 **Hardware profile:**
+
 ```
 Storage:
   - SQL database: ~1-2 GB per 1M sessions
@@ -222,6 +228,7 @@ Typical: Same host as detector/VLM, or small NAS ($300-600 for Synology)
 **Purpose:** Async message queue for event routing, durability, subscriber management.
 
 **Hardware profile:**
+
 ```
 CPU:      2-4 cores (mostly I/O, low CPU)
 RAM:      4-8 GB (message queue buffer, subscriptions)
@@ -238,6 +245,7 @@ Typical: Runs on same host as database, or mini-PC ($150-250)
 **Purpose:** Ecosystem integration (device state, automations, TTS, siren).
 
 **Hardware profile:**
+
 ```
 Compute:
   - Light (pure MQTT relay): 2 cores, 2 GB RAM, Raspberry Pi 4 ($100)
@@ -261,6 +269,7 @@ Typical: Raspberry Pi 4 with HA OS ($100-150) or existing machine
 ### Topology 1: Single-box (all-in-one)
 
 **Hardware (example: Intel NUC i7):**
+
 ```
 - Intel NUC 12 i7: 12 cores, 32 GB RAM, 1 TB SSD, ~$800
 - Add RTX 4060 Ti GPU: +$650
@@ -275,13 +284,13 @@ Runs on one machine:
   ✓ Reasoner (rules, context assembly)
   ✓ Action dispatcher
   ✓ HA integration (optional, add HA on same box)
-  
+
 Advantages:
   + Simplest setup (one box, one IP, one power cord)
   + Low latency (all local network)
   + Cheap ($1500 for decent setup)
   + Easier to debug (everything on same host)
-  
+
 Tradeoffs:
   - Single point of failure (if box dies, everything stops)
   - Resource contention (detector CPU vs VLM GPU)
@@ -292,17 +301,18 @@ Tradeoffs:
 ### Topology 2: Split-host (separated roles)
 
 **Hardware (example: 2 machines):**
+
 ```
 Machine 1 (Compute): NUC i7 + RTX 4060 Ti ($1450)
   ✓ VLM inference (primary workload)
   ✓ Detector (secondary workload)
   ✓ Database (hot data)
   ✓ Event bus
-  
+
 Machine 2 (DVR/Ingest): Raspberry Pi 4 or N100 ($150-250)
   ✓ DVR (RTSP ingest, frame archive)
   ✓ HA integration (optional)
-  
+
 Total cost: ~$1650
 
 Advantages:
@@ -310,7 +320,7 @@ Advantages:
   + Better thermal management
   + Easier to upgrade (swap machine 1 GPU independently)
   + Resilience (camera loss ≠ inference loss)
-  
+
 Tradeoffs:
   - More complex networking (two IPs, two power supplies)
   - Slightly higher latency (network round-trips)
@@ -320,31 +330,32 @@ Tradeoffs:
 ### Topology 3: Enterprise (dedicated per role)
 
 **Hardware (example: 4 machines):**
+
 ```
 Machine 1 (GPU): RTX 4080 NUC ($1800)
   ✓ VLM inference only
-  
+
 Machine 2 (Detector): Intel i5 with RTX 4060 ($600)
   ✓ Fast detector (YOLO, face, re-ID)
-  
+
 Machine 3 (DVR+Storage): Synology NAS ($600)
   ✓ RTSP ingest + archive
   ✓ NVMe SSD (fast frame access for replays)
   ✓ Hard drives (cold archive)
-  
+
 Machine 4 (DB+Bus): Raspberry Pi 4 ($150)
   ✓ PostgreSQL + TimescaleDB
   ✓ Vector DB (Qdrant)
   ✓ NATS JetStream
   ✓ Rules + reasoning
-  
+
 Total cost: ~$3200
 
 Advantages:
   + Maximum reliability (any one failure doesn't stop system)
   + Max performance (no resource contention)
   + Easiest to scale (add more GPU machines in parallel)
-  
+
 Tradeoffs:
   - Expensive
   - Complex setup and debugging
@@ -360,6 +371,7 @@ Tradeoffs:
 **For:** 1-2 cameras, casual users, tech enthusiasts
 
 **Hardware:**
+
 ```
 Single-box:
   - Intel N100 mini-PC: $250
@@ -377,6 +389,7 @@ Or:
 ```
 
 **Capability:**
+
 ```
 ✓ 1-2 cameras @ 10fps
 ✓ Real-time detector (CPU or light GPU)
@@ -397,6 +410,7 @@ Or:
 **For:** 3-4 cameras, security-conscious users, homes with multi-zone coverage
 
 **Hardware Option A (Single-box premium):**
+
 ```
   - Intel NUC i7-12700H: $600
   - RTX 4060 Ti (16GB VRAM): $650
@@ -407,6 +421,7 @@ Or:
 ```
 
 **Hardware Option B (Split-host):**
+
 ```
   - NUC i7 + RTX 4060 Ti (compute): $1450
   - Raspberry Pi 4 (DVR): $200
@@ -415,6 +430,7 @@ Or:
 ```
 
 **Capability:**
+
 ```
 ✓ 3-4 cameras @ 15-20fps (good quality)
 ✓ Fast detector on GPU (8-10ms per frame)
@@ -435,6 +451,7 @@ Or:
 **For:** 5-8+ cameras, homes with security-critical zones, high uptime requirement
 
 **Hardware (Enterprise split):**
+
 ```
   - Compute: RTX 4080 NUC or workstation: $1800-2200
   - Detector GPU: RTX 4060 separate NUC: $600
@@ -445,6 +462,7 @@ Or:
 ```
 
 **Or:**
+
 ```
   - Compute: 2x RTX 4060 Ti in single workstation: $1600
   - DVR: Synology NAS: $600
@@ -454,6 +472,7 @@ Or:
 ```
 
 **Capability:**
+
 ```
 ✓ 6-8 cameras @ high FPS
 ✓ Dual-GPU setup (split VLM and detector)
@@ -498,6 +517,7 @@ Apple M3 Max (unified) 36GB    2.0s              ~6s*
 ```
 
 **Recommendation:**
+
 ```
 1-2 cameras:    RTX 4060 (8GB) or Apple M1 Mac Mini
 3-4 cameras:    RTX 4060 Ti (16GB) or AMD RX 7900 XT
@@ -518,7 +538,7 @@ Ingest (cameras → DVR):
 
 Processing (DVR → Detector → VLM):
   Frame readback: 1080p frames @ 10fps = 3 Mbps (negligible)
-  
+
 Cloud fallback (home → cloud VLM):
   Typical: 1-5 frames/min to cloud = 500 Kbps (negligible)
   Burst: 10 frames/min = 1 Mbps (still fine)
@@ -560,6 +580,7 @@ Recommendation for tier 2 setup:
 ### When to add a second GPU
 
 **Triggers:**
+
 ```
 ✗ Single GPU > 80% utilization for 2+ consecutive days
 ✗ VLM queue depth > 10 events
@@ -568,6 +589,7 @@ Recommendation for tier 2 setup:
 ```
 
 **Action:**
+
 ```
 Add RTX 4060 Ti ($650):
   - Primary GPU: VLM inference
@@ -578,6 +600,7 @@ Add RTX 4060 Ti ($650):
 ### When to add stereo calibration & multi-camera fusion
 
 **Triggers:**
+
 ```
 ✓ Installed 2+ overlapping cameras (e.g., doorbell + side approach)
 ✓ Identity confidence < 0.70 (single camera limitation)
@@ -585,11 +608,12 @@ Add RTX 4060 Ti ($650):
 ```
 
 **Action:**
+
 ```
 1. Calibrate stereo: use phone AR or landmark PnP (2-3 hours)
    - Benefit: 3D face verification, gait biometric correlation
    - Expected improvement: +0.15 identity confidence
-   
+
 2. Enable multi-camera fusion in rules:
    - Cost: extra preprocessing (5-10% GPU)
    - Benefit: 50-80% reduction in identity-related false positives
@@ -598,6 +622,7 @@ Add RTX 4060 Ti ($650):
 ### When to move to cloud-fallback only
 
 **Triggers:**
+
 ```
 ✗ VLM consistently > 95% utilization
 ✗ Cannot expand local GPU (physical space, power budget)
@@ -605,6 +630,7 @@ Add RTX 4060 Ti ($650):
 ```
 
 **Action:**
+
 ```
 1. Keep fast detector local (CPU, always fast)
 2. Send VLM requests to cloud (conditional, cost-aware)
@@ -695,11 +721,11 @@ Typical single-box (NUC i7 + RTX 4060 Ti):
   - Idle: 30W (CPU) + 20W (GPU) = 50W
   - Full load: 100W (CPU) + 130W (GPU) = 230W
   - Sustained operating: ~80-120W average
-  
+
 Example: Running 24/7 at 100W avg
   - Monthly: 100W × 24h × 30 = 72 kWh
   - Cost: 72 kWh × $0.12/kWh = $8.64/month (US average)
-  
+
 For dual-GPU setup: double the cost, so ~$17/month sustained
 ```
 
@@ -755,10 +781,10 @@ Quarterly: Update models, review performance metrics
 ```
 Assess: Is GPU utilization trending up?
   → If yes and >80% sustained: plan GPU upgrade
-  
+
 Assess: Are false positives increasing?
   → If yes: run feedback optimization, consider better models
-  
+
 Assess: Storage fill rate?
   → If >80% full within 6 months: expand or cloud archive
 ```
@@ -768,13 +794,13 @@ Assess: Storage fill rate?
 ```
 GPU aging: Check if newer models (RTX 50xx) offer better value
   - Typically: new gen = +40% perf / same price
-  
+
 SSD degradation: if NVMe close to rated cycles, replace
   - Typical lifespan: 3-5 years
-  
+
 Database growth: Vector DB or SQL starting to slow?
   - Compress old embeddings, archive old sessions
-  
+
 Model updates: better VLM released?
   - Test variant against current rule performance
   - Gradual rollout if FP/FN improve
@@ -802,7 +828,7 @@ Operations:
 Support:
   Installation: $500 (if not DIY)
   Troubleshooting: $0 (community support, MCP)
-  
+
 Total TCO: $2100 + $419 + $500 = $3019 (over 3 years)
 Monthly: $84/month
 

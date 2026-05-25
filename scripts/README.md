@@ -4,11 +4,11 @@ Operational scripts: first-time setup, day-to-day dev tooling, release automatio
 
 ## Layout
 
-| Folder | Purpose |
-|--------|---------|
-| [`setup/`](setup/) | First-time installer: dependencies, docker compose, DB migrations, NATS streams |
-| [`dev/`](dev/) | Day-to-day dev workflow: regenerate schemas, format/lint everything, seed test data, run focused services |
-| [`release/`](release/) | Versioning, changelog generation, image tagging, GitHub release creation |
+| Folder                 | Purpose                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------- |
+| [`setup/`](setup/)     | First-time installer: dependencies, docker compose, DB migrations, NATS streams                           |
+| [`dev/`](dev/)         | Day-to-day dev workflow: regenerate schemas, format/lint everything, seed test data, run focused services |
+| [`release/`](release/) | Versioning, changelog generation, image tagging, GitHub release creation                                  |
 
 ## Conventions
 

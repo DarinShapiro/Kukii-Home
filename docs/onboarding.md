@@ -6,14 +6,14 @@ Get from a fresh clone to your first PR in under 30 minutes.
 
 ## Prerequisites
 
-| Tool | Version | Why | Install |
-|------|---------|-----|---------|
-| **git** | any recent | source control | system package manager |
-| **Python** | 3.12+ | core services | [python.org](https://www.python.org/) |
-| **uv** | 0.11+ | Python package manager | [docs.astral.sh/uv](https://docs.astral.sh/uv/) |
-| **Node.js** | 22+ | frontend builds | [nodejs.org](https://nodejs.org/) |
-| **pnpm** | 11+ | TypeScript monorepo | `npm install -g pnpm` |
-| **Docker** | recent | dev stack (NATS, Postgres, Qdrant, Redis) | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+| Tool        | Version    | Why                                       | Install                                                           |
+| ----------- | ---------- | ----------------------------------------- | ----------------------------------------------------------------- |
+| **git**     | any recent | source control                            | system package manager                                            |
+| **Python**  | 3.12+      | core services                             | [python.org](https://www.python.org/)                             |
+| **uv**      | 0.11+      | Python package manager                    | [docs.astral.sh/uv](https://docs.astral.sh/uv/)                   |
+| **Node.js** | 22+        | frontend builds                           | [nodejs.org](https://nodejs.org/)                                 |
+| **pnpm**    | 11+        | TypeScript monorepo                       | `npm install -g pnpm`                                             |
+| **Docker**  | recent     | dev stack (NATS, Postgres, Qdrant, Redis) | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
 
 Check yours:
 
@@ -210,11 +210,11 @@ Then read the section relevant to the issue you're working:
 
 Three workflows guard `main`:
 
-| Workflow | Trigger | Time | What it does |
-|----------|---------|------|--------------|
-| **CI** | PR + push to main | ~5 min | ruff, prettier, eslint, tsc, pytest (fast), vitest |
+| Workflow        | Trigger           | Time    | What it does                                                   |
+| --------------- | ----------------- | ------- | -------------------------------------------------------------- |
+| **CI**          | PR + push to main | ~5 min  | ruff, prettier, eslint, tsc, pytest (fast), vitest             |
 | **Integration** | PR + push to main | ~10 min | Spins up NATS+Postgres+Qdrant+Redis, runs `tests/integration/` |
-| **Nightly e2e** | 06:00 UTC | ~30 min | Full docker-compose stack + `tests/e2e/` |
+| **Nightly e2e** | 06:00 UTC         | ~30 min | Full docker-compose stack + `tests/e2e/`                       |
 
 CI cancels superseded PR runs automatically.
 

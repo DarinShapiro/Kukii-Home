@@ -41,16 +41,16 @@ services:
   nats:
     image: nats:2.11-alpine
     container_name: sentihome-nats
-    command: ["-js", "-sd", "/data", "-m", "8222"]
+    command: ['-js', '-sd', '/data', '-m', '8222']
     ports:
-      - "4222:4222"   # client connections
-      - "8222:8222"   # monitoring
+      - '4222:4222' # client connections
+      - '8222:8222' # monitoring
     volumes:
       - nats-data:/data
     networks:
       - sentihome
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:8222/healthz']
       interval: 10s
       timeout: 3s
       retries: 5
@@ -63,13 +63,13 @@ services:
       POSTGRES_PASSWORD: sentihome
       POSTGRES_DB: sentihome
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - sentihome
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentihome"]
+      test: ['CMD-SHELL', 'pg_isready -U sentihome']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -78,14 +78,14 @@ services:
     image: qdrant/qdrant:v1.12.4
     container_name: sentihome-qdrant
     ports:
-      - "6333:6333"   # REST
-      - "6334:6334"   # gRPC
+      - '6333:6333' # REST
+      - '6334:6334' # gRPC
     volumes:
       - qdrant-data:/qdrant/storage
     networks:
       - sentihome
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:6333/healthz']
       interval: 10s
       timeout: 3s
       retries: 5
@@ -94,13 +94,13 @@ services:
     image: redis:7-alpine
     container_name: sentihome-redis
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redis-data:/data
     networks:
       - sentihome
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -115,7 +115,7 @@ services:
   core:
     <<: *python-service
     container_name: sentihome-core
-    command: ["python", "-m", "sentihome_core"]
+    command: ['python', '-m', 'sentihome_core']
     depends_on:
       nats:
         condition: service_healthy
@@ -125,7 +125,7 @@ services:
   preprocessor:
     <<: *python-service
     container_name: sentihome-preprocessor
-    command: ["python", "-m", "sentihome_preprocessor"]
+    command: ['python', '-m', 'sentihome_preprocessor']
     depends_on:
       nats:
         condition: service_healthy
@@ -135,7 +135,7 @@ services:
   detector:
     <<: *python-service
     container_name: sentihome-detector
-    command: ["python", "-m", "sentihome_detector"]
+    command: ['python', '-m', 'sentihome_detector']
     depends_on:
       nats:
         condition: service_healthy
@@ -143,7 +143,7 @@ services:
   vlm-router:
     <<: *python-service
     container_name: sentihome-vlm-router
-    command: ["python", "-m", "sentihome_vlm_router"]
+    command: ['python', '-m', 'sentihome_vlm_router']
     depends_on:
       nats:
         condition: service_healthy
@@ -151,7 +151,7 @@ services:
   memory:
     <<: *python-service
     container_name: sentihome-memory
-    command: ["python", "-m", "sentihome_memory"]
+    command: ['python', '-m', 'sentihome_memory']
     depends_on:
       nats:
         condition: service_healthy
@@ -163,7 +163,7 @@ services:
   ha-agent:
     <<: *python-service
     container_name: sentihome-ha-agent
-    command: ["python", "-m", "sentihome_ha_agent"]
+    command: ['python', '-m', 'sentihome_ha_agent']
     environment:
       - SENTIHOME_ENV=dev
       - NATS_URL=nats://nats:4222
@@ -179,7 +179,7 @@ services:
   notify:
     <<: *python-service
     container_name: sentihome-notify
-    command: ["python", "-m", "sentihome_notify"]
+    command: ['python', '-m', 'sentihome_notify']
     depends_on:
       nats:
         condition: service_healthy
