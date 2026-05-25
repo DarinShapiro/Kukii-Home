@@ -2,10 +2,10 @@
 
 > **Resumption document** for agents continuing implementation work. This is a snapshot of where the code is, what's done, what's next, and the conventions established so far.
 
-**Last updated:** 2026-05-25 (Epic 6 closed)
+**Last updated:** 2026-05-25 (Epic 7 closed)
 **Branch:** `main`
 **CI status:** ✅ green
-**Tests:** 197 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
+**Tests:** 229 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
 
 ---
 
@@ -33,8 +33,8 @@ cd SentiHome
 
 | Status                       | Count             |
 | ---------------------------- | ----------------- |
-| Epics closed                 | 6 of 16 (38%)     |
-| Sub-issues closed            | 104 of 264 (~39%) |
+| Epics closed                 | 7 of 16 (44%)     |
+| Sub-issues closed            | 116 of 264 (~44%) |
 | Architecture sections stable | 23 of 23 (100%)   |
 | Foundation infrastructure    | Complete          |
 
@@ -48,13 +48,13 @@ cd SentiHome
 | #46 | Preprocessing & Detection           | 21/21      | Real OpenCV MOG2 motion detection with temporal/size/zone/environmental filtering, on-camera AI corroboration, in-memory metadata cache, `Detector` facade with stubbed ML model registry             |
 | #68 | VLM Router & Inference              | 13/13      | Multi-backend router (Ollama/vLLM/Cloud OpenAI-compatible), routing policy with privacy enforcement + affinity + cost/latency scoring, 3-state circuit breaker, fallback chain, telemetry, response repair |
 | #82 | Memory & Storage                    | 22/22      | SQLAlchemy ORM (11 tables across 5 memory layers), Alembic migration tooling, MemoryStore facade (sessions, hybrid rule retrieval, episodic, visit ledger, identity), retention + soft-delete + grace |
+| #105 | Rule Engine & Conversational Rule Creation | 11/11 | RuleEvaluator (all §10 conditions + temporal), ConflictResolver (scope+severity+suppression), heuristic NL RuleParser, DEFAULT_RULE_PACK with Tier-1 safety |
 
 ### Open epics (in dependency order)
 
 | #    | Epic                                       | Sub-issues | Notes                                                                                                                                                                 |
 | ---- | ------------------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #105 | Rule Engine & Conversational Rule Creation | #106-#116  | **Start here.** Hybrid retrieval already in MemoryStore; build conflict resolution, NL→rule parsing, default rule pack.                                               |
-| #117 | Action Dispatch & Alerting                 | #118-#133  | Tier 0–4 escalation, quiet hours, occupancy routing, ask flow, policy gate, remediation registry, deeper-assessment loop.                                             |
+| #117 | Action Dispatch & Alerting                 | #118-#133  | **Start here.** Tier 0–4 escalation, quiet hours, occupancy routing, ask flow, policy gate, remediation registry, deeper-assessment loop. Rule engine already complete.                                                              |
 | #134 | Home Assistant Integration                 | #135-#156  | `services/ha-agent` (read+write MCP), `ha-integration/` custom HA component (entities, services, events).                                                             |
 | #157 | Identity & Recognition                     | #158-#174  | Multi-modal identity, multi-camera fusion, stereo verification, temporal evidence accumulation, retroactive re-eval.                                                  |
 | #175 | Feedback-Driven Optimization               | #176-#192  | Variant generator + replay engine + 4-phase rollout (silent → shadow → gradual → full) + rollback triggers.                                                           |
@@ -87,7 +87,7 @@ SentiHome/
 │   └── onboarding.md
 │
 ├── services/                7 Python services
-│   ├── core/                Triage worker + adapter registry  (REAL)
+│   ├── core/                Triage worker + adapter registry + rule engine  (REAL)
 │   ├── preprocessor/        MOG2 motion + corroboration + cache  (REAL)
 │   ├── detector/            Model facade (YOLO/face/reid/pose stubs)  (FACADE+STUBS)
 │   ├── vlm-router/          Multi-backend router + policy + breaker + telemetry  (REAL)
@@ -290,7 +290,8 @@ These are captured in `docs/architecture/20-open-questions.md`; don't re-litigat
 | 4 (Preprocessing) | motion, corroboration, cache, detector facade                                        | 31                               |
 | 5 (VLM Router)    | breaker, telemetry, policy, router, response_repair                                  | 39                               |
 | 6 (Memory)        | ORM models (all 11 tables), retention policy, MemoryStore facade                     | 30                               |
-| **Total**         |                                                                                      | **197 unit + integration suite** |
+| 7 (Rule Engine)   | RuleEvaluator (12), ConflictResolver (6), RuleParser NL (7), default pack (2), lifecycle (4) | 32                         |
+| **Total**         |                                                                                      | **229 unit + integration suite** |
 
 ---
 
