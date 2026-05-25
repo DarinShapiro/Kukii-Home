@@ -1,0 +1,20 @@
+# Generated artifacts
+**/generated/**
+**/dist/**
+**/build/**
+**/.next/**
+**/coverage/**
+
+# Lock files
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+uv.lock
+
+# Python / venv
+.venv/
+**/__pycache__/**
+*.pyc
+
+# Documentation generated content
+docs/_build/

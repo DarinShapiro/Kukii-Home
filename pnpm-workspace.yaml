@@ -1,0 +1,10 @@
+packages:
+  - "frontend/ha-cards"
+  - "frontend/operator-dashboard"
+  - "shared/lib-typescript"
+
+allowBuilds:
+  esbuild: set this to true or false
+
+onlyBuiltDependencies:
+  - esbuild
