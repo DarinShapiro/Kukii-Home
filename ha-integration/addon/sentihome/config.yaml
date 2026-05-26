@@ -2,7 +2,7 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: SentiHome
-version: '0.3.1'
+version: '0.3.2'
 slug: sentihome
 description: AI-powered home security and presence understanding
 url: https://github.com/DarinShapiro/SentiHome
@@ -54,25 +54,51 @@ ports_description:
 startup: services
 boot: auto
 
-# Options surface in the Supervisor add-on UI. Each maps to a Topology
-# section; nested sections are accepted as free-form match() entries.
+# Options surface in the Supervisor add-on UI. Each top-level key here
+# also needs a `schema:` entry below — Supervisor only renders form
+# fields for declared options.
+#
+# `adapters` is the main field most users will edit. It's a structured
+# array so Supervisor renders an "Add Adapter" button + per-field inputs.
+# For deep / complex configs, use Supervisor's YAML editor mode (toggle
+# via the three-dot menu in the Configuration tab).
 options:
   profile: yellow_single_box
   household_id: my_home
   timezone: UTC
   ha_token: ''
   log_level: INFO
+  adapters: []
 schema:
   profile: list(yellow_single_box|yellow_plus_inference|distributed)
   household_id: str
   timezone: str
   ha_token: password?
   log_level: list(DEBUG|INFO|WARNING|ERROR)?
+
+  # Structured adapter config — renders as repeatable form items.
+  # See DOCS.md for examples. Two adapter kinds are commonly used today:
+  #   ha-camera   — ride on HA's camera integration (preferred)
+  #   rtsp-direct — pull RTSP directly (for cameras not in HA)
+  adapters:
+    - name: str
+      kind: list(rtsp-direct|ha-camera|agent-dvr|frigate|blueiris|synology|qnap|unifi)
+      # ha-camera fields
+      camera_entity: str?
+      motion_entities:
+        - str?
+      snapshot_cooldown_seconds: float(1.0,3600.0)?
+      # rtsp-direct / generic fields
+      url: str?
+      username: str?
+      password: password?
+      mqtt_host: str?
+
+  # Less-common nested sections; advanced users edit via YAML mode.
   bus: 'match(.+)?'
   memory: 'match(.+)?'
   vlm_router: 'match(.+)?'
   notify: 'match(.+)?'
-  adapters: 'match(.+)?'
 
 # No `image:` — Supervisor builds locally from the Dockerfile in this dir.
 # Once we publish pre-built images to ghcr.io via the addon-build workflow,

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.2 — 2026-05-27
+
+**Make `adapters` editable in the Configuration tab.**
+
+v0.3.1 declared `adapters` as a loose `match(.+)?` regex and never
+included it in the default `options:` block — so Supervisor's
+Configuration tab had no form field for it at all, leaving users with
+no way to actually wire up a camera through the UI.
+
+Fixes:
+
+- `adapters: []` is now a default option, so Supervisor renders it.
+- The schema is now a structured array of objects: each adapter has
+  `name`, `kind` (dropdown), and the type-specific fields
+  (`camera_entity`, `motion_entities`, `snapshot_cooldown_seconds` for
+  ha-camera; `url`/`username`/`password`/`mqtt_host` for others).
+  Supervisor renders this as a repeatable form with an "Add Adapter"
+  button + per-field inputs.
+- The other nested sections (`bus`, `memory`, `vlm_router`, `notify`)
+  remain as `match(.+)?` — most users won't touch them, and editing
+  them via Supervisor's YAML mode (three-dot menu → "Edit in YAML")
+  works for advanced setups.
+
+After this lands, the configuration flow is: Configuration tab → click
+**Add Adapter** under the adapters section → fill in the form → Save.
+No YAML paste required.
+
 ## 0.3.1 — 2026-05-27
 
 - **Better motion-sensor matching.** The v0.3.0 heuristic required the
