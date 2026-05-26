@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.6 — 2026-05-27
+
+User reported the v0.3.5 snapshot thumbnail still didn't render. Live
+diagnosis via /logs + /recent_alerts curls proved the backend works
+perfectly: alert recorded, evidence_ref set, /alerts/<id>/snapshot
+returns 21,889 bytes of valid JPEG, HTML emits correct relative URLs.
+The miss has to be browser-side.
+
+Defensive fixes:
+
+- **`<base href="./">`** in the page head. Forces relative URLs to
+  resolve against the document's directory regardless of whether HA
+  Ingress preserves the trailing slash on the page URL. Eliminates the
+  edge case where `/api/hassio_ingress/<token>` (no slash) would make
+  relative paths resolve to the wrong base.
+- **Request logging** on `/alerts/<id>/snapshot` — every fetch logs
+  `snapshot.request alert_id=... user_agent=...` so the ring buffer
+  shows whether the browser even attempts the fetch. If the log shows
+  no GET when the page rendered, the issue is HTML/URL/cache. If it
+  shows a GET that returned 200, the issue is purely browser display.
+
+To rule out browser cache once and for all: hard-refresh
+(Ctrl+Shift+R) the Web UI after updating to v0.3.6.
+
 ## 0.3.5 — 2026-05-27
 
 **Fix the v0.3.4 thumbnail-not-rendering bug + ship debug endpoints

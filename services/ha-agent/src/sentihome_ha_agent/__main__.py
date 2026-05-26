@@ -104,6 +104,10 @@ _STATUS_PAGE = """<!doctype html>
 <meta charset="utf-8">
 <title>SentiHome</title>
 <meta http-equiv="refresh" content="10">
+<!-- base href="./" makes all relative URLs resolve against the current
+     document's directory. Belt-and-suspenders for HA Ingress, which
+     may or may not preserve the trailing slash on the page URL. -->
+<base href="./">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
          max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
@@ -502,6 +506,16 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
         latest snapshot for its camera.
         """
         alert_id = request.match_info["alert_id"]
+        # Log every fetch so /logs shows browser GETs for snapshots.
+        # Useful for diagnosing "thumbnail not visible" complaints —
+        # if the browser doesn't even hit this endpoint, we know the
+        # issue is HTML/URL/cache, not backend.
+        logger.info(
+            "snapshot.request",
+            alert_id=alert_id,
+            user_agent=request.headers.get("User-Agent", "")[:80],
+            referer=request.headers.get("Referer", ""),
+        )
         alert = alert_log.get(alert_id)
         if alert is None:
             return web.Response(status=404, text=f"no alert {alert_id}")
