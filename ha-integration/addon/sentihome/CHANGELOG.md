@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.4 — 2026-05-26
+
+- Fix stale image: `RUN git clone` was being cached by Docker, so rebuilds
+  served old source code (specifically, the v0.1.2 `NotImplementedError`
+  stubs in service `__main__` files). The new `config.yaml` from v0.1.3
+  was being read by Supervisor (showing the Web UI button) but the
+  in-container code was the unfixed crash-looping version, so port 8765
+  had nothing listening when you clicked the button.
+- Adds an `ADD https://api.github.com/repos/.../commits/main` instruction
+  before the git clone. Docker's `ADD` on a URL re-fetches if the
+  response changes — so whenever `main` advances, the cache key flips
+  and the clone re-runs.
+
+If you previously installed v0.1.3 and got "couldn't load page" from the
+Web UI: **Uninstall the add-on, then reinstall** (don't just Update).
+Update may still hit Supervisor's image cache; Uninstall + Reinstall
+forces a clean rebuild with the new cache-busting Dockerfile.
+
 ## 0.1.3 — 2026-05-26
 
 - The add-on now has a Web UI (Supervisor surfaces an "OPEN WEB UI"

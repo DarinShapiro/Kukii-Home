@@ -12,7 +12,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.1.3" \
+    io.hass.version="0.1.4" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \
@@ -46,6 +46,14 @@ RUN pip install --no-cache-dir uv==0.11.16
 #   docker build --build-arg SENTIHOME_REF=feature/foo ...
 ARG SENTIHOME_REPO=https://github.com/DarinShapiro/SentiHome.git
 ARG SENTIHOME_REF=main
+
+# Docker layer cache can't tell that "git clone main" returns different
+# content on different days — so without a cache-buster, Supervisor's
+# image rebuild would serve stale source. Fetching the current HEAD
+# commit of main BEFORE the git clone gives Docker a different layer key
+# whenever main advances, forcing the clone to re-run. The fetched file
+# is unused; it exists only to invalidate cache.
+ADD https://api.github.com/repos/DarinShapiro/SentiHome/commits/${SENTIHOME_REF} /tmp/.sentihome_main_head
 
 WORKDIR /app
 RUN git clone --depth=1 --branch "${SENTIHOME_REF}" "${SENTIHOME_REPO}" /app \
