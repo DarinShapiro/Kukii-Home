@@ -544,16 +544,16 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     async def debug_version(_request: web.Request) -> web.Response:
         """Return package + add-on versions so we can verify what's
         actually running vs what was last committed."""
-        from sentihome_ha_agent import __version__ as pkg_version
-
         from pathlib import Path
+
+        from sentihome_ha_agent import __version__ as pkg_version
 
         addon_version = "unknown"
         version_file = Path("/app/.sentihome_addon_version")
         try:
             # tiny one-line read, OK to do sync inside async — not worth
             # pulling in anyio.path
-            addon_version = version_file.read_text().strip()  # noqa: ASYNC230
+            addon_version = version_file.read_text().strip()  # noqa: ASYNC240
         except FileNotFoundError:
             pass
         return web.json_response({"package_version": pkg_version, "addon_version": addon_version})
