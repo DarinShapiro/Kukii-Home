@@ -127,6 +127,29 @@ _STATUS_PAGE = """<!doctype html>
   .footer { color: #6a737d; font-size: 0.85rem; margin-top: 2rem; }
   a { color: #0366d6; text-decoration: none; }
   a:hover { text-decoration: underline; }
+  /* Lightbox: click a thumbnail to view the full snapshot in-page.
+     Fixed overlay covers the viewport; click anywhere (or press Esc)
+     to dismiss. Pure CSS+vanilla JS — no library deps so it works
+     identically under HA Ingress and direct port access. */
+  .thumb { cursor: zoom-in; transition: transform 0.08s ease; }
+  .thumb:hover { transform: scale(1.03); }
+  #lightbox {
+    display: none; position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0, 0, 0, 0.85); align-items: center;
+    justify-content: center; cursor: zoom-out; padding: 2rem;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img {
+    max-width: 100%; max-height: 100%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    border-radius: 6px;
+  }
+  #lightbox .lb-hint {
+    position: fixed; bottom: 1rem; left: 0; right: 0;
+    text-align: center; color: #ddd; font-size: 0.85rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -149,6 +172,32 @@ in HA so entities populate.</p>
 <a href="capabilities">capabilities</a> &middot; <a href="recent_alerts">recent_alerts</a> &middot;
 <a href="ha_cameras">ha_cameras</a> &middot; <a href="logs">logs</a></p>
 </div>
+
+<!-- Lightbox overlay: hidden until openLightbox(url) is called.
+     The meta refresh re-renders the page every 10s; the overlay
+     element is re-created with display:none on each render, so a
+     stale lightbox can't persist past a refresh. -->
+<div id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" alt="full snapshot"/>
+  <div class="lb-hint">Click anywhere or press Esc to close</div>
+</div>
+<script>
+  function openLightbox(url) {
+    var lb = document.getElementById('lightbox');
+    var img = document.getElementById('lightbox-img');
+    img.src = url;
+    lb.classList.add('open');
+    return false;  // prevent the anchor's default navigation
+  }
+  function closeLightbox() {
+    var lb = document.getElementById('lightbox');
+    lb.classList.remove('open');
+    document.getElementById('lightbox-img').src = '';
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeLightbox();
+  });
+</script>
 </body>
 </html>
 """
@@ -231,16 +280,22 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
             else:
                 when = "—"
 
-            # Thumbnail. Click → full-size in a new tab.
+            # Thumbnail. Click → in-page lightbox overlay with full-size
+            # image (vanilla JS, see openLightbox in the page template).
+            # The anchor's href is kept as a fallback so middle-click /
+            # right-click → "open in new tab" still works.
+            #
             # IMPORTANT: relative URLs (no leading slash). When the page is
             # served through HA ingress at /api/hassio_ingress/<token>/,
             # absolute paths resolve to the HA host root (not the ingress
             # prefix) and 404. Relative URLs work both via ingress AND via
             # direct port 8765 access.
             if a.get("evidence_ref"):
+                snap_url = f"alerts/{alert_id}/snapshot"
                 thumb = (
-                    f"<a href='alerts/{alert_id}/snapshot' target='_blank'>"
-                    f"<img src='alerts/{alert_id}/snapshot' "
+                    f"<a href='{snap_url}' target='_blank' "
+                    f"onclick=\"return openLightbox('{snap_url}')\">"
+                    f"<img class='thumb' src='{snap_url}' "
                     "style='max-width: 96px; max-height: 54px; "
                     "border-radius: 4px; vertical-align: middle;' "
                     "onerror=\"this.style.display='none'\"/></a>"
@@ -363,16 +418,21 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
             detail = f"<br/><span class='muted'>{cs.last_error}</span>" if cs.last_error else ""
             # Inline snapshot thumbnail when one exists for this camera.
             # Cache-bust on motion count so a new snapshot replaces the old
-            # without manual reload.
-            thumb_html = (
-                # Relative URL — see comment on alerts-table thumbnails about
-                # why absolute paths break under HA ingress.
-                f"<img src='cameras/{cs.camera_id}/snapshot?v={cs.motion_events}' "
-                "style='max-width: 160px; max-height: 90px; border-radius: 4px;'"
-                " onerror=\"this.style.display='none'\"/>"
-                if cs.motion_events > 0
-                else '<span class="muted">no snapshot yet</span>'
-            )
+            # without manual reload. Click → lightbox (see status page
+            # template); fallback link opens raw image in new tab.
+            if cs.motion_events > 0:
+                cam_snap_url = f"cameras/{cs.camera_id}/snapshot?v={cs.motion_events}"
+                thumb_html = (
+                    # Relative URL — see comment on alerts-table thumbnails about
+                    # why absolute paths break under HA ingress.
+                    f"<a href='{cam_snap_url}' target='_blank' "
+                    f"onclick=\"return openLightbox('{cam_snap_url}')\">"
+                    f"<img class='thumb' src='{cam_snap_url}' "
+                    "style='max-width: 160px; max-height: 90px; border-radius: 4px;'"
+                    " onerror=\"this.style.display='none'\"/></a>"
+                )
+            else:
+                thumb_html = '<span class="muted">no snapshot yet</span>'
             rows.append(
                 f"<tr><td>{cs.camera_id}<br/>{thumb_html}</td>"
                 f"<td><span class='{state_class}'>{cs.state}</span>{detail}</td>"

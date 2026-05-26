@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.10 — 2026-05-27
+
+**Click a thumbnail → full-size lightbox in-page.**
+
+Recent-alert and per-camera thumbnails are tiny on purpose (the table
+would be unreadable at full res), but the user couldn't get a closer
+look without right-click → Open in new tab. Added an in-page lightbox:
+
+- Click any thumbnail → dark overlay with the full snapshot
+- Click overlay / press Esc → dismiss
+- Pure vanilla JS + CSS — no library deps, works identically under
+  HA Ingress and direct port 8765
+- Anchor `href` preserved as a fallback so middle-click / right-click
+  → "open in new tab" still works
+- Also stamps a `.thumb` class on thumbnails with `cursor: zoom-in`
+  and a subtle hover transform so the click affordance is obvious
+
+End-to-end verification on the Reolink Front South Camera (via the
+Reolink HA integration, after 0.3.9's diagnosis): snapshot was a real
+97 KB JPEG (`FF D8 FF DB ...`), thumbnail rendered, lightbox opens
+the full image inline.
+
 ## 0.3.9 — 2026-05-27
 
 **Remove the broken WS `camera/get_image` path + surface camera-side
