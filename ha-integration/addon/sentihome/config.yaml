@@ -2,7 +2,7 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: SentiHome
-version: '0.1.5'
+version: '0.1.6'
 slug: sentihome
 description: AI-powered home security and presence understanding
 url: https://github.com/DarinShapiro/SentiHome
@@ -31,15 +31,25 @@ map:
   - addon_config:rw
   - share:rw
 
-ports:
-  '8765/tcp': 8765 # ha-agent HTTP API + status page (Web UI)
-ports_description:
-  '8765/tcp': SentiHome ha-agent API + status page
+# Ingress mode: HA proxies the Web UI through its own auth + URL space.
+# No port published to the host network — eliminates the entire class of
+# bugs around `host_network`, port conflicts, firewall rules between
+# browser and HA host. The "OPEN WEB UI" button stays in Supervisor; it
+# now opens a URL like /api/hassio_ingress/<token>/ rather than
+# http://<host>:<port>/.
+ingress: true
+ingress_port: 8765
+ingress_stream: false
+panel_icon: mdi:cctv
+panel_title: SentiHome
 
-# Tells Supervisor to surface an "OPEN WEB UI" button on the add-on info
-# page. [HOST] expands to the HA host; [PORT:8765] resolves to whatever
-# port the user mapped 8765/tcp to (defaults to 8765 above).
-webui: http://[HOST]:[PORT:8765]/
+# Optional external port for direct API access (the custom integration's
+# coordinator can use this; ingress is for the UI). Comment out to keep
+# the API ingress-only.
+ports:
+  '8765/tcp': 8765
+ports_description:
+  '8765/tcp': SentiHome ha-agent API (direct access; UI uses ingress)
 
 startup: services
 boot: auto

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.6 — 2026-05-26
+
+- **Switch the Web UI to HA Ingress.** This is the canonical pattern for
+  add-on Web UIs and removes the entire port-publishing path: no `host:port`
+  resolution, no firewall surface, no `host_network` interactions. The
+  "OPEN WEB UI" button now opens an HA-proxied URL like
+  `/api/hassio_ingress/<token>/` that goes through HA's own auth.
+- The SentiHome panel also shows up in the HA sidebar (look for "SentiHome"
+  with a CCTV icon below the standard panels).
+- The direct port mapping at `8765/tcp` is kept (commented to keep, in
+  fact) so the custom integration's coordinator can still poll
+  `http://homeassistant.local:8765/snapshot` for the JSON API. Only the
+  UI path moves to ingress.
+- Belt-and-suspenders cache-busters: hardcoded ADD URL (some BuildKit
+  versions don't interpolate ARGs in URLs reliably) plus a `CACHEBUST`
+  ARG that the addon-build workflow passes the commit SHA into.
+
 ## 0.1.5 — 2026-05-26
 
 - Fix "connection refused" on the Web UI button. Two changes:

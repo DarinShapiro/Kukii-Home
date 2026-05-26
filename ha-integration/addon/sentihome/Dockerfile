@@ -12,7 +12,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.1.5" \
+    io.hass.version="0.1.6" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \
@@ -49,14 +49,19 @@ ARG SENTIHOME_REF=main
 
 # Docker layer cache can't tell that "git clone main" returns different
 # content on different days — so without a cache-buster, Supervisor's
-# image rebuild would serve stale source. Fetching the current HEAD
-# commit of main BEFORE the git clone gives Docker a different layer key
-# whenever main advances, forcing the clone to re-run. The fetched file
-# is unused; it exists only to invalidate cache.
-ADD https://api.github.com/repos/DarinShapiro/SentiHome/commits/${SENTIHOME_REF} /tmp/.sentihome_main_head
+# image rebuild would serve stale source. Two cache-busters belt-and-
+# suspenders:
+#   1. ADD on a URL whose body changes when main advances. Some BuildKit
+#      versions don't interpolate ARGs in ADD URLs reliably, so we
+#      hardcode the path here.
+#   2. An ARG that callers (the addon-build CI workflow) pass the commit
+#      SHA into, so even if (1) doesn't bust, this does.
+ADD https://api.github.com/repos/DarinShapiro/SentiHome/commits/main /tmp/.sentihome_main_head
+ARG CACHEBUST=0
 
 WORKDIR /app
-RUN git clone --depth=1 --branch "${SENTIHOME_REF}" "${SENTIHOME_REPO}" /app \
+RUN echo "Cache key: ${CACHEBUST}" \
+    && git clone --depth=1 --branch "${SENTIHOME_REF}" "${SENTIHOME_REPO}" /app \
     && rm -rf /app/.git
 
 # Install every workspace member system-wide.
