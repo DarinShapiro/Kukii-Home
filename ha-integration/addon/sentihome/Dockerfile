@@ -1,4 +1,10 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.20
+# BUILD_FROM has no default on purpose: build.yaml maps each arch to its
+# correct base image and Supervisor passes the right one via --build-arg.
+# Building manually? Set BUILD_FROM explicitly:
+#   docker build \
+#     --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.20 \
+#     ...
+ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
 # Add-on metadata (visible to Supervisor).
@@ -6,7 +12,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.1.1" \
+    io.hass.version="0.1.2" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.2 — 2026-05-26
+
+- Fix install failure on ARM64 hosts (HA Yellow, Raspberry Pi, etc.):
+  the Dockerfile hard-coded `BUILD_FROM` to the amd64 base image, so
+  Supervisor on an aarch64 host ended up pulling an amd64 image and
+  failing at the first apk call with "exec format error".
+- Ship a `build.yaml` mapping each declared arch (amd64, aarch64) to its
+  correct `home-assistant/<arch>-base-python` image. Supervisor reads
+  this and passes the matching one as a `--build-arg`.
+- Remove the BUILD_FROM default in the Dockerfile so a missing arch
+  fails loud at build time instead of silently picking the wrong arch.
+
 ## 0.1.1 — 2026-05-26
 
 - Fix install failure on Supervisor: removed the `image:` reference to an
