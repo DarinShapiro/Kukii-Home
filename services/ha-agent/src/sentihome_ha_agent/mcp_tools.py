@@ -71,6 +71,16 @@ class CapabilitySummary:
 
 
 @dataclass
+class HACameraDiscovery:
+    """Result of scanning HA for cameras + motion sensors."""
+
+    cameras: list[HACameraEntity]
+    unmatched_motion_sensors: list[str] = field(default_factory=list)
+    """Motion-like binary_sensor.* entities the heuristic couldn't pair
+    with any camera. User can manually wire them into adapter config."""
+
+
+@dataclass
 class HACameraEntity:
     """An HA camera the user could point a SentiHome adapter at."""
 
@@ -93,7 +103,61 @@ _MOTION_KEYWORDS = (
     "package",
     "pet",
     "occupancy",
+    "intrusion",
 )
+
+# Tokens we strip when computing the "device tokens" of a camera entity.
+# Dahua / ONVIF / Reolink commonly create camera entities with stream-name
+# suffixes (camera.dahua_pool_cam_main, .._sub, .._profile000_mainstream)
+# but the corresponding motion binary_sensor sits at the device level
+# without those suffixes (binary_sensor.dahua_pool_motion_alarm). So we
+# strip the suffixes from both sides before token overlap.
+_STREAM_STOP_TOKENS = frozenset(
+    {
+        "camera",
+        "cam",
+        "stream",
+        "mainstream",
+        "substream",
+        "main",
+        "sub",
+        "hd",
+        "sd",
+        "profile",
+        "profile000",
+        "profile001",
+        "profile002",
+        "profile003",
+        "high",
+        "low",
+        "alarm",
+        "alert",
+        "alerts",
+        "sensor",
+        "binary",
+        "detected",
+        "detection",
+    }
+)
+
+
+def _meaningful_tokens(slug: str) -> set[str]:
+    """Tokenize an entity slug into device-identifying tokens.
+
+    Drops stream-name suffixes (main, sub, mainstream, profile000…),
+    pure numerics, motion keywords (so we don't accidentally use 'motion'
+    itself as a matching token), and the entity-kind words.
+    """
+    out: set[str] = set()
+    for raw in slug.split("_"):
+        if not raw or raw.isdigit():
+            continue
+        if raw in _STREAM_STOP_TOKENS:
+            continue
+        if raw in _MOTION_KEYWORDS:
+            continue
+        out.add(raw)
+    return out
 
 
 class HATools:
@@ -153,14 +217,36 @@ class HATools:
 
     async def list_ha_cameras(self) -> list[HACameraEntity]:
         """Return every ``camera.*`` entity HA has, with heuristically-matched
-        motion / AI binary sensors. Used by the Web UI's "HA cameras
-        detected" card so users can see what's available before configuring
-        a SentiHome adapter.
+        motion / AI binary sensors.
 
-        Heuristic: for each ``camera.X``, find all ``binary_sensor.Y`` where
-        ``Y`` starts with the camera's id-suffix AND ``Y`` contains one of
-        the motion keywords (motion / person / vehicle / animal / package /
-        pet / occupancy).
+        Matching uses token overlap (not prefix): the camera slug and the
+        motion-sensor slug are each broken into ``_``-delimited tokens, stream
+        suffixes (main / sub / profile000 / etc.) and entity-kind words
+        (camera / sensor / detected / etc.) are dropped, and a sensor is
+        paired with the camera when:
+          * the sensor slug contains a motion keyword, AND
+          * at least one meaningful token overlaps with the camera slug.
+
+        Why this is loose:
+          camera.dahua_pool_cam_main → meaningful tokens {dahua, pool}
+          binary_sensor.dahua_pool_motion_alarm → meaningful tokens {dahua, pool}
+          overlap = {dahua, pool} → match
+        With the old startswith() heuristic this never matched because
+        ``dahua_pool_motion_alarm`` doesn't start with ``dahua_pool_cam_main``.
+
+        Unmatched motion sensors land on the discovery payload via
+        :meth:`discover_ha_cameras` (which wraps this and adds them).
+        """
+        discovery = await self.discover_ha_cameras()
+        return discovery.cameras
+
+    async def discover_ha_cameras(self) -> HACameraDiscovery:
+        """Cameras + unmatched motion sensors, in one pass.
+
+        The unmatched list is what the Web UI uses to show "we saw these
+        motion-like sensors but couldn't auto-pair them" — useful when
+        the user has motion entities under non-obvious names that need
+        manual configuration.
         """
         states = await self._client.get_states()
         cameras: list[HAState] = []
@@ -172,18 +258,26 @@ class HATools:
             elif domain == "binary_sensor":
                 binary_sensors.append(s)
 
-        results: list[HACameraEntity] = []
+        # Pre-compute slug + tokens once per binary_sensor.
+        motion_bs: list[tuple[HAState, str, set[str]]] = []
+        for bs in binary_sensors:
+            bs_slug = bs.entity_id.split(".", 1)[1]
+            if not any(kw in bs_slug for kw in _MOTION_KEYWORDS):
+                continue
+            motion_bs.append((bs, bs_slug, _meaningful_tokens(bs_slug)))
+
+        matched_bs_ids: set[str] = set()
+        cam_entries: list[HACameraEntity] = []
         for cam in cameras:
-            cam_slug = cam.entity_id.split(".", 1)[1]  # e.g. "pool_cam"
+            cam_slug = cam.entity_id.split(".", 1)[1]
+            cam_tokens = _meaningful_tokens(cam_slug)
             motion: list[str] = []
-            for bs in binary_sensors:
-                bs_slug = bs.entity_id.split(".", 1)[1]
-                if not bs_slug.startswith(cam_slug):
-                    continue
-                if not any(kw in bs_slug for kw in _MOTION_KEYWORDS):
+            for bs, _bs_slug, bs_tokens in motion_bs:
+                if not cam_tokens & bs_tokens:
                     continue
                 motion.append(bs.entity_id)
-            results.append(
+                matched_bs_ids.add(bs.entity_id)
+            cam_entries.append(
                 HACameraEntity(
                     camera_entity=cam.entity_id,
                     friendly_name=(cam.attributes or {}).get("friendly_name"),
@@ -191,7 +285,9 @@ class HATools:
                     motion_candidates=motion,
                 )
             )
-        return results
+
+        unmatched = [bs.entity_id for bs, _, _ in motion_bs if bs.entity_id not in matched_bs_ids]
+        return HACameraDiscovery(cameras=cam_entries, unmatched_motion_sensors=unmatched)
 
     async def get_calendar_events(
         self, calendar_entity: str, *, start: datetime, end: datetime

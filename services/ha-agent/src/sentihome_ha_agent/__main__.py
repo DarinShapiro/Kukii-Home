@@ -205,11 +205,14 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         ha_cameras_card += '<p class="muted">Connect to HA first (see card below).</p></div>'
     else:
         try:
-            ha_cams = await boot.tools.list_ha_cameras()
+            discovery = await boot.tools.discover_ha_cameras()
+            ha_cams = discovery.cameras
+            unmatched = discovery.unmatched_motion_sensors
         except Exception as e:
             ha_cams = []
+            unmatched = []
             ha_cameras_card += f'<p class="bad">Discovery failed: {e}</p>'
-        if not ha_cams:
+        if not ha_cams and not unmatched:
             ha_cameras_card += (
                 '<p class="muted">HA has no camera.* entities. Add a camera '
                 "via an HA integration (Generic Camera, ONVIF, Reolink, etc.) "
@@ -222,17 +225,31 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
                 motion_html = (
                     ", ".join(f"<code>{m}</code>" for m in c.motion_candidates)
                     if c.motion_candidates
-                    else '<span class="muted">none detected</span>'
+                    else '<span class="muted">none auto-matched</span>'
                 )
+                state_class = "bad" if c.state in ("unavailable", "unknown") else "muted"
                 rows.append(
                     f"<tr><td><code>{c.camera_entity}</code><br/>"
                     f'<span class="muted">{name}</span></td>'
-                    f"<td>{c.state}</td>"
+                    f'<td><span class="{state_class}">{c.state}</span></td>'
                     f"<td>{motion_html}</td></tr>"
                 )
             ha_cameras_card += (
                 "<table><tr><th>Camera entity</th><th>State</th>"
                 "<th>Motion / AI sensors</th></tr>" + "".join(rows) + "</table>"
+            )
+
+            if unmatched:
+                ha_cameras_card += (
+                    '<h4 style="margin-top:1rem;">Unmatched motion sensors</h4>'
+                    '<p class="muted">Motion-like binary sensors I couldn\'t '
+                    "auto-pair with a camera (likely because their entity names "
+                    "don't share tokens with any camera). Manually wire the "
+                    "right one into <code>motion_entities</code> below.</p>"
+                    "<ul>" + "".join(f"<li><code>{m}</code></li>" for m in unmatched) + "</ul>"
+                )
+
+            ha_cameras_card += (
                 '<p class="muted">To wire one of these into SentiHome, paste '
                 "into the add-on Configuration:</p>"
                 "<pre>adapters:\n"

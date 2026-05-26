@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.3.1 — 2026-05-27
+
+- **Better motion-sensor matching.** The v0.3.0 heuristic required the
+  binary_sensor entity_id to start with the camera entity_id, but Dahua /
+  ONVIF / Reolink integrations typically create camera entities with
+  stream-name suffixes (`camera.dahua_pool_cam_main`, `_sub`,
+  `_profile000_mainstream`) while motion sensors sit at the device level
+  without those suffixes (`binary_sensor.dahua_pool_motion_alarm`). Result:
+  every Dahua user got "none detected" for motion candidates.
+
+  New matcher tokenizes both slugs, drops stream-name + entity-kind stop
+  words (`main`, `sub`, `mainstream`, `profile000`, `camera`, `sensor`,
+  …), and pairs when ≥1 meaningful token overlaps. Adds `intrusion` to
+  motion keywords (Dahua's term for trip-wire / line-cross events).
+
+- **"Unmatched motion sensors" section** on the discovery card lists
+  every motion-like `binary_sensor.*` the heuristic couldn't pair with
+  any camera — so even if auto-matching misses, you can see what's
+  available and wire it manually.
+
+- **Unavailable camera state highlighted in red** so misconfigured /
+  offline cameras are visible at a glance.
+
+- New API: `GET /ha_cameras` now returns `{cameras: [...], unmatched_motion_sensors: [...]}`
+  (additive — `cameras` shape unchanged).
+
 ## 0.3.0 — 2026-05-27
 
 **Ride on HA's camera integration instead of duplicating it.** New

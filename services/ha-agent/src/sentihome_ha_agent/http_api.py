@@ -83,7 +83,7 @@ class HAAgentAPI:
                 }
 
             if method == "GET" and path == "/ha_cameras":
-                cams = await self._tools.list_ha_cameras()
+                discovery = await self._tools.discover_ha_cameras()
                 return 200, {
                     "cameras": [
                         {
@@ -92,8 +92,9 @@ class HAAgentAPI:
                             "state": c.state,
                             "motion_candidates": c.motion_candidates,
                         }
-                        for c in cams
-                    ]
+                        for c in discovery.cameras
+                    ],
+                    "unmatched_motion_sensors": discovery.unmatched_motion_sensors,
                 }
 
             if method == "POST" and path == "/service":

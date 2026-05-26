@@ -204,7 +204,7 @@ async def test_tools_list_capabilities_buckets_by_domain():
     assert "sensor" not in by_domain
 
 
-async def test_tools_list_ha_cameras_matches_motion_sensors_by_substring():
+async def test_tools_list_ha_cameras_matches_motion_sensors_by_token_overlap():
     """v0.3.0: HATools.list_ha_cameras pairs each camera.* with its
     binary_sensor.* siblings whose ids contain motion keywords."""
     routes = {
@@ -260,6 +260,74 @@ async def test_tools_list_ha_cameras_matches_motion_sensors_by_substring():
     assert by_entity["camera.front_yard_south"].motion_candidates == [
         "binary_sensor.front_yard_south_motion"
     ]
+
+
+async def test_tools_discover_ha_cameras_handles_stream_suffix_mismatch():
+    """The hard case from the Dahua Pool Cam: camera entities have stream
+    suffixes (camera.dahua_pool_cam_main, _sub, etc.) but motion sensors
+    sit at the device level (binary_sensor.dahua_pool_motion). The old
+    startswith() heuristic missed these entirely. The new token-overlap
+    matcher pairs them via the shared 'dahua' + 'pool' tokens."""
+    routes = {
+        ("GET", "/api/states"): httpx.Response(
+            200,
+            json=[
+                {
+                    "entity_id": "camera.dahua_pool_cam_main",
+                    "state": "unavailable",
+                    "attributes": {"friendly_name": "Dahua Pool Cam Main"},
+                },
+                {
+                    "entity_id": "camera.dahua_pool_cam_sub",
+                    "state": "unavailable",
+                    "attributes": {"friendly_name": "Dahua Pool Cam Sub"},
+                },
+                {
+                    "entity_id": "binary_sensor.dahua_pool_motion_alarm",
+                    "state": "off",
+                    "attributes": {},
+                },
+                {
+                    "entity_id": "binary_sensor.dahua_pool_intrusion",
+                    "state": "off",
+                    "attributes": {},
+                },
+            ],
+        )
+    }
+    client = _client_with_mocks(routes)
+    tools = HATools(client)
+    discovery = await tools.discover_ha_cameras()
+    # Both cameras should get both sensors via token overlap.
+    by_entity = {c.camera_entity: c for c in discovery.cameras}
+    for cam_id in ("camera.dahua_pool_cam_main", "camera.dahua_pool_cam_sub"):
+        assert set(by_entity[cam_id].motion_candidates) == {
+            "binary_sensor.dahua_pool_motion_alarm",
+            "binary_sensor.dahua_pool_intrusion",
+        }
+    assert discovery.unmatched_motion_sensors == []
+
+
+async def test_tools_discover_ha_cameras_reports_unmatched_sensors():
+    """A motion sensor with no token overlap with any camera lands in
+    discovery.unmatched_motion_sensors."""
+    routes = {
+        ("GET", "/api/states"): httpx.Response(
+            200,
+            json=[
+                {"entity_id": "camera.driveway", "state": "idle"},
+                {
+                    "entity_id": "binary_sensor.unrelated_garage_motion",
+                    "state": "off",
+                },
+            ],
+        )
+    }
+    client = _client_with_mocks(routes)
+    tools = HATools(client)
+    discovery = await tools.discover_ha_cameras()
+    assert discovery.cameras[0].motion_candidates == []
+    assert discovery.unmatched_motion_sensors == ["binary_sensor.unrelated_garage_motion"]
 
 
 async def test_tools_list_ha_cameras_empty_when_no_cameras():

@@ -17,6 +17,8 @@ from sentihome_ha_agent.mcp_tools import (
     CAPABILITY_DOMAINS,
     CapabilitySummary,
     ChangedEntity,
+    HACameraDiscovery,
+    HACameraEntity,
     HATools,
 )
 
@@ -31,6 +33,8 @@ __all__ = [
     "ChangedEntity",
     "HAAgentAPI",
     "HAAgentSettings",
+    "HACameraDiscovery",
+    "HACameraEntity",
     "HAClient",
     "HAClientError",
     "HAClientSettings",
