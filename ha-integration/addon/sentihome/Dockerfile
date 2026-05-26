@@ -12,7 +12,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.1.7" \
+    io.hass.version="0.1.8" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \
@@ -64,11 +64,12 @@ RUN echo "Cache key: ${CACHEBUST}" \
     && git clone --depth=1 --branch "${SENTIHOME_REF}" "${SENTIHOME_REPO}" /app \
     && rm -rf /app/.git
 
-# Install every workspace member into /app/.venv (uv sync's default).
-# The s6 run scripts use /app/.venv/bin/python explicitly so they pick up
-# these packages — the base image's /usr/local/bin/python has none of
-# them on its sys.path.
-RUN uv sync --frozen --no-dev
+# Install every workspace member into /app/.venv.
+# --all-packages is required: without it, `uv sync` only installs the
+# root project's dependencies (which are empty for SentiHome — it's a
+# pure workspace shell) and silently skips the member packages, leaving
+# /app/.venv without any `sentihome_*` modules.
+RUN uv sync --frozen --no-dev --all-packages
 
 # Verify the workspace installed correctly. If any of these imports fail,
 # the s6 services would crash-loop at runtime with "No module named ..." —

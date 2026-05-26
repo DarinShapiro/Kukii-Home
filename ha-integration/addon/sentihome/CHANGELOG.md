@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.8 — 2026-05-26
+
+- `uv sync` needs `--all-packages` to actually install workspace members.
+  Without it (silent default behavior), only the root project's
+  dependencies are installed — and SentiHome's root project has no deps;
+  it's a pure workspace shell. So /app/.venv had nothing in it, the
+  build-time import check (added in 0.1.7) caught the regression and
+  failed install loudly. v0.1.8 fixes the missing flag.
+- The `InvalidDefaultArgInFrom` warning in build output is harmless;
+  Supervisor passes BUILD_FROM via build.yaml + --build-arg before the
+  default would be used. The warning can be ignored.
+
 ## 0.1.7 — 2026-05-26
 
 **The actual root cause for v0.1.3-v0.1.6 "connection refused".**
