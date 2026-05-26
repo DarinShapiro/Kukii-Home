@@ -2,7 +2,7 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: SentiHome
-version: '0.1.6'
+version: '0.1.7'
 slug: sentihome
 description: AI-powered home security and presence understanding
 url: https://github.com/DarinShapiro/SentiHome

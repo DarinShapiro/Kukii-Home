@@ -74,5 +74,35 @@ jobs:
             ha-integration/addon/sentihome
       - name: Sanity-run the image
         run: |
-          docker run --rm sentihome-addon:ci /bin/bash -c \
-            "python -c 'import sentihome_shared.topology; print(\"topology importable\")'"
+          # Verify the s6 run scripts can actually start each SentiHome
+          # service. Use the same venv-python path the s6 scripts use —
+          # if this changes and the run scripts don't follow, we'd ship
+          # broken images again (which we did in v0.1.3-v0.1.6).
+          docker run --rm sentihome-addon:ci /bin/bash -c '
+            /app/.venv/bin/python -c "
+            import sentihome_shared.topology
+            import sentihome_core
+            import sentihome_memory
+            import sentihome_ha_agent
+            import sentihome_notify
+            import sentihome_vlm_router
+            import sentihome_preprocessor
+            print(\"All SentiHome packages importable from /app/.venv/bin/python\")
+            "
+          '
+      - name: Verify s6 run scripts point at the venv
+        run: |
+          # If a service run script uses bare `python` instead of
+          # /app/.venv/bin/python, it WILL crash-loop on import. Catch
+          # the regression here.
+          for f in ha-integration/addon/sentihome/rootfs/etc/services.d/*/run; do
+            if grep -q 'exec python' "$f"; then
+              echo "FAIL: $f uses bare 'python'; should use /app/.venv/bin/python"
+              exit 1
+            fi
+            if ! grep -q 'exec /app/.venv/bin/python' "$f"; then
+              echo "FAIL: $f doesn't invoke /app/.venv/bin/python"
+              exit 1
+            fi
+          done
+          echo "All s6 run scripts correctly target the venv python"

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.1.7 — 2026-05-26
+
+**The actual root cause for v0.1.3-v0.1.6 "connection refused".**
+
+The Dockerfile installs all SentiHome packages with `uv sync`, which
+creates `/app/.venv/` — but the s6 run scripts invoked `python` (which
+resolves to `/usr/local/bin/python`, the base image's system python, NOT
+the venv). System python has no SentiHome packages on its path, so all
+six services crash-looped on import with `No module named sentihome_*`
+forever. The Web UI port never bound because the ha-agent process never
+got past the `from aiohttp import web` line.
+
+Fixes:
+
+- All six `rootfs/etc/services.d/*/run` scripts now exec
+  `/app/.venv/bin/python` explicitly instead of `python`.
+- Dockerfile adds a build-time import check:
+  `RUN /app/.venv/bin/python -c "import sentihome_ha_agent; ..."`. If any
+  workspace member isn't installed, the BUILD fails — so this kind of
+  packaging bug surfaces during install, not after start.
+
+Apologies for the v0.1.3-v0.1.6 churn. None of those would have ever
+worked.
+
 ## 0.1.6 — 2026-05-26
 
 - **Switch the Web UI to HA Ingress.** This is the canonical pattern for

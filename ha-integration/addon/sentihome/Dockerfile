@@ -12,7 +12,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.1.6" \
+    io.hass.version="0.1.7" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \
@@ -64,8 +64,23 @@ RUN echo "Cache key: ${CACHEBUST}" \
     && git clone --depth=1 --branch "${SENTIHOME_REF}" "${SENTIHOME_REPO}" /app \
     && rm -rf /app/.git
 
-# Install every workspace member system-wide.
+# Install every workspace member into /app/.venv (uv sync's default).
+# The s6 run scripts use /app/.venv/bin/python explicitly so they pick up
+# these packages — the base image's /usr/local/bin/python has none of
+# them on its sys.path.
 RUN uv sync --frozen --no-dev
+
+# Verify the workspace installed correctly. If any of these imports fail,
+# the s6 services would crash-loop at runtime with "No module named ..." —
+# fail the BUILD instead so the misconfig surfaces in install/CI.
+RUN /app/.venv/bin/python -c "import sentihome_shared.topology; \
+    import sentihome_core; \
+    import sentihome_memory; \
+    import sentihome_ha_agent; \
+    import sentihome_notify; \
+    import sentihome_vlm_router; \
+    import sentihome_preprocessor; \
+    print('SentiHome packages OK:', sentihome_ha_agent.__version__)"
 
 # s6-overlay service definitions + run.sh entrypoint live in this add-on
 # directory (the build context).
