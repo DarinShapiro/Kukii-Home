@@ -201,9 +201,7 @@ class HAClient:
         except HAClientError:
             raise
         except Exception as e:
-            logger.warning(
-                "ha_client.ws_get_image_failed", entity_id=entity_id, error=str(e)
-            )
+            logger.warning("ha_client.ws_get_image_failed", entity_id=entity_id, error=str(e))
 
         # Path 2 — REST camera_proxy fallback
         resp = await self._http.get(f"/api/camera_proxy/{entity_id}")

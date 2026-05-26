@@ -22,41 +22,42 @@ stream. ONVIF tried to fill that gap and failed.
 
 Fix:
 
-  HAClient.fetch_camera_snapshot now tries TWO paths:
+HAClient.fetch_camera_snapshot now tries TWO paths:
 
-  1. WebSocket `camera/get_image` command (NEW)
-     - HA routes via the integration's async_camera_image() getter,
-       which for Reolink uses the proper Reolink REST API
-     - Returns base64 inside the WS result
-     - Requires plumbing command-response routing through the existing
-       WebSocket: new `_ws_pending` dict tracks msg_id → Future,
-       _ws_consume routes `result` messages with matching ids to the
-       waiting future
-     - On WS disconnect, in-flight futures get HAClientError so callers
-       don't hang
+1. WebSocket `camera/get_image` command (NEW)
+   - HA routes via the integration's async_camera_image() getter,
+     which for Reolink uses the proper Reolink REST API
+   - Returns base64 inside the WS result
+   - Requires plumbing command-response routing through the existing
+     WebSocket: new `_ws_pending` dict tracks msg_id → Future,
+     \_ws_consume routes `result` messages with matching ids to the
+     waiting future
+   - On WS disconnect, in-flight futures get HAClientError so callers
+     don't hang
 
-  2. REST `/api/camera_proxy/<entity_id>` (existing, now validated)
-     - Used as fallback if the WS path returns None / fails
-     - **Content-Type now validated**: if response isn't `image/*`,
-       raise HAClientError with first 200 chars of the body preview
-     - This way we NEVER write HTML masquerading as `.jpg` again
+2. REST `/api/camera_proxy/<entity_id>` (existing, now validated)
+   - Used as fallback if the WS path returns None / fails
+   - **Content-Type now validated**: if response isn't `image/*`,
+     raise HAClientError with first 200 chars of the body preview
+   - This way we NEVER write HTML masquerading as `.jpg` again
 
 Net effect:
 
-  - For Reolink cameras: WS get_image returns proper JPEG bytes (HA's
-    Reolink integration implements get_image correctly even when the
-    ONVIF still-URL is broken)
-  - For cameras where both paths fail: a clear error in /logs telling
-    you exactly what came back instead of an image
-  - Alerts still record without evidence_ref on failure — no data loss
+- For Reolink cameras: WS get_image returns proper JPEG bytes (HA's
+  Reolink integration implements get_image correctly even when the
+  ONVIF still-URL is broken)
+- For cameras where both paths fail: a clear error in /logs telling
+  you exactly what came back instead of an image
+- Alerts still record without evidence_ref on failure — no data loss
 
 If after v0.3.7 the snapshot STILL doesn't appear:
-  - `/logs?level=warning` will show either `snapshot_fetch_failed` (WS
-    or REST raised) or `ws_get_image_failed` (only WS raised, REST
-    fallback also failed)
-  - The error message will include the actual content-type / preview
-    so we know whether it's an HA-side config issue or an SentiHome
-    code path issue
+
+- `/logs?level=warning` will show either `snapshot_fetch_failed` (WS
+  or REST raised) or `ws_get_image_failed` (only WS raised, REST
+  fallback also failed)
+- The error message will include the actual content-type / preview
+  so we know whether it's an HA-side config issue or an SentiHome
+  code path issue
 
 ## 0.3.6 — 2026-05-27
 
