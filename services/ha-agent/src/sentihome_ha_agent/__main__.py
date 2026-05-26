@@ -17,7 +17,9 @@ import json
 import logging
 import os
 import traceback
+from collections import deque
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -40,6 +42,37 @@ logger = structlog.get_logger(__name__)
 
 LISTEN_HOST = "0.0.0.0"  # noqa: S104 — bind all interfaces inside the container
 LISTEN_PORT = 8765
+
+
+# ─────────────────────────────────────────────────────────────────────
+# In-memory log ring buffer
+# ─────────────────────────────────────────────────────────────────────
+# Captures every structlog event into a deque so /logs and the Web UI's
+# "Recent logs" card can show them without needing to scrape the add-on
+# Log tab. Bounded — won't grow unbounded.
+
+_LOG_RING: deque[dict[str, Any]] = deque(maxlen=500)
+
+
+def _ring_buffer_processor(_logger, _method, event_dict: dict[str, Any]) -> dict[str, Any]:
+    """structlog processor: capture each event into _LOG_RING then pass through."""
+    record = dict(event_dict)
+    record.setdefault("ts", datetime.now(UTC).isoformat())
+    _LOG_RING.append(record)
+    return event_dict
+
+
+# Wire the processor into structlog's default chain. Done at import time so
+# every logger anywhere in ha-agent flows through the ring buffer.
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        _ring_buffer_processor,
+        structlog.dev.ConsoleRenderer(colors=False),
+    ]
+)
 
 
 @dataclass
@@ -102,13 +135,15 @@ __CAMERAS_CARD__
 __HA_CARD__
 __ALERTS_CARD__
 __CAPABILITIES_CARD__
+__LOGS_CARD__
 
 <div class="footer">
 <p>Next step: install the
 <a href="https://github.com/DarinShapiro/SentiHome/blob/main/docs/install.md">SentiHome custom integration</a>
 in HA so entities populate.</p>
-<p>API: <a href="/healthz">/healthz</a> &middot; <a href="/snapshot">/snapshot</a> &middot;
-<a href="/capabilities">/capabilities</a> &middot; <a href="/recent_alerts">/recent_alerts</a></p>
+<p>API: <a href="healthz">healthz</a> &middot; <a href="snapshot">snapshot</a> &middot;
+<a href="capabilities">capabilities</a> &middot; <a href="recent_alerts">recent_alerts</a> &middot;
+<a href="ha_cameras">ha_cameras</a> &middot; <a href="logs">logs</a></p>
 </div>
 </body>
 </html>
@@ -193,10 +228,15 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
                 when = "—"
 
             # Thumbnail. Click → full-size in a new tab.
+            # IMPORTANT: relative URLs (no leading slash). When the page is
+            # served through HA ingress at /api/hassio_ingress/<token>/,
+            # absolute paths resolve to the HA host root (not the ingress
+            # prefix) and 404. Relative URLs work both via ingress AND via
+            # direct port 8765 access.
             if a.get("evidence_ref"):
                 thumb = (
-                    f"<a href='/alerts/{alert_id}/snapshot' target='_blank'>"
-                    f"<img src='/alerts/{alert_id}/snapshot' "
+                    f"<a href='alerts/{alert_id}/snapshot' target='_blank'>"
+                    f"<img src='alerts/{alert_id}/snapshot' "
                     "style='max-width: 96px; max-height: 54px; "
                     "border-radius: 4px; vertical-align: middle;' "
                     "onerror=\"this.style.display='none'\"/></a>"
@@ -321,7 +361,9 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
             # Cache-bust on motion count so a new snapshot replaces the old
             # without manual reload.
             thumb_html = (
-                f"<img src='/cameras/{cs.camera_id}/snapshot?v={cs.motion_events}' "
+                # Relative URL — see comment on alerts-table thumbnails about
+                # why absolute paths break under HA ingress.
+                f"<img src='cameras/{cs.camera_id}/snapshot?v={cs.motion_events}' "
                 "style='max-width: 160px; max-height: 90px; border-radius: 4px;'"
                 " onerror=\"this.style.display='none'\"/>"
                 if cs.motion_events > 0
@@ -339,6 +381,47 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
             "<th>Last motion</th></tr>" + "".join(rows) + "</table></div>"
         )
 
+    # ─── recent logs card ──────────────────────────────────────────
+    # Last 30 lines from the in-memory ring buffer. Surfaces failures
+    # right next to the state, so debugging doesn't require the add-on
+    # Log tab. Level color-coded; warning/error highlighted.
+    recent_logs = list(_LOG_RING)[-30:]
+    if recent_logs:
+        log_rows = []
+        for entry in reversed(recent_logs):
+            level = str(entry.get("level", "info"))
+            color_class = {
+                "warning": "warn",
+                "error": "bad",
+                "critical": "bad",
+            }.get(level, "muted")
+            event = entry.get("event", "")
+            ts = entry.get("timestamp") or entry.get("ts", "")
+            # Trim ts to HH:MM:SS for display
+            short_ts = ts[11:19] if len(ts) >= 19 else ts
+            # Extra key=value pairs (everything except meta keys)
+            meta_keys = {"event", "level", "timestamp", "ts", "logger", "_record"}
+            extras = " ".join(f"{k}={v}" for k, v in entry.items() if k not in meta_keys)
+            log_rows.append(
+                f"<tr><td><code>{short_ts}</code></td>"
+                f"<td><span class='{color_class}'>{level}</span></td>"
+                f"<td><code>{event}</code></td>"
+                f"<td><span class='muted' style='font-size:0.85rem;'>{extras}</span></td></tr>"
+            )
+        logs_card = (
+            '<div class="card"><h3>Recent logs</h3>'
+            "<table><tr><th>Time</th><th>Level</th><th>Event</th><th>Fields</th></tr>"
+            + "".join(log_rows)
+            + '</table><p class="muted">Full log: '
+            '<a href="logs?limit=200">/logs?limit=200</a> · '
+            '<a href="logs?level=warning">/logs?level=warning</a></p></div>'
+        )
+    else:
+        logs_card = (
+            '<div class="card"><h3>Recent logs</h3>'
+            '<p class="muted">No log entries captured yet.</p></div>'
+        )
+
     return (
         _STATUS_PAGE.replace("__VERSION__", __version__)
         .replace("__STAGE__", boot.stage)
@@ -348,6 +431,7 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         .replace("__CAPABILITIES_CARD__", caps_card)
         .replace("__CAMERAS_CARD__", cameras_card)
         .replace("__HA_CAMERAS_CARD__", ha_cameras_card)
+        .replace("__LOGS_CARD__", logs_card)
     )
 
 
@@ -376,6 +460,39 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
                 except FileNotFoundError:
                     return web.Response(status=404, text=f"snapshot file missing: {path}")
         return web.Response(status=404, text=f"no snapshots for {cam_id}")
+
+    async def logs_handler(request: web.Request) -> web.Response:
+        """Return recent log entries as JSON.
+
+        Query params:
+          limit=N (default 100) — max entries to return
+          level=warning — minimum level (debug/info/warning/error)
+        """
+        try:
+            limit = int(request.rel_url.query.get("limit", "100"))
+        except ValueError:
+            limit = 100
+        level_filter = request.rel_url.query.get("level", "").lower()
+        level_rank = {"debug": 0, "info": 1, "warning": 2, "error": 3, "critical": 4}
+        min_rank = level_rank.get(level_filter, 0)
+
+        items = list(_LOG_RING)[-limit:]
+        if level_filter:
+            items = [e for e in items if level_rank.get(str(e.get("level", "info")), 0) >= min_rank]
+        return web.json_response({"logs": items, "count": len(items)})
+
+    async def debug_topology(_request: web.Request) -> web.Response:
+        """Return the loaded topology as JSON (current in-memory state)."""
+        if boot.topology is None:
+            return web.json_response({"loaded": False, "error": boot.topology_error}, status=503)
+        return web.json_response({"loaded": True, "topology": boot.topology.model_dump()})
+
+    async def debug_alert(request: web.Request) -> web.Response:
+        """Return one alert's full JSON payload (no snapshot bytes)."""
+        alert = alert_log.get(request.match_info["alert_id"])
+        if alert is None:
+            return web.json_response({"error": "not found"}, status=404)
+        return web.json_response(alert)
 
     async def snapshot_for_alert(request: web.Request) -> web.Response:
         """Return the snapshot captured for a specific alert.
@@ -417,6 +534,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     app.router.add_get("/", status_page)
     app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
     app.router.add_get("/alerts/{alert_id}/snapshot", snapshot_for_alert)
+    app.router.add_get("/alerts/{alert_id}", debug_alert)
+    app.router.add_get("/logs", logs_handler)
+    app.router.add_get("/debug/topology", debug_topology)
     for path in ("/healthz", "/snapshot", "/capabilities", "/recent_alerts", "/ha_cameras"):
         app.router.add_get(path, api_get)
     for path in ("/service", "/acknowledge_alert"):

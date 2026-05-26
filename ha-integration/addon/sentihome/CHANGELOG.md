@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.3.5 — 2026-05-27
+
+**Fix the v0.3.4 thumbnail-not-rendering bug + ship debug endpoints
+that close the dev loop.**
+
+User reported the Snapshot column in the Recent alerts table was empty
+even though the alert had `evidence_ref` set and the snapshot file
+existed on disk. Diagnosed live by curl-ing the add-on's port 8765
+from the dev machine: backend returned 21,889 bytes of valid JPEG for
+both `/cameras/<id>/snapshot` and `/alerts/<id>/snapshot`. Backend
+fine; the bug was in the HTML.
+
+Root cause: the Web UI is served through HA Ingress at
+`/api/hassio_ingress/<token>/`. The thumbnail HTML used absolute paths
+(`<img src='/alerts/<id>/snapshot'>`). The browser resolved that to
+the HA-Core root (`https://homeassistant-yellow:8123/alerts/...`),
+which HA doesn't know about → 404 → `onerror` hides the broken image.
+
+Fixes:
+
+- Thumbnail/link URLs in the alerts + cameras cards switched to
+  **relative paths** (no leading slash). Resolves correctly under both
+  HA ingress AND direct port 8765 access.
+- Footer API links also made relative.
+
+**New debug endpoints** (idea from user — "host MCP-style debug
+services inside the app, callable via curl from the dev machine"):
+
+GET /logs?limit=100&level=warning
+In-memory log ring buffer (500 entries max), JSON.
+Structlog now flows every event through the ring buffer.
+GET /alerts/<alert_id>
+Full alert JSON payload (NOT the image bytes — use
+/alerts/<alert_id>/snapshot for the JPEG).
+GET /debug/topology
+Currently-loaded Topology pydantic model as JSON. Verifies
+config was parsed how the code thinks it was.
+
+**New "Recent logs" card** on the Web UI showing the last 30 log
+events live (Time / Level / Event / Fields), so debugging doesn't
+require the add-on Log tab anymore. Warning/error rows highlighted.
+
+Net effect: the dev loop closes. Next time something fails, the user
+either screenshots the Web UI (Recent logs card visible) or I curl
+`http://<HA-IP>:8765/logs` directly from PowerShell on their dev box.
+
 ## 0.3.4 — 2026-05-27
 
 **Per-alert thumbnails + timestamps in the Recent alerts table.**
