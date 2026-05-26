@@ -178,32 +178,27 @@ class HAClient:
     async def fetch_camera_snapshot(self, entity_id: str) -> bytes:
         """Return the current frame for ``entity_id`` as image bytes.
 
-        Tries two paths in order:
+        Uses HA's REST endpoint ``/api/camera_proxy/{entity_id}`` which
+        internally calls the camera integration's ``async_camera_image()``
+        method. Content-Type on the response is validated — if it's not
+        ``image/*``, we raise rather than silently writing garbage to
+        disk (e.g. an ONVIF-configured camera returning its login HTML).
 
-        1. **WebSocket `camera/get_image`** — uses HA's
-           ``async_camera_image()`` getter which most integrations
-           implement properly (Reolink, Frigate, generic). The image
-           is returned as base64 inside the WS response.
+        Live testing against HA 2026.5.3 confirmed there is NO WebSocket
+        command for camera image fetch — `camera/get_image` returns
+        "Unknown command". The REST path is canonical.
 
-        2. **REST `/api/camera_proxy/{entity_id}`** as a fallback —
-           proxies through HA Core but for some camera entities
-           (notably ONVIF-configured ones with broken still-image
-           URLs) returns HTML error pages instead of bytes.
-
-        We validate Content-Type on the REST fallback so we never
-        silently write a non-image as a `.jpg` on disk.
+        When this raises HAClientError because of a non-image response,
+        the diagnosis is almost always HA-side:
+          * The camera entity's integration doesn't implement
+            ``async_camera_image()`` correctly
+          * Or it's misconfigured (e.g. ONVIF still-image URL requiring
+            auth we don't have)
+        Fix: in HA, switch the camera to a different integration (e.g.
+        the official Reolink integration instead of generic ONVIF) OR
+        use SentiHome's ``rtsp-direct`` adapter with the camera's RTSP
+        URL + credentials so SentiHome bypasses HA's image-fetch entirely.
         """
-        # Path 1 — WebSocket get_image
-        try:
-            blob = await self._ws_get_camera_image(entity_id)
-            if blob is not None:
-                return blob
-        except HAClientError:
-            raise
-        except Exception as e:
-            logger.warning("ha_client.ws_get_image_failed", entity_id=entity_id, error=str(e))
-
-        # Path 2 — REST camera_proxy fallback
         resp = await self._http.get(f"/api/camera_proxy/{entity_id}")
         if resp.status_code >= 400:
             raise HAClientError(
@@ -211,54 +206,13 @@ class HAClient:
             )
         ctype = resp.headers.get("content-type", "")
         if not ctype.startswith("image/"):
-            # HA proxied an HTML error page (e.g. ONVIF integration
-            # with broken still URL → camera's login HTML). Don't
-            # write garbage to disk.
             preview = resp.text[:200].replace("\n", " ")
             raise HAClientError(
                 f"camera_proxy {entity_id} returned content-type={ctype!r} "
-                f"(expected image/*) — first 200 chars: {preview!r}"
+                f"(expected image/*). HA's integration for this camera entity "
+                f"is returning non-image data. First 200 chars: {preview!r}"
             )
         return resp.content
-
-    async def _ws_get_camera_image(self, entity_id: str) -> bytes | None:
-        """Send a ``camera/get_image`` command over the WebSocket and
-        decode the base64 image bytes from the response.
-
-        Returns None if the WebSocket isn't connected (so callers can
-        fall back to REST).
-        """
-        import base64
-
-        ws = self._ws_active
-        if ws is None:
-            return None
-        self._ws_msg_id += 1
-        msg_id = self._ws_msg_id
-        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
-        self._ws_pending[msg_id] = future
-        try:
-            await ws.send(
-                json.dumps(
-                    {
-                        "id": msg_id,
-                        "type": "camera/get_image",
-                        "entity_id": entity_id,
-                    }
-                )
-            )
-            response = await asyncio.wait_for(future, timeout=10.0)
-        finally:
-            self._ws_pending.pop(msg_id, None)
-
-        if not response.get("success"):
-            err = (response.get("error") or {}).get("message", str(response))
-            raise HAClientError(f"ws camera/get_image failed: {err}")
-        result = response.get("result") or {}
-        content_b64 = result.get("content")
-        if not content_b64:
-            return None
-        return base64.b64decode(content_b64)
 
     # ─── REST: service calls ───────────────────────────────────────
 

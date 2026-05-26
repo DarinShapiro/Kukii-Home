@@ -336,12 +336,17 @@ class HACameraLoop:
         snapshot_bytes: bytes | None = None
         try:
             snapshot_bytes = await self._client.fetch_camera_snapshot(self._camera_entity)
+            self._status.last_error = ""
         except Exception as e:
+            err_msg = str(e)
             logger.warning(
                 "ha_camera_loop.snapshot_fetch_failed",
                 camera=self._camera_entity,
-                error=str(e),
+                error=err_msg,
             )
+            # Surface the error on the Cameras card so the user sees the
+            # diagnosis directly without checking logs.
+            self._status.last_error = f"snapshot fetch failed: {err_msg[:300]}"
 
         if snapshot_bytes is not None:
             try:

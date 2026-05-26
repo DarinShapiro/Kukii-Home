@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.3.9 — 2026-05-27
+
+**Remove the broken WS `camera/get_image` path + surface camera-side
+errors directly in the Cameras card.**
+
+The v0.3.7 attempt to use HA's WebSocket `camera/get_image` command
+was based on a guessed API name. Live `/debug/test_snapshot` against
+HA 2026.5.3 returned:
+
+{ success: false, error: "ws camera/get_image failed: Unknown command." }
+
+Confirmed: HA has NO WebSocket command for camera image fetch. The
+canonical path is REST `/api/camera_proxy/<entity_id>`, which internally
+calls the camera integration's `async_camera_image()` method.
+
+The user's actual problem isn't a missing path — it's that the camera
+entity's `async_camera_image()` is returning Reolink's login HTML
+instead of a frame, because the entity comes from HA's ONVIF integration
+with auth that doesn't reach the snapshot URL. This is a config issue on
+the HA side that SentiHome can't fix from inside the add-on.
+
+Changes:
+
+- HAClient.fetch_camera_snapshot: removed the dead WS path entirely.
+  Pure REST + content-type validation, with a docstring documenting
+  what HA-side fix is needed when the validation rejects a response.
+- HACameraLoop.\_capture_and_alert: when the fetch fails, the error
+  message now lands on CameraStreamStatus.last_error and is rendered
+  inline on the Cameras card. So the user sees the actual diagnosis
+  ("camera_proxy returned content-type='text/html'…") without
+  needing to check logs.
+
+User-facing fix paths for this specific situation:
+
+1. In HA: add the camera via the official Reolink integration
+   instead of ONVIF — that creates a camera entity whose
+   async_camera_image() uses Reolink's REST API directly and works.
+2. Switch this camera in SentiHome topology from `kind: ha-camera`
+   to `kind: rtsp-direct` with the RTSP URL + creds — bypasses
+   HA's image-fetch entirely.
+
 ## 0.3.8 — 2026-05-27
 
 **Add on-demand debug endpoints + stamp add-on version into the image.**
