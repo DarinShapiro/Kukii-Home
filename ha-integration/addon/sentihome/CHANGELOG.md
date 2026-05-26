@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.9 — 2026-05-26
+
+- v0.1.8 build failed on aarch64 because `sentihome-detector` depends on
+  `onnxruntime`, which only ships glibc (manylinux) wheels. The HA
+  base-python image is alpine (musllinux), so onnxruntime install was
+  impossible without a source build (which fails too on the minimal
+  alpine base).
+- Detector is facade+stubs in v1 and not run by the s6 service set.
+  v0.1.9 explicitly installs only the workspace members the add-on
+  actually runs, skipping `sentihome-detector` (and therefore avoiding
+  onnxruntime entirely). When detector graduates to real ML inference,
+  we'll switch to a debian base image — tracked as a future task.
+
 ## 0.1.8 — 2026-05-26
 
 - `uv sync` needs `--all-packages` to actually install workspace members.

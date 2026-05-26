@@ -12,7 +12,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.1.8" \
+    io.hass.version="0.1.9" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \
@@ -64,12 +64,37 @@ RUN echo "Cache key: ${CACHEBUST}" \
     && git clone --depth=1 --branch "${SENTIHOME_REF}" "${SENTIHOME_REPO}" /app \
     && rm -rf /app/.git
 
-# Install every workspace member into /app/.venv.
-# --all-packages is required: without it, `uv sync` only installs the
-# root project's dependencies (which are empty for SentiHome — it's a
-# pure workspace shell) and silently skips the member packages, leaving
-# /app/.venv without any `sentihome_*` modules.
-RUN uv sync --frozen --no-dev --all-packages
+# Install the workspace members we actually run in the add-on.
+#
+# We can NOT use `uv sync --all-packages` because that pulls in
+# sentihome-detector, which depends on onnxruntime — and onnxruntime
+# only ships glibc (manylinux) wheels, not musllinux. The HA base-python
+# image is alpine, so onnxruntime install fails with "no wheel for the
+# current platform". The detector service is facade+stubs in v1 and not
+# yet run; skipping it is correct.
+#
+# When the detector graduates from facade to real ML inference, we'll
+# either:
+#   - switch this Dockerfile to a debian-based HA base (homeassistant/
+#     <arch>-base-debian) which is glibc-compatible, OR
+#   - use onnxruntime's source build inside the image (slow but works
+#     on musllinux), OR
+#   - keep detector as a separate add-on with its own debian image
+RUN uv sync --frozen --no-dev \
+    --package sentihome-shared \
+    --package sentihome-core \
+    --package sentihome-memory \
+    --package sentihome-ha-agent \
+    --package sentihome-notify \
+    --package sentihome-vlm-router \
+    --package sentihome-preprocessor \
+    --package sentihome-adapter-rtsp-direct \
+    --package sentihome-adapter-agent-dvr \
+    --package sentihome-adapter-frigate \
+    --package sentihome-adapter-blueiris \
+    --package sentihome-adapter-synology \
+    --package sentihome-adapter-qnap \
+    --package sentihome-adapter-unifi
 
 # Verify the workspace installed correctly. If any of these imports fail,
 # the s6 services would crash-loop at runtime with "No module named ..." —
