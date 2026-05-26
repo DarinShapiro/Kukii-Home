@@ -12,21 +12,21 @@ I couldn't tell from outside which add-on version was actually running.
 
 Two fixes for both:
 
-  GET /debug/test_snapshot?camera_entity=camera.X
-    Forces a fresh fetch_camera_snapshot() call right now, without
-    waiting for a real motion event. Returns:
-      { success: bool, bytes: N, first_16_hex: "FF D8 FF ...",
-        looks_like: "jpeg" | "html" | "png" | "unknown",
-        error: <message if failed> }
-    This is how the dev cycle should have worked from the start.
+GET /debug/test_snapshot?camera_entity=camera.X
+Forces a fresh fetch_camera_snapshot() call right now, without
+waiting for a real motion event. Returns:
+{ success: bool, bytes: N, first_16_hex: "FF D8 FF ...",
+looks_like: "jpeg" | "html" | "png" | "unknown",
+error: <message if failed> }
+This is how the dev cycle should have worked from the start.
 
-  GET /debug/version
-    Returns { package_version, addon_version }. The add-on version is
-    baked into the image at build time via:
-      Dockerfile: ARG ADDON_VERSION; RUN echo $ADDON_VERSION > /app/.sentihome_addon_version
-      build.yaml: args: { ADDON_VERSION: '0.3.8' }
-    So next time we can curl /debug/version to confirm exactly which
-    add-on build is running.
+GET /debug/version
+Returns { package_version, addon_version }. The add-on version is
+baked into the image at build time via:
+Dockerfile: ARG ADDON_VERSION; RUN echo $ADDON_VERSION > /app/.sentihome_addon_version
+build.yaml: args: { ADDON_VERSION: '0.3.8' }
+So next time we can curl /debug/version to confirm exactly which
+add-on build is running.
 
 ## 0.3.7 — 2026-05-27
 

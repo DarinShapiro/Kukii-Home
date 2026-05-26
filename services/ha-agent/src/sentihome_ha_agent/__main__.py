@@ -546,15 +546,17 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
         actually running vs what was last committed."""
         from sentihome_ha_agent import __version__ as pkg_version
 
+        from pathlib import Path
+
         addon_version = "unknown"
+        version_file = Path("/app/.sentihome_addon_version")
         try:
-            with open("/app/.sentihome_addon_version") as f:
-                addon_version = f.read().strip()
+            # tiny one-line read, OK to do sync inside async — not worth
+            # pulling in anyio.path
+            addon_version = version_file.read_text().strip()  # noqa: ASYNC230
         except FileNotFoundError:
             pass
-        return web.json_response(
-            {"package_version": pkg_version, "addon_version": addon_version}
-        )
+        return web.json_response({"package_version": pkg_version, "addon_version": addon_version})
 
     async def snapshot_for_alert(request: web.Request) -> web.Response:
         """Return the snapshot captured for a specific alert.
