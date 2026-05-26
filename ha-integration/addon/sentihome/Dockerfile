@@ -10,7 +10,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.3.7" \
+    io.hass.version="0.3.8" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \
@@ -67,6 +67,10 @@ RUN /app/.venv/bin/python -c "import sentihome_shared.topology; \
     import sentihome_vlm_router; \
     import sentihome_preprocessor; \
     print('SentiHome packages OK:', sentihome_ha_agent.__version__)"
+
+# Stamp the add-on version into the image so /debug/version can return it.
+ARG ADDON_VERSION=unknown
+RUN echo "${ADDON_VERSION}" > /app/.sentihome_addon_version
 
 # s6-overlay service definitions + cont-init scripts.
 # v0.1.11: only ha-agent runs under s6 in this build — the other five

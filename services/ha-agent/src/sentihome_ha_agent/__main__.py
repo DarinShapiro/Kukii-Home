@@ -498,6 +498,64 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
             return web.json_response({"error": "not found"}, status=404)
         return web.json_response(alert)
 
+    async def debug_test_snapshot(request: web.Request) -> web.Response:
+        """Force a snapshot fetch on demand. Reports which path won + the
+        first bytes (hex) so we know if it's a real JPEG, HTML masquerading
+        as JPEG, or something else.
+
+        Usage:
+          GET /debug/test_snapshot?camera_entity=camera.front_south_camera_profile000_mainstream
+        """
+        entity_id = request.rel_url.query.get("camera_entity") or ""
+        if not entity_id:
+            return web.json_response({"error": "missing ?camera_entity=camera.X"}, status=400)
+        if boot.client is None:
+            return web.json_response({"error": "HA client not connected"}, status=503)
+        try:
+            blob = await boot.client.fetch_camera_snapshot(entity_id)
+        except Exception as e:
+            return web.json_response(
+                {
+                    "camera_entity": entity_id,
+                    "success": False,
+                    "error_class": type(e).__name__,
+                    "error": str(e),
+                }
+            )
+        magic_hex = " ".join(f"{b:02X}" for b in blob[:16])
+        if blob.startswith(b"\xff\xd8\xff"):
+            looks_like = "jpeg"
+        elif blob.startswith(b"\x89PNG"):
+            looks_like = "png"
+        elif blob.lstrip().startswith(b"<"):
+            looks_like = "html"
+        else:
+            looks_like = "unknown"
+        return web.json_response(
+            {
+                "camera_entity": entity_id,
+                "success": True,
+                "bytes": len(blob),
+                "first_16_hex": magic_hex,
+                "looks_like": looks_like,
+            }
+        )
+
+    async def debug_version(_request: web.Request) -> web.Response:
+        """Return package + add-on versions so we can verify what's
+        actually running vs what was last committed."""
+        from sentihome_ha_agent import __version__ as pkg_version
+
+        addon_version = "unknown"
+        try:
+            with open("/app/.sentihome_addon_version") as f:
+                addon_version = f.read().strip()
+        except FileNotFoundError:
+            pass
+        return web.json_response(
+            {"package_version": pkg_version, "addon_version": addon_version}
+        )
+
     async def snapshot_for_alert(request: web.Request) -> web.Response:
         """Return the snapshot captured for a specific alert.
 
@@ -551,6 +609,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     app.router.add_get("/alerts/{alert_id}", debug_alert)
     app.router.add_get("/logs", logs_handler)
     app.router.add_get("/debug/topology", debug_topology)
+    app.router.add_get("/debug/test_snapshot", debug_test_snapshot)
+    app.router.add_get("/debug/version", debug_version)
     for path in ("/healthz", "/snapshot", "/capabilities", "/recent_alerts", "/ha_cameras"):
         app.router.add_get(path, api_get)
     for path in ("/service", "/acknowledge_alert"):

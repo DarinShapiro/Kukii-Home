@@ -13,6 +13,9 @@
 # s6-overlay 3.x and the cont-init.d / services.d layout the rootfs/
 # directory relies on. Python is installed in the Dockerfile via apt.
 
+args:
+  ADDON_VERSION: '0.3.8'
+
 build_from:
   amd64: ghcr.io/home-assistant/amd64-base-debian:bookworm
   aarch64: ghcr.io/home-assistant/aarch64-base-debian:bookworm
