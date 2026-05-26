@@ -323,25 +323,39 @@ class HACameraLoop:
         await self._capture_and_alert(triggering_sensor=new.entity_id, sensor_state=new)
 
     async def _capture_and_alert(self, *, triggering_sensor: str, sensor_state: HAState) -> None:
-        # Build a unique snapshot filename. /data is persistent inside the
-        # add-on; /share would also work for HA-side access.
+        from pathlib import Path
+
         ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
         snapshot_filename = f"{self._camera_id}_{ts}_{uuid.uuid4().hex[:6]}.jpg"
-        snapshot_path = f"{self._snapshot_dir}/{snapshot_filename}"
+        snapshot_path: str | None = f"{self._snapshot_dir}/{snapshot_filename}"
 
+        # Fetch the current frame from HA via /api/camera_proxy and write
+        # it to OUR filesystem. Don't use the camera.snapshot service —
+        # that runs HA-Core-side, writes to HA Core's filesystem, and
+        # SentiHome's /data is a different mountpoint from HA Core's.
+        snapshot_bytes: bytes | None = None
         try:
-            await self._client.call_service(
-                "camera",
-                "snapshot",
-                entity_id=self._camera_entity,
-                data={"filename": snapshot_path},
-            )
+            snapshot_bytes = await self._client.fetch_camera_snapshot(self._camera_entity)
         except Exception as e:
             logger.warning(
-                "ha_camera_loop.snapshot_failed",
+                "ha_camera_loop.snapshot_fetch_failed",
                 camera=self._camera_entity,
                 error=str(e),
             )
+
+        if snapshot_bytes is not None:
+            try:
+                Path(self._snapshot_dir).mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
+                Path(snapshot_path).write_bytes(snapshot_bytes)  # noqa: ASYNC240
+            except Exception as e:
+                logger.warning(
+                    "ha_camera_loop.snapshot_write_failed",
+                    path=snapshot_path,
+                    error=str(e),
+                )
+                snapshot_path = None
+        else:
+            snapshot_path = None
 
         self._status.motion_events += 1
         self._status.last_motion_at = datetime.now(UTC)

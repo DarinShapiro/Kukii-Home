@@ -308,6 +308,31 @@ async def test_tools_discover_ha_cameras_handles_stream_suffix_mismatch():
     assert discovery.unmatched_motion_sensors == []
 
 
+async def test_client_fetch_camera_snapshot_returns_bytes():
+    """v0.3.3: HAClient.fetch_camera_snapshot hits /api/camera_proxy and
+    returns the response bytes. Used instead of the camera.snapshot
+    service because the latter writes HA-Core-side and SentiHome's
+    /data is a different mountpoint."""
+    fake_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"x" * 1000
+    routes = {
+        ("GET", "/api/camera_proxy/camera.front_porch"): httpx.Response(
+            200, content=fake_jpeg, headers={"Content-Type": "image/jpeg"}
+        )
+    }
+    client = _client_with_mocks(routes)
+    body = await client.fetch_camera_snapshot("camera.front_porch")
+    assert body == fake_jpeg
+
+
+async def test_client_fetch_camera_snapshot_raises_on_4xx():
+    from sentihome_ha_agent import HAClientError
+
+    routes = {("GET", "/api/camera_proxy/camera.missing"): httpx.Response(404, text="not found")}
+    client = _client_with_mocks(routes)
+    with pytest.raises(HAClientError):
+        await client.fetch_camera_snapshot("camera.missing")
+
+
 async def test_tools_discover_ha_cameras_reports_unmatched_sensors():
     """A motion sensor with no token overlap with any camera lands in
     discovery.unmatched_motion_sensors."""

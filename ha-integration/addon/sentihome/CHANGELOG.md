@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.3.3 — 2026-05-27
+
+**Fix snapshot capture across the add-on / HA Core container boundary.**
+
+After v0.3.2 successfully fired its first motion alert, the snapshot
+URL (`/cameras/<id>/snapshot`) returned 404 — the snapshot file didn't
+exist where SentiHome expected it.
+
+Root cause: the previous implementation called HA's `camera.snapshot`
+service with `filename=/data/sentihome/snapshots/<file>.jpg`. That asks
+**HA Core** to write the file at `/data/sentihome/snapshots/...`, but:
+
+- HA Core's `/data` is HA's config directory
+- SentiHome's `/data` is the add-on's persistent storage
+- These are **completely different mountpoints**
+
+So the file either ended up somewhere in HA's filesystem (not visible
+to SentiHome) or was silently rejected by HA's `allowlist_external_dirs`
+gate. SentiHome's serving endpoint then couldn't find the file in its
+own container's `/data`, returning 404.
+
+Fix: switch to **HA's `/api/camera_proxy/<entity_id>` REST endpoint**.
+
+- SentiHome's `HAClient.fetch_camera_snapshot(entity_id)` GETs the
+  current frame as JPEG bytes via HTTP, using the same bearer-token
+  auth we already have configured
+- HACameraLoop writes those bytes to SentiHome's own filesystem at
+  `/data/sentihome/snapshots/<file>.jpg` — under SentiHome's actual
+  control, no cross-container path confusion
+- No HA `allowlist_external_dirs` requirement
+- No file-write race condition (HA was writing while SentiHome read)
+
+Logging is clearer too: `ha_camera_loop.snapshot_fetch_failed` if the
+proxy GET fails, `ha_camera_loop.snapshot_write_failed` if the local
+file write fails. Alerts still record without `evidence_ref` when
+either step fails, rather than dropping the alert entirely.
+
 ## 0.3.2 — 2026-05-27
 
 **Make `adapters` editable in the Configuration tab.**

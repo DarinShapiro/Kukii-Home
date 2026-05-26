@@ -173,6 +173,31 @@ class HAClient:
         """Read-only view of the in-memory state cache."""
         return dict(self._state_cache)
 
+    async def fetch_camera_snapshot(self, entity_id: str) -> bytes:
+        """Return the current frame for ``entity_id`` as JPEG bytes.
+
+        Hits HA Core's ``/api/camera_proxy/{entity_id}`` endpoint, which
+        returns the most recent stream frame as image/jpeg. Auth comes
+        from the bearer token we configured on the http client.
+
+        Why this rather than ``camera.snapshot`` service:
+
+          The service writes the file on HA Core's filesystem. HA Core
+          and the SentiHome add-on are separate containers with separate
+          ``/data`` mountpoints — so a file HA writes at ``/data/foo.jpg``
+          is NOT the same path SentiHome reads at ``/data/foo.jpg``. Plus
+          the service is gated by HA's ``allowlist_external_dirs``.
+
+          camera_proxy avoids both problems: bytes come over HTTP, the
+          add-on writes them wherever it wants in its own filesystem.
+        """
+        resp = await self._http.get(f"/api/camera_proxy/{entity_id}")
+        if resp.status_code >= 400:
+            raise HAClientError(
+                f"camera_proxy {entity_id} failed: HTTP {resp.status_code} {resp.text}"
+            )
+        return resp.content
+
     # ─── REST: service calls ───────────────────────────────────────
 
     async def call_service(
