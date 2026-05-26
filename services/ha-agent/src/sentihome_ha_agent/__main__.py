@@ -34,8 +34,16 @@ from sentihome_ha_agent.camera_loop import (
 )
 from sentihome_ha_agent.client import HAClient, HAClientSettings
 from sentihome_ha_agent.config import HAAgentSettings
+from sentihome_ha_agent.discovery import DiscoveryDecision, build_decisions
 from sentihome_ha_agent.http_api import AlertLog, HAAgentAPI
 from sentihome_ha_agent.mcp_tools import HATools
+from sentihome_ha_agent.overrides import (
+    load_overrides,
+    reset_device,
+    save_overrides,
+    set_device_override,
+)
+from sentihome_ha_agent.reconciler import Reconciler
 
 logger = structlog.get_logger(__name__)
 
@@ -96,6 +104,18 @@ class BootState:
     camera_loops: list[CameraLoop] = field(default_factory=list)
     ha_camera_loops: list[HACameraLoop] = field(default_factory=list)
     topology: Any | None = None
+
+    # ─── v0.3.11: zero-config onboarding state ────────────────────
+    # When `auto_discover` is True (the default), the bootstrap runs
+    # discovery on the live HA camera list, merges per-device overrides
+    # from /data/sentihome/adapter_overrides.json, and hands the
+    # resulting specs to `reconciler.apply()` — which starts/stops
+    # HACameraLoops to match.
+    reconciler: Reconciler | None = None
+    discovery_decisions: list[DiscoveryDecision] = field(default_factory=list)
+    discovery_error: str | None = None
+    auto_discover: bool = True
+    periodic_rediscover_task: asyncio.Task | None = None
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -201,6 +221,200 @@ in HA so entities populate.</p>
 </body>
 </html>
 """
+
+
+def _escape(s: str) -> str:
+    """Minimal HTML escaping for entity ids / friendly names that land
+    in attribute values and text. Avoids pulling in html.escape so this
+    file stays self-contained."""
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
+
+
+def _render_ha_cameras_card(boot: BootState) -> str:
+    """Render the HA cameras card.
+
+    Auto-discover ON (the default):
+        Interactive per-device cards with Enable/Disable + Override
+        controls. Each control posts to /discovery/* and triggers a
+        live reconcile — no add-on restart needed.
+
+    Auto-discover OFF (legacy / advanced):
+        Read-only discovery dump; user is hand-writing adapters.
+    """
+    header = '<div class="card"><h3>HA cameras</h3>'
+
+    if boot.tools is None:
+        return header + '<p class="muted">Connect to HA first (see card below).</p></div>'
+
+    if not boot.auto_discover:
+        # Legacy path — kept for power users who want the read-only
+        # discovery view + hand-written adapters.
+        legacy = (
+            '<p class="muted">Auto-discover is <strong>off</strong>. '
+            "Hand-write <code>adapters</code> in the add-on Configuration tab.</p>"
+        )
+        return header + legacy + "</div>"
+
+    parts = [header]
+    parts.append(
+        '<p class="muted">Auto-discover is <strong>on</strong>. '
+        "SentiHome AI-picks the best stream + motion sensors per device. "
+        "Override any choice below — changes apply live.</p>"
+    )
+
+    if boot.discovery_error:
+        parts.append(
+            f'<p class="bad">Last discovery refresh failed: {_escape(boot.discovery_error)}</p>'
+        )
+
+    if not boot.discovery_decisions:
+        parts.append(
+            '<p class="muted">No HA cameras discovered yet. Add one via an HA '
+            "integration (Reolink, Dahua, ONVIF, Generic Camera, ...) and this "
+            "card will populate within 5 minutes (or click Refresh below).</p>"
+        )
+        parts.append(_refresh_form_html())
+        return "".join(parts) + "</div>"
+
+    for decision in boot.discovery_decisions:
+        parts.append(_render_device_block(decision))
+
+    parts.append(_refresh_form_html())
+    return "".join(parts) + "</div>"
+
+
+def _refresh_form_html() -> str:
+    return (
+        '<form method="post" action="discovery/refresh" '
+        'style="margin-top:1rem;display:inline-block">'
+        '<button type="submit">Re-discover now</button>'
+        "</form>"
+    )
+
+
+def _render_device_block(d: DiscoveryDecision) -> str:
+    """Render one device's card with Enable/Disable + Override forms."""
+    dev_id = _escape(d.device_id)
+    name = _escape(d.friendly_name)
+    border_color = "#28a745" if d.enabled else "#d73a49"
+    badge = (
+        '<span class="ok">● Enabled</span>' if d.enabled else '<span class="bad">○ Disabled</span>'
+    )
+
+    out: list[str] = [
+        f'<div style="border-left: 3px solid {border_color}; '
+        'padding: 0.5rem 0.75rem; margin: 0.5rem 0; background: #fff;">'
+        f"<strong>{name}</strong> &middot; {badge}"
+        f' &middot; <span class="muted">device id: <code>{dev_id}</code></span>'
+    ]
+
+    # Auto-disabled reason banner.
+    if not d.enabled and d.auto_disabled_reason:
+        out.append(
+            f'<br/><span class="warn">Auto-disabled: {_escape(d.auto_disabled_reason)}</span>'
+        )
+
+    # Active spec (when enabled).
+    if d.enabled and d.spec is not None:
+        spec = d.spec
+        source_badge = (
+            '<span class="muted">(AI pick)</span>'
+            if spec.source == "auto"
+            else '<span class="warn">(override)</span>'
+        )
+        motion_html = ", ".join(f"<code>{_escape(m)}</code>" for m in spec.motion_entities)
+        out.append(
+            f'<br/><span class="muted">Stream:</span> '
+            f"<code>{_escape(spec.camera_entity)}</code> {source_badge}"
+            f'<br/><span class="muted">Motion:</span> {motion_html or "<em>none</em>"}'
+            f'<br/><span class="muted">Cooldown:</span> '
+            f"<code>{spec.cooldown_seconds:g}s</code>"
+        )
+
+    # Enable / Disable toggle.
+    out.append('<div style="margin-top:0.5rem">')
+    if d.enabled:
+        out.append(
+            f'<form method="post" action="discovery/enable" style="display:inline">'
+            f'<input type="hidden" name="device_id" value="{dev_id}"/>'
+            f'<input type="hidden" name="enabled" value="false"/>'
+            f'<button type="submit">Disable</button></form>'
+        )
+    else:
+        out.append(
+            f'<form method="post" action="discovery/enable" style="display:inline">'
+            f'<input type="hidden" name="device_id" value="{dev_id}"/>'
+            f'<input type="hidden" name="enabled" value="true"/>'
+            f'<button type="submit">Enable</button></form>'
+        )
+    out.append(
+        f' <form method="post" action="discovery/reset" style="display:inline">'
+        f'<input type="hidden" name="device_id" value="{dev_id}"/>'
+        f'<button type="submit">Reset to AI defaults</button></form>'
+    )
+    out.append("</div>")
+
+    # ─── Override section (collapsed by default) ──────────────────
+    out.append(
+        '<details style="margin-top:0.5rem"><summary>Override stream / motion / cooldown</summary>'
+    )
+    out.append(
+        f'<form method="post" action="discovery/override" style="margin-top:0.5rem">'
+        f'<input type="hidden" name="device_id" value="{dev_id}"/>'
+    )
+
+    # Stream radio list.
+    current_stream = d.spec.camera_entity if d.spec else ""
+    out.append('<div style="margin-bottom:0.5rem"><strong>Stream</strong><br/>')
+    out.append(
+        '<label><input type="radio" name="stream" value=""'
+        + (" checked" if not current_stream else "")
+        + "/> Use AI pick</label><br/>"
+    )
+    for s in d.candidate_streams:
+        s_esc = _escape(s)
+        chk = " checked" if s == current_stream else ""
+        out.append(
+            f'<label><input type="radio" name="stream" value="{s_esc}"{chk}/> '
+            f"<code>{s_esc}</code></label><br/>"
+        )
+    out.append("</div>")
+
+    # Motion checkboxes.
+    current_motion = set(d.spec.motion_entities) if d.spec else set()
+    out.append(
+        '<div style="margin-bottom:0.5rem"><strong>Motion sensors</strong>'
+        '<br/><label><input type="checkbox" name="motion_use_ai" value="1"/> '
+        "Leave blank to use AI pick</label><br/>"
+    )
+    for m in d.candidate_motions:
+        m_esc = _escape(m)
+        chk = " checked" if m in current_motion else ""
+        out.append(
+            f'<label><input type="checkbox" name="motion" value="{m_esc}"{chk}/> '
+            f"<code>{m_esc}</code></label><br/>"
+        )
+    out.append("</div>")
+
+    # Cooldown.
+    cooldown_val = d.spec.cooldown_seconds if d.spec else 10.0
+    out.append(
+        '<div style="margin-bottom:0.5rem"><strong>Cooldown seconds</strong> '
+        f'<input type="number" name="cooldown" step="0.5" min="1" max="3600" '
+        f'value="{cooldown_val:g}" style="width:6rem"/> '
+        '<span class="muted">(blank = AI default of 10s)</span></div>'
+    )
+
+    out.append('<button type="submit">Save override</button>')
+    out.append("</form></details>")
+    out.append("</div>")
+    return "".join(out)
 
 
 async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
@@ -328,69 +542,14 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         f"<p>{caps_html}</p></div>"
     )
 
-    # ─── HA cameras detected card (read-only discovery) ───────────
-    # Shows every camera HA already knows about, with heuristically-matched
-    # motion sensors. User pastes the camera_entity + motion_candidates
-    # into the add-on Configuration to wire SentiHome to it.
-    ha_cameras_card = '<div class="card"><h3>HA cameras detected</h3>'
-    if boot.tools is None:
-        ha_cameras_card += '<p class="muted">Connect to HA first (see card below).</p></div>'
-    else:
-        try:
-            discovery = await boot.tools.discover_ha_cameras()
-            ha_cams = discovery.cameras
-            unmatched = discovery.unmatched_motion_sensors
-        except Exception as e:
-            ha_cams = []
-            unmatched = []
-            ha_cameras_card += f'<p class="bad">Discovery failed: {e}</p>'
-        if not ha_cams and not unmatched:
-            ha_cameras_card += (
-                '<p class="muted">HA has no camera.* entities. Add a camera '
-                "via an HA integration (Generic Camera, ONVIF, Reolink, etc.) "
-                "and refresh.</p></div>"
-            )
-        else:
-            rows = []
-            for c in ha_cams:
-                name = c.friendly_name or c.camera_entity
-                motion_html = (
-                    ", ".join(f"<code>{m}</code>" for m in c.motion_candidates)
-                    if c.motion_candidates
-                    else '<span class="muted">none auto-matched</span>'
-                )
-                state_class = "bad" if c.state in ("unavailable", "unknown") else "muted"
-                rows.append(
-                    f"<tr><td><code>{c.camera_entity}</code><br/>"
-                    f'<span class="muted">{name}</span></td>'
-                    f'<td><span class="{state_class}">{c.state}</span></td>'
-                    f"<td>{motion_html}</td></tr>"
-                )
-            ha_cameras_card += (
-                "<table><tr><th>Camera entity</th><th>State</th>"
-                "<th>Motion / AI sensors</th></tr>" + "".join(rows) + "</table>"
-            )
-
-            if unmatched:
-                ha_cameras_card += (
-                    '<h4 style="margin-top:1rem;">Unmatched motion sensors</h4>'
-                    '<p class="muted">Motion-like binary sensors I couldn\'t '
-                    "auto-pair with a camera (likely because their entity names "
-                    "don't share tokens with any camera). Manually wire the "
-                    "right one into <code>motion_entities</code> below.</p>"
-                    "<ul>" + "".join(f"<li><code>{m}</code></li>" for m in unmatched) + "</ul>"
-                )
-
-            ha_cameras_card += (
-                '<p class="muted">To wire one of these into SentiHome, paste '
-                "into the add-on Configuration:</p>"
-                "<pre>adapters:\n"
-                "  - name: my-cam\n"
-                "    kind: ha-camera\n"
-                "    camera_entity: camera.YOUR_CAMERA\n"
-                "    motion_entities:\n"
-                "      - binary_sensor.YOUR_MOTION_SENSOR</pre></div>"
-            )
+    # ─── HA cameras detected card ─────────────────────────────────
+    # When auto_discover is on (the default), this becomes the SETUP
+    # SURFACE: per-device cards with Enable/Disable + Override controls
+    # that POST to /discovery/* — no YAML editing needed.
+    #
+    # When auto_discover is off, falls back to the legacy read-only
+    # discovery view (the user has opted into hand-writing `adapters`).
+    ha_cameras_card = _render_ha_cameras_card(boot)
 
     # ─── cameras card ──────────────────────────────────────────────
     cam_statuses = boot.camera_registry.all()
@@ -647,6 +806,96 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
         except FileNotFoundError:
             return web.Response(status=404, text=f"snapshot file missing: {path}")
 
+    # ─── discovery overrides (v0.3.11 zero-config UI) ─────────────
+    #
+    # All four endpoints share the same pattern:
+    #   1. Parse the form body.
+    #   2. Mutate the persistent overrides file
+    #      (/data/sentihome/adapter_overrides.json).
+    #   3. Call _reconcile_discovery to apply the change live.
+    #   4. Redirect back to "/" so the user lands on a fresh status
+    #      page — POST-Redirect-GET so reload doesn't re-submit.
+    #
+    # Form parsing uses aiohttp's request.post() (handles
+    # application/x-www-form-urlencoded out of the box).
+
+    async def _redirect_home() -> web.Response:
+        # Relative redirect so it works under both HA Ingress and
+        # direct port access — see :data:`_STATUS_PAGE` for context on
+        # base-href + relative URLs.
+        return web.HTTPSeeOther(location="./")
+
+    async def discovery_enable(request: web.Request) -> web.Response:
+        form = await request.post()
+        device_id = str(form.get("device_id", "")).strip()
+        enabled_str = str(form.get("enabled", "")).strip().lower()
+        if not device_id:
+            return web.Response(status=400, text="missing device_id")
+        enabled = enabled_str == "true"
+        overrides = load_overrides()
+        set_device_override(overrides, device_id, enabled=enabled)
+        save_overrides(overrides)
+        await _reconcile_discovery(boot)
+        return await _redirect_home()
+
+    async def discovery_override(request: web.Request) -> web.Response:
+        form = await request.post()
+        device_id = str(form.get("device_id", "")).strip()
+        if not device_id:
+            return web.Response(status=400, text="missing device_id")
+
+        stream_raw = str(form.get("stream", "")).strip()
+        # "motion_use_ai" checkbox lets the user clear the motion
+        # override even after they previously set one. If checked,
+        # we clear; otherwise the submitted motion checkboxes become
+        # the new override (empty list = no motion = disabled effect).
+        motion_use_ai = form.get("motion_use_ai") == "1"
+        motion_list = [m for m in form.getall("motion") if m]
+        cooldown_raw = str(form.get("cooldown", "")).strip()
+
+        overrides = load_overrides()
+        kwargs: dict[str, Any] = {}
+        # Stream: empty string → clear (use AI); else override.
+        if stream_raw:
+            kwargs["stream_override"] = stream_raw
+        else:
+            kwargs["clear_stream"] = True
+        # Motion: explicit AI checkbox wins; else the checkbox list.
+        if motion_use_ai:
+            kwargs["clear_motion"] = True
+        elif motion_list:
+            kwargs["motion_override"] = motion_list
+        else:
+            kwargs["clear_motion"] = True
+        # Cooldown: blank → clear; else override.
+        if cooldown_raw:
+            try:
+                kwargs["cooldown_override"] = float(cooldown_raw)
+            except ValueError:
+                kwargs["clear_cooldown"] = True
+        else:
+            kwargs["clear_cooldown"] = True
+
+        set_device_override(overrides, device_id, **kwargs)
+        save_overrides(overrides)
+        await _reconcile_discovery(boot)
+        return await _redirect_home()
+
+    async def discovery_reset(request: web.Request) -> web.Response:
+        form = await request.post()
+        device_id = str(form.get("device_id", "")).strip()
+        if not device_id:
+            return web.Response(status=400, text="missing device_id")
+        overrides = load_overrides()
+        reset_device(overrides, device_id)
+        save_overrides(overrides)
+        await _reconcile_discovery(boot)
+        return await _redirect_home()
+
+    async def discovery_refresh(_request: web.Request) -> web.Response:
+        await _reconcile_discovery(boot)
+        return await _redirect_home()
+
     async def api_get(request: web.Request) -> web.Response:
         body: dict = dict(request.rel_url.query)
         # Always re-bind tools off the current boot state so the API
@@ -677,7 +926,49 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
         app.router.add_get(path, api_get)
     for path in ("/service", "/acknowledge_alert"):
         app.router.add_post(path, api_post)
+    # v0.3.11 zero-config discovery overrides.
+    app.router.add_post("/discovery/enable", discovery_enable)
+    app.router.add_post("/discovery/override", discovery_override)
+    app.router.add_post("/discovery/reset", discovery_reset)
+    app.router.add_post("/discovery/refresh", discovery_refresh)
     return app
+
+
+async def _reconcile_discovery(boot: BootState) -> None:
+    """Re-run discovery and bring HACameraLoops into line with overrides.
+
+    Called at boot (after HA connects), from the periodic re-discover
+    task, and from every POST /discovery/* handler. Safe to call
+    concurrently — :class:`Reconciler` holds an internal lock.
+
+    Failures are caught + recorded in ``boot.discovery_error`` so the
+    UI shows them; never raises (we don't want a transient HA blip to
+    break a user clicking Enable).
+    """
+    if boot.reconciler is None or boot.tools is None:
+        return
+    try:
+        discovery = await boot.tools.discover_ha_cameras()
+        overrides = load_overrides()
+        decisions = build_decisions(discovery.cameras, overrides=overrides)
+        boot.discovery_decisions = decisions
+        target_specs = [d.spec for d in decisions if d.enabled and d.spec is not None]
+        await boot.reconciler.apply(target_specs)
+        boot.discovery_error = None
+    except Exception as e:
+        boot.discovery_error = str(e)
+        logger.warning("discovery.reconcile_failed", error=str(e))
+
+
+async def _periodic_rediscover(boot: BootState, *, interval_seconds: float = 300.0) -> None:
+    """Long-lived task that re-runs discovery every 5 minutes.
+
+    Catches HA cameras the user added after the add-on started — no
+    restart required, just an Enable click in the /ha_cameras card.
+    """
+    while True:
+        await asyncio.sleep(interval_seconds)
+        await _reconcile_discovery(boot)
 
 
 async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) -> None:
@@ -688,6 +979,7 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
 
         topology = load_topology()
         boot.topology = topology
+        boot.auto_discover = getattr(topology, "auto_discover", True)
         boot.topology_summary = {
             "profile": topology.deployment.profile,
             "household_id": topology.deployment.household_id,
@@ -695,6 +987,7 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
             "postgres": topology.memory.postgres_url.split("@")[-1],
             "ha_url": topology.ha_agent.ha_url,
             "vlm_backends": ", ".join(b.name for b in topology.vlm_router.backends) or "none",
+            "auto_discover": "on" if boot.auto_discover else "off",
         }
         boot.ha_url = topology.ha_agent.ha_url
         boot.stage = "topology_loaded"
@@ -735,7 +1028,8 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
         boot.stage = "ha_connected"
         logger.info("ha_agent.connected", ha_url=boot.ha_url)
 
-        # ha-camera loops need the live HAClient — spawn them now.
+        # Legacy adapter-driven HA camera loops (kept for back-compat).
+        # New default is auto-discovery — see below.
         ha_loops = build_ha_camera_loops_from_topology(
             boot.topology,
             client=client,
@@ -754,6 +1048,26 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
                     if t.exception()
                     else None
                 )
+            )
+
+        # v0.3.11 zero-config path: run discovery + reconciler when
+        # `auto_discover` is on (the default). The reconciler manages
+        # the lifecycle of HACameraLoops based on auto-picked specs +
+        # per-device overrides edited from the Web UI.
+        if boot.auto_discover:
+            boot.reconciler = Reconciler(
+                client=client,
+                alert_log=alert_log,
+                registry=boot.camera_registry,
+            )
+            await _reconcile_discovery(boot)
+            # Periodic re-discovery picks up newly-added HA cameras
+            # without requiring a restart. Store the reference so the
+            # task is kept alive and so we can cancel it cleanly during
+            # tests or future shutdown paths.
+            boot.periodic_rediscover_task = asyncio.create_task(
+                _periodic_rediscover(boot),
+                name="periodic_rediscover",
             )
     except Exception as e:
         boot.ha_error = str(e)

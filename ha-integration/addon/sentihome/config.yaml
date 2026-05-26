@@ -2,7 +2,7 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: SentiHome
-version: '0.3.10'
+version: '0.3.11'
 slug: sentihome
 description: AI-powered home security and presence understanding
 url: https://github.com/DarinShapiro/SentiHome
@@ -68,6 +68,12 @@ options:
   timezone: UTC
   ha_token: ''
   log_level: INFO
+  # Zero-config camera onboarding (v0.3.11+). When ON (default), the
+  # add-on auto-discovers every HA camera, AI-picks the best stream +
+  # motion sensors, and wires them up live — no need to write any
+  # `adapters:` entries below. Per-device toggles + overrides are in
+  # the Web UI's "HA cameras detected" card.
+  auto_discover: true
   adapters: []
 schema:
   profile: list(yellow_single_box|yellow_plus_inference|distributed)
@@ -75,6 +81,7 @@ schema:
   timezone: str
   ha_token: password?
   log_level: list(DEBUG|INFO|WARNING|ERROR)?
+  auto_discover: bool?
 
   # Structured adapter config — renders as repeatable form items.
   # See DOCS.md for examples. Two adapter kinds are commonly used today:

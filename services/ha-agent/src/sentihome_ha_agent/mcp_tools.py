@@ -130,6 +130,13 @@ _STREAM_STOP_TOKENS = frozenset(
         "profile003",
         "high",
         "low",
+        # Reolink stream names: their integration creates entities
+        # like camera.<device>_fluent (sub stream) + camera.<device>_clear
+        # (main). Treating these as device tokens splits one physical
+        # camera into two "devices" in :func:`discovery.group_by_device`,
+        # so strip them at the same level as Dahua's _main / _sub.
+        "fluent",
+        "clear",
         "alarm",
         "alert",
         "alerts",

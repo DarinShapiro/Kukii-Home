@@ -169,6 +169,17 @@ class Topology(_StrictModel):
     ha_agent: HAAgentConfig = Field(default_factory=HAAgentConfig)
     notify: NotifyConfig = Field(default_factory=NotifyConfig)
     adapters: list[AdapterConfig] = Field(default_factory=list)
+    auto_discover: bool = True
+    """Zero-config camera onboarding (v0.3.11+). When True and
+    ``adapters`` is empty, the ha-agent auto-discovers every HA camera
+    entity, AI-picks the best stream + motion sensors per device, and
+    wires up :class:`HACameraLoop` instances live. Per-device overrides
+    (enable/disable, stream, motion, cooldown) live in
+    ``/data/sentihome/adapter_overrides.json`` and are editable via the
+    /ha_cameras Web UI card.
+
+    Setting this False (or providing a non-empty ``adapters``) falls
+    back to the legacy hand-written-YAML path."""
 
     async def verify(self, *, probe_timeout_s: float = 5.0) -> BootstrapReport:
         """Ping every declared dependency. Returns a :class:`BootstrapReport`."""

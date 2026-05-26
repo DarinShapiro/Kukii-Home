@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.3.11 — 2026-05-27
+
+**Zero-config camera onboarding — stop hand-writing adapter YAML.**
+
+The old setup flow was: read DOCS, look at `/ha_cameras`, copy
+entity-ids + motion-sensor lists into the Configuration tab in YAML
+form, restart. Every new camera in HA = repeat. v0.3.11 replaces
+that with discovery + AI defaults + a clickable per-device UI.
+
+What's new:
+
+- **New `auto_discover: true` option** (default ON). At boot the
+  add-on lists every HA camera entity, groups them by physical
+  device, and AI-picks per-device:
+  - **Stream**: prefer low-bandwidth substreams (`_fluent`, `_sub`)
+    over `_main` / `_mainstream` / `_clear`. Exclude known-broken
+    Reolink `_profile*` ONVIF entries and Dahua duplicate substreams
+    (`_sub_2`, `_sub_3`).
+  - **Motion sensors**: prefer AI-classified
+    (`_smart_motion_human`, `_person_detection`, `_intrusion_area_*`)
+    over noisy generics (`_motion_alarm`,
+    `_cell_motion_detection`, `_video_motion_info`).
+  - **Cooldown**: 10 s default.
+- **New "HA cameras" card UI** (replaces the read-only discovery
+  table). One row per device:
+  - Click **Enable / Disable** to start/stop the camera loop live.
+  - Expand **Override** to override the stream, motion sensors, or
+    cooldown via radio / checkbox / number inputs.
+  - Click **Reset to AI defaults** to drop overrides.
+  - **Re-discover now** picks up newly-added HA cameras.
+  - The card also runs a periodic re-discovery every 5 minutes.
+- **Persistent overrides** at
+  `/data/sentihome/adapter_overrides.json`. Atomic writes; survives
+  add-on updates because `/data` is the persistent volume.
+- **Live reconciler**: changes take effect immediately, no restart
+  needed. Click Enable → loop starts in milliseconds. Change stream
+  → loop restarts with the new config.
+
+Back-compat: the legacy hand-written `adapters: [...]` path still
+works exactly as before. If `auto_discover: false` (or `adapters`
+is non-empty), the add-on uses the manual config. Existing users
+on 0.3.x with a populated `adapters` array see no behavior change.
+
+The user's mandate behind this release: "get away from any
+handwriting. Discovered devices should be filtered and selected if
+there are options per device. Otherwise AI should make the
+configuration decisions." Done. The conversational AI wizard
+they also asked about is deferred to a later epic.
+
 ## 0.3.10 — 2026-05-27
 
 **Click a thumbnail → full-size lightbox in-page.**
