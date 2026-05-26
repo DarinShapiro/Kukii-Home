@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.11 — 2026-05-26
+
+**Fix `s6-overlay-suexec: fatal: can only run as pid 1` restart loop.**
+
+v0.1.10 installed packages cleanly (debian base, all wheels resolved)
+but the container restart-looped with the suexec/PID-1 error. Two
+fixes:
+
+- Remove `CMD ["/init"]` from the Dockerfile. The HA base-debian image
+  already sets `ENTRYPOINT ["/init"]`, so my CMD was being passed as an
+  argument — Docker effectively ran `/init /init`. That broke PID 1
+  semantics and triggered s6-overlay-suexec to fatal. Letting the base
+  ENTRYPOINT run with no args is correct.
+- Remove `tini` from the apt install set. It wasn't being used; only
+  risk was Docker auto-injecting it as init (`--init` flag) ahead of s6.
+
+- Reduce the s6 service set to just `ha-agent`. The other five
+  (core / memory / notify / vlm-router / preprocessor) had only
+  idle-and-sleep run scripts and contributed nothing v1-useful to the
+  add-on runtime. They re-enter when the NATS bus runtime wires up
+  (Epic 10+); for now they're noise. The in-process Python (RuleEvaluator,
+  MemoryStore, dispatchers, etc.) is already usable by anything that
+  imports the modules directly.
+
+After this: the add-on should show one running service (ha-agent), the
+Web UI button should open the status page, and the SentiHome sidebar
+panel should be functional.
+
 ## 0.1.10 — 2026-05-26
 
 **Switch base image from alpine to debian to fix the manylinux/musllinux

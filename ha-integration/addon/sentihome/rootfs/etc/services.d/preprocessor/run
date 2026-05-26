@@ -1,3 +1,0 @@
-#!/usr/bin/with-contenv bash
-# SentiHome preprocessor (MOG2 motion + on-camera AI corroboration).
-exec /app/.venv/bin/python -m sentihome_preprocessor
