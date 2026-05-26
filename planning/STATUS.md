@@ -33,8 +33,8 @@ cd SentiHome
 
 | Status                       | Count             |
 | ---------------------------- | ----------------- |
-| Epics closed                 | 8 of 16 (50%)     |
-| Sub-issues closed            | 132 of 264 (~50%) |
+| Epics closed                 | 8 of 17 (47%)     |
+| Sub-issues closed            | 132 of 279 (~47%) |
 | Architecture sections stable | 23 of 23 (100%)   |
 | Foundation infrastructure    | Complete          |
 
@@ -53,20 +53,21 @@ cd SentiHome
 
 ### Open epics (in dependency order)
 
-| #    | Epic                         | Sub-issues | Notes                                                                                                                                                            |
-| ---- | ---------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #134 | Home Assistant Integration   | #135-#156  | **Start here.** `services/ha-agent` (read+write MCP), `ha-integration/` custom HA component. Push/TTS in notify already invoke HA via injected caller — wire it. |
-| #157 | Identity & Recognition       | #158-#174  | Multi-modal identity, multi-camera fusion, stereo verification, temporal evidence accumulation, retroactive re-eval.                                             |
-| #175 | Feedback-Driven Optimization | #176-#192  | Variant generator + replay engine + 4-phase rollout (silent → shadow → gradual → full) + rollback triggers.                                                      |
-| #193 | Observability & Diagnostics  | #194-#207  | Metrics taxonomy, time-series storage, distributed tracing, AI synthesis layer, replay tooling.                                                                  |
-| #208 | Privacy & Governance         | #209-#222  | Privacy tier enforcement, scrubbing pipeline, retention, right-to-forget, multi-resident consent, GDPR/CCPA docs.                                                |
-| #223 | Calibration & Spatial Model  | #224-#237  | Camera/area/zone records, calibration UX flows, ground plane, stereo, PTZ presets.                                                                               |
-| #238 | Failure Modes & Resilience   | #239-#253  | Watchdog + 10 documented failure modes (F1-F10) + safe defaults matrix + chaos testing.                                                                          |
-| #254 | Documentation & Onboarding   | #255-#264  | User install guide, NVR setup, first-rule walkthrough, troubleshooting, HACS packaging.                                                                          |
+| #    | Epic                                   | Sub-issues | Notes                                                                                                                                                                                                                                                               |
+| ---- | -------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #265 | Deployment Topology & Bootstrap Config | #266-#280  | **Start here — pre-Epic-9 prerequisite.** Central `sentihome.yaml` + profile presets (yellow_single_box / yellow_plus_inference / distributed) + env overrides + HA Supervisor adapter + dependency-ping bootstrap. Refactors every service off scattered env-vars. |
+| #134 | Home Assistant Integration             | #135-#156  | `services/ha-agent` (read+write MCP), `ha-integration/` custom HA component. Push/TTS in notify already invoke HA via injected caller — wire it. Inherits topology config from #265.                                                                                |
+| #157 | Identity & Recognition                 | #158-#174  | Multi-modal identity, multi-camera fusion, stereo verification, temporal evidence accumulation, retroactive re-eval.                                                                                                                                                |
+| #175 | Feedback-Driven Optimization           | #176-#192  | Variant generator + replay engine + 4-phase rollout (silent → shadow → gradual → full) + rollback triggers.                                                                                                                                                         |
+| #193 | Observability & Diagnostics            | #194-#207  | Metrics taxonomy, time-series storage, distributed tracing, AI synthesis layer, replay tooling.                                                                                                                                                                     |
+| #208 | Privacy & Governance                   | #209-#222  | Privacy tier enforcement, scrubbing pipeline, retention, right-to-forget, multi-resident consent, GDPR/CCPA docs.                                                                                                                                                   |
+| #223 | Calibration & Spatial Model            | #224-#237  | Camera/area/zone records, calibration UX flows, ground plane, stereo, PTZ presets.                                                                                                                                                                                  |
+| #238 | Failure Modes & Resilience             | #239-#253  | Watchdog + 10 documented failure modes (F1-F10) + safe defaults matrix + chaos testing.                                                                                                                                                                             |
+| #254 | Documentation & Onboarding             | #255-#264  | User install guide, NVR setup, first-rule walkthrough, troubleshooting, HACS packaging.                                                                                                                                                                             |
 
-**Suggested epic order:** 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 (the order in `planning/epics/`)
+**Suggested epic order:** 5 → 6 → 7 → 8 → **8.5 (topology config)** → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 (the order in `planning/epics/`)
 
-Epic 9 (HA Integration) can run in parallel with 6+7 after Epic 5 is done.
+Epic 9 (HA Integration) can run in parallel with 6+7 after Epic 5 is done, but should be preceded by 8.5 so its HA URL/token wiring uses the central topology config rather than another env-var bolt-on.
 
 ---
 
@@ -328,4 +329,4 @@ gh run watch "$RUN_ID" --repo DarinShapiro/SentiHome --exit-status
 
 ---
 
-**Next session — pick up at Epic 9 (#134 Home Assistant Integration).** Good luck.
+**Next session — pick up at Epic 8.5 (#265 Deployment Topology & Bootstrap Config)** before Epic 9. Topology config is a pre-Epic-9 prerequisite so HA URL/token + every dependency hop is configurable per household (Yellow single-box vs Yellow + inference vs distributed vs HA add-on under Supervisor). Good luck.
