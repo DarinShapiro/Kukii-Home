@@ -6,7 +6,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.1.0" \
+    io.hass.version="0.1.1" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \
@@ -16,12 +16,17 @@ ENV \
     SENTIHOME_ENV=addon
 
 # System packages SentiHome services need at runtime.
+# - git: clones the workspace inside the image (Supervisor's build context
+#   is the add-on directory, not the repo root, so we can't COPY workspace
+#   sources in. This is the canonical pattern for HA add-ons that need a
+#   larger source tree than their own directory.)
 # - libffi/openssl: pydantic + asyncpg
 # - ffmpeg: rtsp-direct adapter, frame extraction
 # - jq: run.sh uses it to read /data/options.json
 RUN apk add --no-cache \
         bash \
         ffmpeg \
+        git \
         jq \
         libffi \
         openssl \
@@ -30,20 +35,22 @@ RUN apk add --no-cache \
 # Install uv (matches CI version).
 RUN pip install --no-cache-dir uv==0.11.16
 
-WORKDIR /app
+# Clone the SentiHome workspace. SENTIHOME_REF defaults to main but can be
+# overridden at build time for testing against a branch:
+#   docker build --build-arg SENTIHOME_REF=feature/foo ...
+ARG SENTIHOME_REPO=https://github.com/DarinShapiro/SentiHome.git
+ARG SENTIHOME_REF=main
 
-# Copy the workspace. Order: lockfiles + pyprojects first for layer cache,
-# then sources.
-COPY pyproject.toml uv.lock /app/
-COPY shared /app/shared
-COPY services /app/services
-COPY adapters /app/adapters
+WORKDIR /app
+RUN git clone --depth=1 --branch "${SENTIHOME_REF}" "${SENTIHOME_REPO}" /app \
+    && rm -rf /app/.git
 
 # Install every workspace member system-wide.
 RUN uv sync --frozen --no-dev
 
-# s6-overlay service definitions + run.sh entrypoint.
-COPY ha-integration/addon/sentihome/rootfs /
+# s6-overlay service definitions + run.sh entrypoint live in this add-on
+# directory (the build context).
+COPY rootfs /
 
 RUN chmod +x /etc/services.d/*/run /etc/cont-init.d/*
 

@@ -2,7 +2,7 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: SentiHome
-version: '0.1.0'
+version: '0.1.1'
 slug: sentihome
 description: AI-powered home security and presence understanding
 url: https://github.com/DarinShapiro/SentiHome
@@ -58,5 +58,7 @@ schema:
   notify: 'match(.+)?'
   adapters: 'match(.+)?'
 
-# Make the add-on logo/icon visible in the Supervisor store.
-image: ghcr.io/darinshapiro/sentihome-addon
+# No `image:` — Supervisor builds locally from the Dockerfile in this dir.
+# Once we publish pre-built images to ghcr.io via the addon-build workflow,
+# this can switch back to:
+#   image: ghcr.io/darinshapiro/sentihome-addon
