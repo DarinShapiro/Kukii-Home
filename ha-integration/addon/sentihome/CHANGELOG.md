@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.10 — 2026-05-26
+
+**Switch base image from alpine to debian to fix the manylinux/musllinux
+wheel-availability gap.**
+
+v0.1.9 unblocked onnxruntime by skipping the detector service, but
+opencv-python-headless (used by the preprocessor) had the same problem
+on the next build attempt — it only ships manylinux wheels, not
+musllinux. Continuing to whack-a-mole `--package` exclusions for every
+glibc-only dep is the wrong path; the fix is at the base image level.
+
+Changes:
+
+- `build.yaml`: base image switched from
+  ghcr.io/home-assistant/<arch>-base-python:3.12-alpine3.20
+  to
+  ghcr.io/home-assistant/<arch>-base-debian:bookworm
+  (~80 MB heavier per arch but unlocks every manylinux wheel).
+- `Dockerfile`: swap `apk add` → `apt-get install`; install python3 +
+  pip + venv via apt; install uv as before.
+- Revert the `--package` exclusion list from v0.1.9 — `uv sync
+--all-packages` works cleanly now, including sentihome-detector +
+  onnxruntime + opencv.
+- Future heavy ML deps (torch, etc.) will install without further base
+  image work.
+
 ## 0.1.9 — 2026-05-26
 
 - v0.1.8 build failed on aarch64 because `sentihome-detector` depends on

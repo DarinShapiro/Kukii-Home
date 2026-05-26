@@ -60,15 +60,17 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Build amd64 image (matches Supervisor's local-build path)
         run: |
-          # Supervisor uses the add-on directory as build context. We do
-          # the same so CI catches breakage that the user would hit.
-          # SENTIHOME_REF=${{ github.sha }} pins the in-image clone to the
-          # commit under test instead of main, so PR builds verify the
-          # actual change.
+          # Supervisor uses the add-on directory as build context + reads
+          # build.yaml for BUILD_FROM. We mirror both so CI breakage
+          # matches what a real install would hit.
+          # SENTIHOME_REF=${{ github.sha }} pins the in-image clone to
+          # the commit under test (so PR builds verify the change, not
+          # whatever's on main right now).
           docker buildx build \
             --platform linux/amd64 \
-            --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.20 \
+            --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:bookworm \
             --build-arg SENTIHOME_REF=${{ github.sha }} \
+            --build-arg CACHEBUST=${{ github.sha }} \
             --tag sentihome-addon:ci \
             --load \
             ha-integration/addon/sentihome
