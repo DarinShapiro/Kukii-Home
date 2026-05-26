@@ -285,6 +285,26 @@ class NotifyWorker:
     def ask_flow(self) -> AskFlow | None:
         return self._ask
 
+    @classmethod
+    def from_topology(cls, topology: Any, *, ha_caller: HACaller) -> NotifyWorker:
+        """Wire push + TTS dispatchers from a :class:`Topology` slice.
+
+        ``ha_caller`` is the resolved HA service-call function (provided by
+        ``services/ha-agent`` once Epic 9 wires it; in tests, an in-memory
+        stub).
+        """
+        notify_cfg = topology.notify
+        push = PushDispatcher(
+            ha_caller=ha_caller,
+            resident_to_service=dict(notify_cfg.resident_to_push_service),
+        )
+        tts = TTSDispatcher(
+            ha_caller=ha_caller,
+            media_player_entities=list(notify_cfg.media_players),
+            tts_service=notify_cfg.tts_service,
+        )
+        return cls(push=push, tts=tts, ask_flow=AskFlow())
+
     async def handle(self, action: ActionEvent) -> None:
         if action.action_type == ActionType.notify_push and self._push is not None:
             await self._push.dispatch(action)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -175,11 +175,18 @@ class Router:
 
 
 def build_backend(config: BackendConfig) -> Backend:
-    """Construct a backend instance from config based on its ``base_url`` shape.
+    """Construct a backend instance from config.
 
-    Defaults to Ollama if the URL has Ollama-style endpoint. Caller can also
-    construct backends directly via their classes — this is just a convenience.
+    When ``config.kind_hint`` is set (topology path) it picks the driver
+    directly. Otherwise falls back to URL-shape sniffing for legacy callers.
     """
+    if config.kind_hint == "ollama":
+        return OllamaBackend(config)
+    if config.kind_hint == "vllm":
+        return VLLMBackend(config)
+    if config.kind_hint == "openai_compatible":
+        return CloudBackend(config)
+
     location = config.location.lower()
     if location == "cloud":
         return CloudBackend(config)
@@ -189,3 +196,8 @@ def build_backend(config: BackendConfig) -> Backend:
         return VLLMBackend(config)
     # Default to Ollama for local; this matches the v1 default deployment
     return OllamaBackend(config)
+
+
+def build_backends_from_topology(topology: Any) -> list[Backend]:
+    """Construct the configured backend list from a :class:`Topology`."""
+    return [build_backend(BackendConfig.from_topology(b)) for b in topology.vlm_router.backends]

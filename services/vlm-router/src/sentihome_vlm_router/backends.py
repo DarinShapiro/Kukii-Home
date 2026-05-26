@@ -74,6 +74,31 @@ class BackendConfig:
     extra_headers: dict[str, str] = field(default_factory=dict)
     cost_per_1k_tokens_usd: float = 0.0
     typical_latency_ms: int = 2000
+    kind_hint: str | None = None
+    """Optional explicit driver kind ("ollama" | "vllm" | "openai_compatible")
+    set when the config comes from the central topology so ``build_backend``
+    can skip URL sniffing. ``None`` falls back to legacy URL detection."""
+
+    @classmethod
+    def from_topology(cls, backend: Any) -> BackendConfig:
+        """Build from a :class:`sentihome_shared.topology.VLMBackendConfig`.
+
+        ``location`` is derived from ``privacy_tier_max`` —
+        ``local_only`` → "local", others → "cloud" — to preserve the policy
+        scoring semantics.
+        """
+        loc = "local" if backend.privacy_tier_max.value == "local_only" else "cloud"
+        return cls(
+            name=backend.name,
+            location=loc,
+            model_name=backend.model,
+            base_url=backend.base_url,
+            api_key=backend.api_key,
+            timeout_seconds=backend.timeout_seconds,
+            cost_per_1k_tokens_usd=backend.cost_per_1k_tokens_usd,
+            typical_latency_ms=backend.typical_latency_ms,
+            kind_hint=backend.kind,
+        )
 
 
 @dataclass

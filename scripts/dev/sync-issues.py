@@ -49,13 +49,20 @@ def run_gh(args, input_text=None):
 
 def list_existing_issues():
     """Return dict mapping title -> issue number for all issues (open + closed)."""
-    out = run_gh([
-        "issue", "list",
-        "--repo", REPO,
-        "--state", "all",
-        "--limit", "1000",
-        "--json", "number,title",
-    ])
+    out = run_gh(
+        [
+            "issue",
+            "list",
+            "--repo",
+            REPO,
+            "--state",
+            "all",
+            "--limit",
+            "1000",
+            "--json",
+            "number,title",
+        ]
+    )
     issues = json.loads(out)
     return {issue["title"]: issue["number"] for issue in issues}
 
@@ -63,10 +70,14 @@ def list_existing_issues():
 def create_issue(title, body, labels):
     """Create an issue; return its number."""
     args = [
-        "issue", "create",
-        "--repo", REPO,
-        "--title", title,
-        "--body", body,
+        "issue",
+        "create",
+        "--repo",
+        REPO,
+        "--title",
+        title,
+        "--body",
+        body,
     ]
     for label in labels:
         args += ["--label", label]
@@ -77,11 +88,17 @@ def create_issue(title, body, labels):
 
 def edit_issue_body(number, body):
     """Replace an issue's body."""
-    run_gh([
-        "issue", "edit", str(number),
-        "--repo", REPO,
-        "--body", body,
-    ])
+    run_gh(
+        [
+            "issue",
+            "edit",
+            str(number),
+            "--repo",
+            REPO,
+            "--body",
+            body,
+        ]
+    )
 
 
 def parse_epic_file(path):
@@ -149,11 +166,13 @@ def parse_epic_file(path):
             label_text = m.group(3).strip()
             # Labels are like `epic:foundation`, `component:infrastructure`, `priority:p0` separated by commas
             labels = [l.strip().strip("`") for l in label_text.split(",")]
-            sub_issues.append({
-                "title": title,
-                "description": desc,
-                "labels": labels,
-            })
+            sub_issues.append(
+                {
+                    "title": title,
+                    "description": desc,
+                    "labels": labels,
+                }
+            )
 
     return {
         "title": epic_title,
@@ -200,7 +219,9 @@ def epic_body(epic, sub_issue_numbers):
     lines.append("")
     lines.append(epic["definition_of_done"] or "_See sub-issues._")
     lines.append("")
-    lines.append(f"_Source: [`planning/epics/{epic['file']}`](../blob/main/planning/epics/{epic['file']})_")
+    lines.append(
+        f"_Source: [`planning/epics/{epic['file']}`](../blob/main/planning/epics/{epic['file']})_"
+    )
     return "\n".join(lines)
 
 

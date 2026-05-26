@@ -47,6 +47,24 @@ class MemoryStoreConfig:
     episodic_top_k: int = 3
     """Max episodic summaries to return from recall_episodic()."""
 
+    @classmethod
+    def from_topology(cls, memory: Any) -> MemoryStoreConfig:
+        """Build from :class:`sentihome_shared.topology.MemoryConfig`.
+
+        ``object_store`` is a URI (``file://``, ``s3://``, ``minio://``);
+        for ``file://`` we strip the scheme so existing code keeps a path.
+        """
+        store = memory.object_store
+        if isinstance(store, str) and store.startswith("file://"):
+            store = store[len("file://") :]
+        return cls(
+            database_url=memory.postgres_url,
+            qdrant_url=memory.qdrant_url,
+            object_store_path=store,
+            rules_top_k=memory.rules_top_k,
+            episodic_top_k=memory.episodic_top_k,
+        )
+
 
 class MemoryStore:
     """Async memory store facade.

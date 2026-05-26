@@ -21,6 +21,7 @@ import structlog
 if TYPE_CHECKING:
     from sentihome_shared.adapter import NVRAdapter
     from sentihome_shared.adapter.base import CameraCapability
+    from sentihome_shared.topology import AdapterConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -160,5 +161,58 @@ def bootstrap_from_env() -> AdapterRegistry:
             registry.register(RTSPDirectAdapter(cameras=cams))
         except Exception as e:
             logger.error("bootstrap.rtsp_direct_config_failed", error=str(e))
+
+    return registry
+
+
+def bootstrap_from_topology(adapters: list[AdapterConfig]) -> AdapterRegistry:
+    """Instantiate adapters from a :class:`Topology.adapters` list.
+
+    This is the preferred bootstrap path; ``bootstrap_from_env`` is retained
+    for backward compatibility but new deployments should use a topology
+    config file. See ``docs/architecture/02-deployment-topologies.md``.
+    """
+    registry = AdapterRegistry()
+
+    for cfg in adapters:
+        kind = cfg.kind
+        try:
+            if kind == "agent-dvr" and cfg.url:
+                from sentihome_adapter_agent_dvr import AgentDVRAdapter, AgentDVRConfig
+
+                registry.register(
+                    AgentDVRAdapter(
+                        AgentDVRConfig(
+                            base_url=cfg.url,
+                            username=cfg.username,
+                            password=cfg.password,
+                        )
+                    )
+                )
+            elif kind == "frigate" and cfg.url:
+                from sentihome_adapter_frigate import FrigateAdapter, FrigateConfig
+
+                registry.register(
+                    FrigateAdapter(
+                        FrigateConfig(
+                            rest_url=cfg.url,
+                            mqtt_host=cfg.mqtt_host or "localhost",
+                        )
+                    )
+                )
+            elif kind == "rtsp-direct" and cfg.streams:
+                from sentihome_adapter_rtsp_direct import CameraConfig, RTSPDirectAdapter
+
+                cams = [CameraConfig(**entry) for entry in cfg.streams]
+                registry.register(RTSPDirectAdapter(cameras=cams))
+            else:
+                logger.warning(
+                    "bootstrap.adapter_skipped",
+                    name=cfg.name,
+                    kind=kind,
+                    reason="unsupported_or_missing_fields",
+                )
+        except Exception as e:
+            logger.error("bootstrap.adapter_failed", name=cfg.name, kind=kind, error=str(e))
 
     return registry
