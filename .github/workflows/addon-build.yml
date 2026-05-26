@@ -1,0 +1,73 @@
+name: Add-on build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ha-integration/addon/**'
+      - 'services/**'
+      - 'shared/lib-python/**'
+      - 'adapters/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/addon-build.yml'
+  pull_request:
+    paths:
+      - 'ha-integration/addon/**'
+      - 'services/**'
+      - 'shared/lib-python/**'
+      - 'adapters/**'
+      - '.github/workflows/addon-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  validate:
+    name: Validate add-on config.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sanity-check YAML
+        run: |
+          python -c "import yaml, sys; yaml.safe_load(open('ha-integration/addon/sentihome/config.yaml')); print('config.yaml OK')"
+      - name: Check required add-on files exist
+        run: |
+          for f in config.yaml Dockerfile README.md DOCS.md CHANGELOG.md icon.png logo.png; do
+            test -f "ha-integration/addon/sentihome/$f" || { echo "MISSING: $f"; exit 1; }
+          done
+          for svc in core memory ha-agent notify vlm-router preprocessor; do
+            test -f "ha-integration/addon/sentihome/rootfs/etc/services.d/$svc/run" || {
+              echo "MISSING s6 service: $svc"; exit 1; }
+          done
+          echo "All required add-on files present"
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ha-integration/addon/sentihome/Dockerfile
+          failure-threshold: warning
+          ignore: DL3018
+
+  build:
+    name: Build add-on image (amd64)
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build amd64 image
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.20 \
+            --file ha-integration/addon/sentihome/Dockerfile \
+            --tag sentihome-addon:ci \
+            --load \
+            .
+      - name: Sanity-run the image
+        run: |
+          docker run --rm sentihome-addon:ci /bin/bash -c \
+            "python -c 'import sentihome_shared.topology; print(\"topology importable\")'"

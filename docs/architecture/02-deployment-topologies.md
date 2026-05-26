@@ -106,6 +106,23 @@ This is the supported way to tweak production deployments without re-rolling the
 
 ---
 
+## Installing as a Supervisor add-on
+
+The repo is itself an HA add-on repository. To install SentiHome on a
+Home Assistant OS / Supervised instance:
+
+1. Settings → Add-ons → Add-on Store → ⋮ → **Repositories**
+2. Paste `https://github.com/DarinShapiro/SentiHome` and **Add**
+3. Refresh — the **SentiHome** tile appears
+4. Click **Install**, then open the **Configuration** tab
+5. Pick a profile + fill in nested sections (see
+   [`infrastructure/docker/sentihome.example.yaml`](../../infrastructure/docker/sentihome.example.yaml))
+6. Click **Start**
+
+Supervisor writes the form to `/data/options.json`; the add-on's
+`cont-init.d/10-bootstrap.sh` exports `SENTIHOME_CONFIG=/data/options.json`
+so the topology loader picks it up automatically.
+
 ## HA add-on Supervisor mapping
 
 When SentiHome runs as a Home Assistant add-on, Supervisor provides:

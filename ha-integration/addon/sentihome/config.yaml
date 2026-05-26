@@ -1,0 +1,62 @@
+# SentiHome — Home Assistant Supervisor add-on manifest.
+# https://developers.home-assistant.io/docs/add-ons/configuration
+
+name: SentiHome
+version: '0.1.0'
+slug: sentihome
+description: AI-powered home security and presence understanding
+url: https://github.com/DarinShapiro/SentiHome
+arch:
+  - amd64
+  - aarch64
+init: false
+# We rely on s6-overlay (provided by the base image) to supervise multiple
+# long-running SentiHome services in one container.
+
+# Run with full host networking so the embedded NATS / Postgres / Qdrant
+# (or external ones the user points us at) are reachable, and so RTSP
+# streams from LAN cameras work.
+host_network: true
+
+# Allow the add-on to call Supervisor APIs (HA Core proxy at
+# http://supervisor/core, secrets, etc.). The ha-agent uses this to talk
+# to HA Core via SUPERVISOR_TOKEN.
+hassio_api: true
+homeassistant_api: true
+
+# Persistent storage for the embedded Postgres + Qdrant + Redis volumes
+# and SentiHome's object store (frames, clips).
+map:
+  - addon_config:rw
+  - share:rw
+
+ports:
+  '8001/tcp': 8001 # SentiHome operator dashboard
+ports_description:
+  '8001/tcp': SentiHome operator dashboard
+
+startup: services
+boot: auto
+
+# Options surface in the Supervisor add-on UI. Each maps to a Topology
+# section; nested sections are accepted as free-form match() entries.
+options:
+  profile: yellow_single_box
+  household_id: my_home
+  timezone: UTC
+  ha_token: ''
+  log_level: INFO
+schema:
+  profile: list(yellow_single_box|yellow_plus_inference|distributed)
+  household_id: str
+  timezone: str
+  ha_token: password?
+  log_level: list(DEBUG|INFO|WARNING|ERROR)?
+  bus: 'match(.+)?'
+  memory: 'match(.+)?'
+  vlm_router: 'match(.+)?'
+  notify: 'match(.+)?'
+  adapters: 'match(.+)?'
+
+# Make the add-on logo/icon visible in the Supervisor store.
+image: ghcr.io/darinshapiro/sentihome-addon

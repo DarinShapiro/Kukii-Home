@@ -1,0 +1,3 @@
+#!/usr/bin/with-contenv bash
+# SentiHome notify dispatcher (push, TTS, ask flow).
+exec python -m sentihome_notify

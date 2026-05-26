@@ -1,0 +1,3 @@
+#!/usr/bin/with-contenv bash
+# SentiHome VLM router (multi-backend inference dispatcher).
+exec python -m sentihome_vlm_router

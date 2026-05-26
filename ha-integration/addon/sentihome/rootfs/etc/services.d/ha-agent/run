@@ -1,0 +1,3 @@
+#!/usr/bin/with-contenv bash
+# SentiHome ha-agent (read+write HA bridge).
+exec python -m sentihome_ha_agent
