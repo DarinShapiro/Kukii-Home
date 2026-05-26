@@ -2,10 +2,10 @@
 
 > **Resumption document** for agents continuing implementation work. This is a snapshot of where the code is, what's done, what's next, and the conventions established so far.
 
-**Last updated:** 2026-05-25 (Epic 8 closed)
+**Last updated:** 2026-05-26 (Epic 8.5 closed)
 **Branch:** `main`
 **CI status:** ✅ green
-**Tests:** 274 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
+**Tests:** 307 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
 
 ---
 
@@ -33,37 +33,37 @@ cd SentiHome
 
 | Status                       | Count             |
 | ---------------------------- | ----------------- |
-| Epics closed                 | 8 of 17 (47%)     |
-| Sub-issues closed            | 132 of 279 (~47%) |
+| Epics closed                 | 9 of 17 (53%)     |
+| Sub-issues closed            | 147 of 279 (~53%) |
 | Architecture sections stable | 23 of 23 (100%)   |
 | Foundation infrastructure    | Complete          |
 
 ### Closed epics
 
-| #    | Epic                                       | Sub-issues | Key deliverables                                                                                                                                                                                                                                                   |
-| ---- | ------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| #1   | Project Foundation & Infrastructure        | 14/14      | uv workspace, pnpm workspaces, docker-compose dev+prod, CI/integration/nightly workflows, shared Python + TS libraries, schema codegen pipeline, onboarding guide                                                                                                  |
-| #16  | Event Bus & Messaging                      | 9/9        | NATS JetStream config (4 streams + 9 consumers), `sentihome_shared.bus.Bus` with schema-validated pub/sub + trace propagation, triage worker with dedup + tiered routing + backpressure load shedding                                                              |
-| #26  | NVR Adapter Layer                          | 19/19      | `NVRAdapter` ABC, 7 platform adapters (rtsp-direct, agent-dvr, frigate fully fleshed; blueiris partially; synology, qnap, unifi as v1.x skeletons), `AdapterRegistry` with env-driven bootstrap                                                                    |
-| #46  | Preprocessing & Detection                  | 21/21      | Real OpenCV MOG2 motion detection with temporal/size/zone/environmental filtering, on-camera AI corroboration, in-memory metadata cache, `Detector` facade with stubbed ML model registry                                                                          |
-| #68  | VLM Router & Inference                     | 13/13      | Multi-backend router (Ollama/vLLM/Cloud OpenAI-compatible), routing policy with privacy enforcement + affinity + cost/latency scoring, 3-state circuit breaker, fallback chain, telemetry, response repair                                                         |
-| #82  | Memory & Storage                           | 22/22      | SQLAlchemy ORM (11 tables across 5 memory layers), Alembic migration tooling, MemoryStore facade (sessions, hybrid rule retrieval, episodic, visit ledger, identity), retention + soft-delete + grace                                                              |
-| #105 | Rule Engine & Conversational Rule Creation | 11/11      | RuleEvaluator (all §10 conditions + temporal), ConflictResolver (scope+severity+suppression), heuristic NL RuleParser, DEFAULT_RULE_PACK with Tier-1 safety                                                                                                        |
-| #117 | Action Dispatch & Alerting                 | 16/16      | TierRouter (Tier 0-4) + EscalationEngine + Quiet hours/Occupancy/DND routing + last-responder mitigation + PolicyGate (auto/gated/blocked) + PreApproval + RemediationRegistry + DeeperAssessmentLoop + Explanation + AckTracker + Push/TTS/Ask notify dispatchers |
+| #    | Epic                                       | Sub-issues | Key deliverables                                                                                                                                                                                                                                                                                                                                                                     |
+| ---- | ------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #1   | Project Foundation & Infrastructure        | 14/14      | uv workspace, pnpm workspaces, docker-compose dev+prod, CI/integration/nightly workflows, shared Python + TS libraries, schema codegen pipeline, onboarding guide                                                                                                                                                                                                                    |
+| #16  | Event Bus & Messaging                      | 9/9        | NATS JetStream config (4 streams + 9 consumers), `sentihome_shared.bus.Bus` with schema-validated pub/sub + trace propagation, triage worker with dedup + tiered routing + backpressure load shedding                                                                                                                                                                                |
+| #26  | NVR Adapter Layer                          | 19/19      | `NVRAdapter` ABC, 7 platform adapters (rtsp-direct, agent-dvr, frigate fully fleshed; blueiris partially; synology, qnap, unifi as v1.x skeletons), `AdapterRegistry` with env-driven bootstrap                                                                                                                                                                                      |
+| #46  | Preprocessing & Detection                  | 21/21      | Real OpenCV MOG2 motion detection with temporal/size/zone/environmental filtering, on-camera AI corroboration, in-memory metadata cache, `Detector` facade with stubbed ML model registry                                                                                                                                                                                            |
+| #68  | VLM Router & Inference                     | 13/13      | Multi-backend router (Ollama/vLLM/Cloud OpenAI-compatible), routing policy with privacy enforcement + affinity + cost/latency scoring, 3-state circuit breaker, fallback chain, telemetry, response repair                                                                                                                                                                           |
+| #82  | Memory & Storage                           | 22/22      | SQLAlchemy ORM (11 tables across 5 memory layers), Alembic migration tooling, MemoryStore facade (sessions, hybrid rule retrieval, episodic, visit ledger, identity), retention + soft-delete + grace                                                                                                                                                                                |
+| #105 | Rule Engine & Conversational Rule Creation | 11/11      | RuleEvaluator (all §10 conditions + temporal), ConflictResolver (scope+severity+suppression), heuristic NL RuleParser, DEFAULT_RULE_PACK with Tier-1 safety                                                                                                                                                                                                                          |
+| #117 | Action Dispatch & Alerting                 | 16/16      | TierRouter (Tier 0-4) + EscalationEngine + Quiet hours/Occupancy/DND routing + last-responder mitigation + PolicyGate (auto/gated/blocked) + PreApproval + RemediationRegistry + DeeperAssessmentLoop + Explanation + AckTracker + Push/TTS/Ask notify dispatchers                                                                                                                   |
+| #265 | Deployment Topology & Bootstrap Config     | 15/15      | `sentihome_shared.topology` pydantic model + YAML loader + 3 profile presets (yellow_single_box/yellow_plus_inference/distributed) + `${VAR}` interpolation + `SENTIHOME__SECTION__FIELD` env overrides + HA Supervisor `/data/options.json` adapter + concurrent `Topology.verify()` dependency-ping. Services refactored to take topology slices via `from_topology` classmethods. |
 
 ### Open epics (in dependency order)
 
-| #    | Epic                                   | Sub-issues | Notes                                                                                                                                                                                                                                                               |
-| ---- | -------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #265 | Deployment Topology & Bootstrap Config | #266-#280  | **Start here — pre-Epic-9 prerequisite.** Central `sentihome.yaml` + profile presets (yellow_single_box / yellow_plus_inference / distributed) + env overrides + HA Supervisor adapter + dependency-ping bootstrap. Refactors every service off scattered env-vars. |
-| #134 | Home Assistant Integration             | #135-#156  | `services/ha-agent` (read+write MCP), `ha-integration/` custom HA component. Push/TTS in notify already invoke HA via injected caller — wire it. Inherits topology config from #265.                                                                                |
-| #157 | Identity & Recognition                 | #158-#174  | Multi-modal identity, multi-camera fusion, stereo verification, temporal evidence accumulation, retroactive re-eval.                                                                                                                                                |
-| #175 | Feedback-Driven Optimization           | #176-#192  | Variant generator + replay engine + 4-phase rollout (silent → shadow → gradual → full) + rollback triggers.                                                                                                                                                         |
-| #193 | Observability & Diagnostics            | #194-#207  | Metrics taxonomy, time-series storage, distributed tracing, AI synthesis layer, replay tooling.                                                                                                                                                                     |
-| #208 | Privacy & Governance                   | #209-#222  | Privacy tier enforcement, scrubbing pipeline, retention, right-to-forget, multi-resident consent, GDPR/CCPA docs.                                                                                                                                                   |
-| #223 | Calibration & Spatial Model            | #224-#237  | Camera/area/zone records, calibration UX flows, ground plane, stereo, PTZ presets.                                                                                                                                                                                  |
-| #238 | Failure Modes & Resilience             | #239-#253  | Watchdog + 10 documented failure modes (F1-F10) + safe defaults matrix + chaos testing.                                                                                                                                                                             |
-| #254 | Documentation & Onboarding             | #255-#264  | User install guide, NVR setup, first-rule walkthrough, troubleshooting, HACS packaging.                                                                                                                                                                             |
+| #    | Epic                         | Sub-issues | Notes                                                                                                                                                                                                                                       |
+| ---- | ---------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #134 | Home Assistant Integration   | #135-#156  | **Start here.** `services/ha-agent` (read+write MCP), `ha-integration/` custom HA component. Push/TTS in notify already invoke HA via injected caller — wire it. Topology config (#265) supplies `HAAgentSettings.from_topology(topology)`. |
+| #157 | Identity & Recognition       | #158-#174  | Multi-modal identity, multi-camera fusion, stereo verification, temporal evidence accumulation, retroactive re-eval.                                                                                                                        |
+| #175 | Feedback-Driven Optimization | #176-#192  | Variant generator + replay engine + 4-phase rollout (silent → shadow → gradual → full) + rollback triggers.                                                                                                                                 |
+| #193 | Observability & Diagnostics  | #194-#207  | Metrics taxonomy, time-series storage, distributed tracing, AI synthesis layer, replay tooling.                                                                                                                                             |
+| #208 | Privacy & Governance         | #209-#222  | Privacy tier enforcement, scrubbing pipeline, retention, right-to-forget, multi-resident consent, GDPR/CCPA docs.                                                                                                                           |
+| #223 | Calibration & Spatial Model  | #224-#237  | Camera/area/zone records, calibration UX flows, ground plane, stereo, PTZ presets.                                                                                                                                                          |
+| #238 | Failure Modes & Resilience   | #239-#253  | Watchdog + 10 documented failure modes (F1-F10) + safe defaults matrix + chaos testing.                                                                                                                                                     |
+| #254 | Documentation & Onboarding   | #255-#264  | User install guide, NVR setup, first-rule walkthrough, troubleshooting, HACS packaging.                                                                                                                                                     |
 
 **Suggested epic order:** 5 → 6 → 7 → 8 → **8.5 (topology config)** → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 (the order in `planning/epics/`)
 
@@ -283,17 +283,18 @@ These are captured in `docs/architecture/20-open-questions.md`; don't re-litigat
 
 ## Test counts by epic
 
-| Epic                | Test files                                                                                                                | Tests passing                    |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| 1 (Foundation)      | smoke imports + shared lib                                                                                                | 17                               |
-| 2 (Event Bus)       | triage worker                                                                                                             | 23 + integration                 |
-| 3 (NVR Adapters)    | rtsp-direct, agent-dvr, frigate, blueiris, synology, qnap, unifi, registry, contract                                      | 53                               |
-| 4 (Preprocessing)   | motion, corroboration, cache, detector facade                                                                             | 31                               |
-| 5 (VLM Router)      | breaker, telemetry, policy, router, response_repair                                                                       | 39                               |
-| 6 (Memory)          | ORM models (all 11 tables), retention policy, MemoryStore facade                                                          | 30                               |
-| 7 (Rule Engine)     | RuleEvaluator (12), ConflictResolver (6), RuleParser NL (7), default pack (2), lifecycle (4)                              | 32                               |
-| 8 (Action Dispatch) | dispatch (core: tier/quiet/occupancy/policy/remediation/escalation/ack/explanation) + notify (push/tts/ask) + integration | 45 unit + 4 integration          |
-| **Total**           |                                                                                                                           | **274 unit + integration suite** |
+| Epic                  | Test files                                                                                                                   | Tests passing                    |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| 1 (Foundation)        | smoke imports + shared lib                                                                                                   | 17                               |
+| 2 (Event Bus)         | triage worker                                                                                                                | 23 + integration                 |
+| 3 (NVR Adapters)      | rtsp-direct, agent-dvr, frigate, blueiris, synology, qnap, unifi, registry, contract                                         | 53                               |
+| 4 (Preprocessing)     | motion, corroboration, cache, detector facade                                                                                | 31                               |
+| 5 (VLM Router)        | breaker, telemetry, policy, router, response_repair                                                                          | 39                               |
+| 6 (Memory)            | ORM models (all 11 tables), retention policy, MemoryStore facade                                                             | 30                               |
+| 7 (Rule Engine)       | RuleEvaluator (12), ConflictResolver (6), RuleParser NL (7), default pack (2), lifecycle (4)                                 | 32                               |
+| 8 (Action Dispatch)   | dispatch (core: tier/quiet/occupancy/policy/remediation/escalation/ack/explanation) + notify (push/tts/ask) + integration    | 45 unit + 4 integration          |
+| 8.5 (Topology Config) | topology loader + profile merging + ${VAR} interpolation + env overrides + Supervisor mapping + bootstrap-ping orchestration | 33 unit                          |
+| **Total**             |                                                                                                                              | **307 unit + integration suite** |
 
 ---
 
@@ -329,4 +330,4 @@ gh run watch "$RUN_ID" --repo DarinShapiro/SentiHome --exit-status
 
 ---
 
-**Next session — pick up at Epic 8.5 (#265 Deployment Topology & Bootstrap Config)** before Epic 9. Topology config is a pre-Epic-9 prerequisite so HA URL/token + every dependency hop is configurable per household (Yellow single-box vs Yellow + inference vs distributed vs HA add-on under Supervisor). Good luck.
+**Next session — pick up at Epic 9 (#134 Home Assistant Integration).** Topology config from #265 is in place: HA URL/token already flows via `HAAgentSettings.from_topology(topology)` in `services/ha-agent/config.py`; push/TTS dispatchers already invoke HA via an injected `HACaller`. Wire the ha-agent MCP server + config flow + HA custom integration on top. Good luck.
