@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.2.0 — 2026-05-26
+
+**First end-to-end runtime: cameras feed in, motion events surface in the
+Web UI.** Minor version bump to mark the milestone.
+
+- `services/ha-agent/camera_loop.py`: one `CameraLoop` task per
+  `rtsp-direct` adapter in topology. Opens the RTSP stream via OpenCV in
+  a thread executor (avoids blocking the aiohttp event loop), samples
+  every 5th frame, runs it through the preprocessor's existing
+  `MOG2MotionDetector`, debounces (30s cooldown per camera), and posts
+  motion events to `AlertLog`.
+- `CameraStreamStatus` per stream tracks state (starting / opening /
+  running / error / stopped), frame count, motion count, last-frame
+  time, last-motion time, error message — all rendered in a new
+  "Cameras" card on the status page.
+- Self-healing: on any read error or stream close, the loop sleeps 15s
+  then re-opens. Status page reflects the state in near-real-time.
+- ha-agent now depends on `sentihome-preprocessor` (for the MOG2 module)
+  and transitively on `opencv-python-headless` (cv2). Both already
+  install cleanly via the debian base.
+
+### How to configure a camera
+
+Add to the add-on **Configuration** tab:
+
+```yaml
+adapters:
+  - name: front-cam
+    kind: rtsp-direct
+    streams:
+      - id: cam_front
+        rtsp_url: rtsp://user:pass@192.168.1.50:554/stream
+```
+
+Restart the add-on; the Cameras card on the status page will show the
+stream go `opening` → `running`. Wave at the camera and within 30s a
+new entry appears in the "Recent alerts" table.
+
+### What's NOT in v0.2.0 yet
+
+- No NATS bus — the loop runs in-process inside ha-agent
+- No VLM analysis on the frames — just motion → alert
+- No rule engine — every motion event becomes an alert
+- No identity recognition — "Motion at cam_front", not "Sarah at front door"
+- No alerts surfaced to HA as entities — they live only in the Web UI
+
+These wire in via Epic 10+ (identity), the NATS bus runtime, and the
+custom integration's coordinator polling `/recent_alerts`.
+
 ## 0.1.12 — 2026-05-26
 
 - Fix `401 Unauthorized` against `http://supervisor/core` after pasting a

@@ -10,6 +10,11 @@ dependencies = [
     "websockets>=13.0",
     "pydantic>=2.9.0",
     "aiohttp>=3.10.0",
+    # v0.2.0 in-process camera loop: import MOG2 + cv2 via the preprocessor
+    # workspace member. cv2 itself comes in via opencv-python-headless
+    # (declared in preprocessor's deps), so we only need to depend on the
+    # preprocessor package for the motion module.
+    "sentihome-preprocessor",
 ]
 
 [project.scripts]

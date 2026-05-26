@@ -23,6 +23,11 @@ from typing import Any
 import structlog
 from aiohttp import web
 
+from sentihome_ha_agent.camera_loop import (
+    CameraLoop,
+    CameraLoopRegistry,
+    build_camera_loops_from_topology,
+)
 from sentihome_ha_agent.client import HAClient, HAClientSettings
 from sentihome_ha_agent.config import HAAgentSettings
 from sentihome_ha_agent.http_api import AlertLog, HAAgentAPI
@@ -52,6 +57,8 @@ class BootState:
     tools: HATools | None = None
     client: HAClient | None = None
     ha_url: str = "(not loaded)"
+    camera_registry: CameraLoopRegistry = field(default_factory=CameraLoopRegistry)
+    camera_loops: list[CameraLoop] = field(default_factory=list)
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -86,6 +93,7 @@ _STATUS_PAGE = """<!doctype html>
 <p class="muted">v__VERSION__ &middot; stage: <code>__STAGE__</code> &middot; auto-refresh every 10 s</p>
 
 __TOPOLOGY_CARD__
+__CAMERAS_CARD__
 __HA_CARD__
 __ALERTS_CARD__
 __CAPABILITIES_CARD__
@@ -183,6 +191,46 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         f"<p>{caps_html}</p></div>"
     )
 
+    # ─── cameras card ──────────────────────────────────────────────
+    cam_statuses = boot.camera_registry.all()
+    if not cam_statuses:
+        cameras_card = (
+            '<div class="card"><h3>Cameras</h3>'
+            '<p class="muted">No cameras configured. Paste an <code>adapters</code> '
+            "block into the add-on Configuration tab. Example:</p>"
+            "<pre>adapters:\n  - name: front-cam\n    kind: rtsp-direct\n"
+            "    streams:\n      - id: cam_front\n"
+            "        rtsp_url: rtsp://user:pass@192.168.1.50/stream</pre></div>"
+        )
+    else:
+        rows = []
+        for cs in cam_statuses:
+            state_class = {
+                "running": "ok",
+                "starting": "muted",
+                "opening": "muted",
+                "error": "bad",
+                "stopped": "muted",
+            }.get(cs.state, "muted")
+            last_frame = cs.last_frame_at.strftime("%H:%M:%S") if cs.last_frame_at else "—"
+            last_motion = cs.last_motion_at.strftime("%H:%M:%S") if cs.last_motion_at else "—"
+            detail = f"<br/><span class='muted'>{cs.last_error}</span>" if cs.last_error else ""
+            rows.append(
+                f"<tr><td>{cs.camera_id}</td>"
+                f"<td><span class='{state_class}'>{cs.state}</span>{detail}</td>"
+                f"<td>{cs.frames_read}</td>"
+                f"<td>{cs.motion_events}</td>"
+                f"<td>{last_frame}</td>"
+                f"<td>{last_motion}</td></tr>"
+            )
+        cameras_card = (
+            '<div class="card"><h3>Cameras</h3>'
+            "<table><tr><th>ID</th><th>State</th><th>Frames</th>"
+            "<th>Motion</th><th>Last frame</th><th>Last motion</th></tr>"
+            + "".join(rows)
+            + "</table></div>"
+        )
+
     return (
         _STATUS_PAGE.replace("__VERSION__", __version__)
         .replace("__STAGE__", boot.stage)
@@ -190,6 +238,7 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         .replace("__HA_CARD__", ha_card)
         .replace("__ALERTS_CARD__", alerts_card)
         .replace("__CAPABILITIES_CARD__", caps_card)
+        .replace("__CAMERAS_CARD__", cameras_card)
     )
 
 
@@ -226,7 +275,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     return app
 
 
-async def _bootstrap_topology_and_ha(boot: BootState) -> None:
+async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) -> None:
     """Run AFTER the HTTP server is listening. Failures land in boot.* so
     the status page shows them; the process never exits."""
     try:
@@ -248,6 +297,22 @@ async def _bootstrap_topology_and_ha(boot: BootState) -> None:
         boot.stage = "fatal"
         logger.exception("ha_agent.topology_load_failed")
         return
+
+    # Camera loops can start even if HA connection is failing — they're
+    # independent. Spawn them before the HA-connect attempt below.
+    loops = build_camera_loops_from_topology(
+        topology, alert_log=alert_log, registry=boot.camera_registry
+    )
+    boot.camera_loops = loops
+    for loop in loops:
+        task = asyncio.create_task(loop.run(), name=f"camera_{loop._camera_id}")
+        task.add_done_callback(
+            lambda t: (
+                logger.warning("camera_loop.task_exception", error=str(t.exception()))
+                if t.exception()
+                else None
+            )
+        )
 
     try:
         settings = HAAgentSettings.from_topology(topology)
@@ -289,7 +354,7 @@ async def _run() -> None:
     logger.info("ha_agent.listening", host=LISTEN_HOST, port=LISTEN_PORT)
 
     # Now do the rest in the background. Any failure surfaces on the page.
-    bootstrap_task = asyncio.create_task(_bootstrap_topology_and_ha(boot))
+    bootstrap_task = asyncio.create_task(_bootstrap_topology_and_ha(boot, alert_log=alert_log))
     bootstrap_task.add_done_callback(
         lambda t: (
             logger.warning("ha_agent.bootstrap_exception", error=str(t.exception()))
@@ -301,6 +366,8 @@ async def _run() -> None:
     try:
         await asyncio.Event().wait()
     finally:
+        for loop in boot.camera_loops:
+            await loop.stop()
         await runner.cleanup()
         if boot.client is not None:
             await boot.client.stop()
