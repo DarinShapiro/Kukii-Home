@@ -512,6 +512,38 @@ def test_alert_log_caps_entries():
     assert [e["alert_id"] for e in recent] == ["a7", "a8", "a9"]
 
 
+def test_alert_log_stamps_recorded_at_iso():
+    """v0.3.4: AlertLog.record auto-stamps a UTC ISO-8601 timestamp."""
+    log = AlertLog()
+    log.record({"alert_id": "a1", "headline": "test"})
+    [entry] = log.recent(10)
+    assert "recorded_at" in entry
+    # ISO-8601: must parse cleanly.
+    from datetime import datetime as _dt
+
+    parsed = _dt.fromisoformat(entry["recorded_at"])
+    assert parsed.tzinfo is not None  # has timezone
+
+
+def test_alert_log_preserves_explicit_recorded_at():
+    """If the caller supplies recorded_at (e.g. a replay or test fixture),
+    don't overwrite it."""
+    log = AlertLog()
+    log.record({"alert_id": "a1", "recorded_at": "2025-01-01T00:00:00+00:00"})
+    [entry] = log.recent(10)
+    assert entry["recorded_at"] == "2025-01-01T00:00:00+00:00"
+
+
+def test_alert_log_get_returns_specific_alert():
+    """v0.3.4: AlertLog.get(alert_id) for per-alert snapshot serving."""
+    log = AlertLog()
+    log.record({"alert_id": "alpha", "headline": "first"})
+    log.record({"alert_id": "beta", "headline": "second"})
+    assert log.get("alpha")["headline"] == "first"
+    assert log.get("beta")["headline"] == "second"
+    assert log.get("missing") is None
+
+
 # ─────────────────────────────────────────────────────────────────────
 # make_ha_caller (notify-dispatcher integration seam)
 # ─────────────────────────────────────────────────────────────────────

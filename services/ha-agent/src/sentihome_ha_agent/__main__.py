@@ -172,16 +172,49 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
     # ─── alerts card ───────────────────────────────────────────────
     alerts = alert_log.recent(10)
     if alerts:
-        rows = "".join(
-            f"<tr><td>{a.get('alert_id', '?')}</td><td>{a.get('headline', '')}</td>"
-            f"<td>{a.get('tier', '')}</td>"
-            f"<td>{'ack' if a.get('acknowledged') else 'open'}</td></tr>"
-            for a in reversed(alerts)
-        )
+        row_strs = []
+        for a in reversed(alerts):
+            alert_id = a.get("alert_id", "?")
+            headline = a.get("headline", "")
+            tier = a.get("tier", "")
+            status = "ack" if a.get("acknowledged") else "open"
+
+            # Time: show HH:MM:SS from recorded_at. Old alerts without
+            # the field (logged before v0.3.4) render an em-dash.
+            recorded_at = a.get("recorded_at")
+            if recorded_at:
+                try:
+                    from datetime import datetime as _dt
+
+                    when = _dt.fromisoformat(recorded_at).strftime("%H:%M:%S")
+                except (ValueError, TypeError):
+                    when = recorded_at[:8]
+            else:
+                when = "—"
+
+            # Thumbnail. Click → full-size in a new tab.
+            if a.get("evidence_ref"):
+                thumb = (
+                    f"<a href='/alerts/{alert_id}/snapshot' target='_blank'>"
+                    f"<img src='/alerts/{alert_id}/snapshot' "
+                    "style='max-width: 96px; max-height: 54px; "
+                    "border-radius: 4px; vertical-align: middle;' "
+                    "onerror=\"this.style.display='none'\"/></a>"
+                )
+            else:
+                thumb = '<span class="muted">—</span>'
+
+            row_strs.append(
+                f"<tr><td>{thumb}</td>"
+                f"<td>{when}</td>"
+                f"<td>{headline}</td>"
+                f"<td>{tier}</td>"
+                f"<td>{status}</td></tr>"
+            )
         alerts_card = (
             '<div class="card"><h3>Recent alerts</h3>'
-            "<table><tr><th>ID</th><th>Headline</th><th>Tier</th>"
-            f"<th>Status</th></tr>{rows}</table></div>"
+            "<table><tr><th>Snapshot</th><th>Time</th><th>Headline</th>"
+            "<th>Tier</th><th>Status</th></tr>" + "".join(row_strs) + "</table></div>"
         )
     else:
         alerts_card = (
@@ -344,6 +377,25 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
                     return web.Response(status=404, text=f"snapshot file missing: {path}")
         return web.Response(status=404, text=f"no snapshots for {cam_id}")
 
+    async def snapshot_for_alert(request: web.Request) -> web.Response:
+        """Return the snapshot captured for a specific alert.
+
+        Used by the Recent alerts table to embed per-alert thumbnails —
+        each row links to the snapshot of THAT alert, not just the
+        latest snapshot for its camera.
+        """
+        alert_id = request.match_info["alert_id"]
+        alert = alert_log.get(alert_id)
+        if alert is None:
+            return web.Response(status=404, text=f"no alert {alert_id}")
+        path = alert.get("evidence_ref")
+        if not path:
+            return web.Response(status=404, text=f"alert {alert_id} has no snapshot")
+        try:
+            return web.FileResponse(path)
+        except FileNotFoundError:
+            return web.Response(status=404, text=f"snapshot file missing: {path}")
+
     async def api_get(request: web.Request) -> web.Response:
         body: dict = dict(request.rel_url.query)
         # Always re-bind tools off the current boot state so the API
@@ -364,6 +416,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     app = web.Application()
     app.router.add_get("/", status_page)
     app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
+    app.router.add_get("/alerts/{alert_id}/snapshot", snapshot_for_alert)
     for path in ("/healthz", "/snapshot", "/capabilities", "/recent_alerts", "/ha_cameras"):
         app.router.add_get(path, api_get)
     for path in ("/service", "/acknowledge_alert"):

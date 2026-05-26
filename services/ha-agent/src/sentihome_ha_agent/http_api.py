@@ -137,12 +137,26 @@ class AlertLog:
         self._entries = []
 
     def record(self, alert: dict[str, Any]) -> None:
+        # Always stamp a `recorded_at` ISO-8601 timestamp so the Web UI
+        # can display when each alert fired without having to derive it
+        # from alert_id formatting.
+        if "recorded_at" not in alert:
+            from datetime import UTC, datetime
+
+            alert["recorded_at"] = datetime.now(UTC).isoformat()
         self._entries.append(alert)
         if len(self._entries) > self.max_entries:
             self._entries = self._entries[-self.max_entries :]
 
     def recent(self, limit: int) -> list[dict[str, Any]]:
         return list(self._entries[-limit:])
+
+    def get(self, alert_id: str) -> dict[str, Any] | None:
+        """Look up a specific alert by id. Returns None if no match."""
+        for e in self._entries:
+            if e.get("alert_id") == alert_id:
+                return e
+        return None
 
     def acknowledge(self, alert_id: str, *, feedback: str) -> None:
         for e in self._entries:

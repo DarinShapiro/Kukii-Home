@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.3.4 — 2026-05-27
+
+**Per-alert thumbnails + timestamps in the Recent alerts table.**
+
+The Recent alerts table previously had just four columns (ID, Headline,
+Tier, Status) — no visual record of what triggered the alert, no time
+information. Hard to correlate with what you actually saw or remember.
+
+Changes:
+
+- **`recorded_at` ISO timestamp** auto-stamped on every alert in
+  `AlertLog.record()`. Old alerts logged before v0.3.4 render `—` for
+  the time column; new alerts show `HH:MM:SS`.
+- **`AlertLog.get(alert_id)`** lookup method.
+- **New endpoint `GET /alerts/<alert_id>/snapshot`** — serves the
+  snapshot file for a specific alert (rather than the latest snapshot
+  for its camera). Used by the Recent alerts table.
+- **Recent alerts table** restructured to 5 columns:
+  Snapshot · Time · Headline · Tier · Status
+  Each thumbnail is clickable — opens the full-size snapshot in a new
+  browser tab. Renders nothing for alerts whose `evidence_ref` is empty
+  (e.g. a snapshot fetch that failed).
+
+Includes the v0.3.3 snapshot fix (camera_proxy bytes → local
+filesystem), so the thumbnails actually render this time.
+
 ## 0.3.3 — 2026-05-27
 
 **Fix snapshot capture across the add-on / HA Core container boundary.**
