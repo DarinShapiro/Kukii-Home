@@ -1,15 +1,13 @@
 """ha-agent service entry point.
 
-Loads the topology, opens an :class:`HAClient` to Home Assistant, and
-binds an aiohttp server on ``0.0.0.0:8765`` that:
+Bootstrap pattern: **HTTP server first, then everything else.**
 
-* hosts the JSON API consumed by ``custom_components/sentihome/`` (see
-  :mod:`http_api`), and
-* renders a minimal HTML status page at ``/`` that Supervisor surfaces
-  as the add-on's Web UI (declared via ``webui:`` in config.yaml).
-
-The HTML page is intentionally small + dependency-free so it loads and
-renders even when the rest of the SentiHome stack is warming up.
+The aiohttp server on ``0.0.0.0:8765`` is bound and serving *before* we
+try to load the topology or open an HA connection. Failures in those
+later steps become visible bullet items on the status page instead of
+silent process crashes. This is how we turn "connection refused" into
+"connection succeeded — page shows error" so misconfiguration is
+diagnosable from the Web UI without needing the add-on Log tab.
 """
 
 from __future__ import annotations
@@ -18,10 +16,12 @@ import asyncio
 import json
 import logging
 import os
+import traceback
+from dataclasses import dataclass, field
+from typing import Any
 
 import structlog
 from aiohttp import web
-from sentihome_shared.topology import load_topology
 
 from sentihome_ha_agent.client import HAClient, HAClientSettings
 from sentihome_ha_agent.config import HAAgentSettings
@@ -31,8 +31,27 @@ from sentihome_ha_agent.mcp_tools import HATools
 logger = structlog.get_logger(__name__)
 
 
-LISTEN_HOST = "0.0.0.0"  # noqa: S104 — listen on all interfaces inside the container
+LISTEN_HOST = "0.0.0.0"  # noqa: S104 — bind all interfaces inside the container
 LISTEN_PORT = 8765
+
+
+@dataclass
+class BootState:
+    """Mutable state the status-page renderer reads.
+
+    Holds whatever stage we're in, plus any error messages from steps
+    that failed. The HTTP server is always up; this dataclass tells the
+    UI what's wrong (if anything).
+    """
+
+    stage: str = "starting"
+    """One of: starting, topology_loaded, ha_connected, ha_failed, fatal."""
+    topology_error: str | None = None
+    ha_error: str | None = None
+    topology_summary: dict[str, Any] = field(default_factory=dict)
+    tools: HATools | None = None
+    client: HAClient | None = None
+    ha_url: str = "(not loaded)"
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -49,11 +68,14 @@ _STATUS_PAGE = """<!doctype html>
           margin-bottom: 1rem; background: #fafbfc; }
   .ok { color: #28a745; font-weight: 600; }
   .bad { color: #d73a49; font-weight: 600; }
+  .warn { color: #e36209; font-weight: 600; }
   .muted { color: #6a737d; font-size: 0.9rem; }
   table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
   th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #eaecef; }
   th { font-weight: 600; color: #586069; font-size: 0.85rem; }
   code { background: #f6f8fa; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.9rem; }
+  pre { background: #f6f8fa; padding: 0.75rem; border-radius: 6px;
+        overflow-x: auto; font-size: 0.85rem; }
   .footer { color: #6a737d; font-size: 0.85rem; margin-top: 2rem; }
   a { color: #0366d6; text-decoration: none; }
   a:hover { text-decoration: underline; }
@@ -61,30 +83,17 @@ _STATUS_PAGE = """<!doctype html>
 </head>
 <body>
 <h1>SentiHome</h1>
-<p class="muted">v__VERSION__ &middot; auto-refresh every 10 s</p>
+<p class="muted">v__VERSION__ &middot; stage: <code>__STAGE__</code> &middot; auto-refresh every 10 s</p>
 
-<div class="card">
-<h3>Connection to Home Assistant</h3>
-<p>Status: <span class="__HA_CLASS__">__HA_STATUS__</span></p>
-<p class="muted">URL: <code>__HA_URL__</code></p>
-<p class="muted">Entities visible: <strong>__ENTITY_COUNT__</strong></p>
-</div>
-
-<div class="card">
-<h3>Recent alerts</h3>
-__ALERTS_TABLE__
-</div>
-
-<div class="card">
-<h3>Capabilities</h3>
-<p class="muted">Domains SentiHome can act on in your HA:</p>
-<p>__CAPABILITIES__</p>
-</div>
+__TOPOLOGY_CARD__
+__HA_CARD__
+__ALERTS_CARD__
+__CAPABILITIES_CARD__
 
 <div class="footer">
 <p>Next step: install the
 <a href="https://github.com/DarinShapiro/SentiHome/blob/main/docs/install.md">SentiHome custom integration</a>
-in HA so entities populate. Then point at least one camera adapter at a stream.</p>
+in HA so entities populate.</p>
 <p>API: <a href="/healthz">/healthz</a> &middot; <a href="/snapshot">/snapshot</a> &middot;
 <a href="/capabilities">/capabilities</a> &middot; <a href="/recent_alerts">/recent_alerts</a></p>
 </div>
@@ -93,28 +102,61 @@ in HA so entities populate. Then point at least one camera adapter at a stream.<
 """
 
 
-async def _render_status(tools: HATools | None, alert_log: AlertLog, ha_url: str) -> str:
+async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
     from sentihome_ha_agent import __version__
 
-    ha_status = "Connecting..."
-    ha_class = "muted"
-    entity_count: int | str = "—"
-    capabilities = "—"
-    if tools is not None:
-        try:
-            states = await tools.get_snapshot()
-            entity_count = len(states)
-            caps = await tools.list_capabilities()
-            ha_status = "OK"
-            ha_class = "ok"
-            capabilities = ", ".join(f"{c.domain} ({c.entity_count})" for c in caps) or "none"
-        except Exception as e:
-            ha_status = f"unreachable — {e}"
-            ha_class = "bad"
+    # ─── topology card ─────────────────────────────────────────────
+    if boot.topology_error:
+        topology_card = (
+            '<div class="card"><h3>Topology config</h3>'
+            f'<p class="bad">Failed to load.</p><pre>{boot.topology_error}</pre>'
+            "</div>"
+        )
     else:
-        ha_status = "ha_token not set — open the Configuration tab"
-        ha_class = "bad"
+        rows = "".join(
+            f"<tr><td>{k}</td><td><code>{v}</code></td></tr>"
+            for k, v in boot.topology_summary.items()
+        )
+        topology_card = (
+            '<div class="card"><h3>Topology config</h3>'
+            '<p class="ok">Loaded.</p>'
+            f"<table>{rows}</table></div>"
+        )
 
+    # ─── HA connection card ────────────────────────────────────────
+    if boot.tools is None:
+        ha_card = (
+            '<div class="card"><h3>Connection to Home Assistant</h3>'
+            f'<p class="bad">{boot.ha_error or "not connected"}</p>'
+            f'<p class="muted">URL: <code>{boot.ha_url}</code></p>'
+            '<p class="muted">Set <code>ha_token</code> in the add-on '
+            "Configuration tab. (Supervisor add-ons normally inject "
+            "<code>SUPERVISOR_TOKEN</code> automatically; if you see this "
+            "message, the bootstrap script didn't pick it up — check the "
+            "add-on Log tab for <code>[bootstrap]</code> lines.)</p></div>"
+        )
+    else:
+        entity_count: int | str = "—"
+        caps_html = "—"
+        try:
+            states = await boot.tools.get_snapshot()
+            entity_count = len(states)
+            caps = await boot.tools.list_capabilities()
+            caps_html = ", ".join(f"{c.domain} ({c.entity_count})" for c in caps) or "none"
+            status_html = '<span class="ok">OK</span>'
+        except Exception as e:
+            status_html = f'<span class="bad">unreachable: {e}</span>'
+        ha_card = (
+            '<div class="card"><h3>Connection to Home Assistant</h3>'
+            f"<p>Status: {status_html}</p>"
+            f'<p class="muted">URL: <code>{boot.ha_url}</code></p>'
+            f'<p class="muted">Entities visible: <strong>{entity_count}</strong></p>'
+            "</div>"
+        )
+        # We also use caps_html in the capability card below — stash it.
+        boot.topology_summary["__caps_html"] = caps_html
+
+    # ─── alerts card ───────────────────────────────────────────────
     alerts = alert_log.recent(10)
     if alerts:
         rows = "".join(
@@ -123,36 +165,46 @@ async def _render_status(tools: HATools | None, alert_log: AlertLog, ha_url: str
             f"<td>{'ack' if a.get('acknowledged') else 'open'}</td></tr>"
             for a in reversed(alerts)
         )
-        alerts_table = (
+        alerts_card = (
+            '<div class="card"><h3>Recent alerts</h3>'
             "<table><tr><th>ID</th><th>Headline</th><th>Tier</th>"
-            f"<th>Status</th></tr>{rows}</table>"
+            f"<th>Status</th></tr>{rows}</table></div>"
         )
     else:
-        alerts_table = (
-            '<p class="muted">No alerts yet. Trigger a detection from one of '
-            "your cameras to see one appear here.</p>"
+        alerts_card = (
+            '<div class="card"><h3>Recent alerts</h3><p class="muted">No alerts yet.</p></div>'
         )
+
+    # ─── capabilities card ─────────────────────────────────────────
+    caps_html = boot.topology_summary.pop("__caps_html", "—")
+    caps_card = (
+        '<div class="card"><h3>Capabilities</h3>'
+        '<p class="muted">Domains SentiHome can act on in your HA:</p>'
+        f"<p>{caps_html}</p></div>"
+    )
 
     return (
         _STATUS_PAGE.replace("__VERSION__", __version__)
-        .replace("__HA_CLASS__", ha_class)
-        .replace("__HA_STATUS__", ha_status)
-        .replace("__HA_URL__", ha_url)
-        .replace("__ENTITY_COUNT__", str(entity_count))
-        .replace("__ALERTS_TABLE__", alerts_table)
-        .replace("__CAPABILITIES__", capabilities)
+        .replace("__STAGE__", boot.stage)
+        .replace("__TOPOLOGY_CARD__", topology_card)
+        .replace("__HA_CARD__", ha_card)
+        .replace("__ALERTS_CARD__", alerts_card)
+        .replace("__CAPABILITIES_CARD__", caps_card)
     )
 
 
-def _build_app(*, tools: HATools | None, alert_log: AlertLog, ha_url: str) -> web.Application:
-    api = HAAgentAPI(tools=tools, alert_log=alert_log)
+def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
+    api = HAAgentAPI(tools=None, alert_log=alert_log)  # tools rebound below
 
     async def status_page(_request: web.Request) -> web.Response:
-        body = await _render_status(tools, alert_log, ha_url)
+        body = await _render_status(boot, alert_log)
         return web.Response(text=body, content_type="text/html")
 
     async def api_get(request: web.Request) -> web.Response:
         body: dict = dict(request.rel_url.query)
+        # Always re-bind tools off the current boot state so the API
+        # picks up late-arriving HA connections without a restart.
+        api._tools = boot.tools
         status, payload = await api.dispatch(method="GET", path=request.path, body=body)
         return web.json_response(payload, status=status)
 
@@ -161,6 +213,7 @@ def _build_app(*, tools: HATools | None, alert_log: AlertLog, ha_url: str) -> we
             body = await request.json() if request.body_exists else {}
         except json.JSONDecodeError:
             body = {}
+        api._tools = boot.tools
         status, payload = await api.dispatch(method="POST", path=request.path, body=body)
         return web.json_response(payload, status=status)
 
@@ -173,14 +226,29 @@ def _build_app(*, tools: HATools | None, alert_log: AlertLog, ha_url: str) -> we
     return app
 
 
-async def _run() -> None:
-    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    topology = load_topology()
-    alert_log = AlertLog()
+async def _bootstrap_topology_and_ha(boot: BootState) -> None:
+    """Run AFTER the HTTP server is listening. Failures land in boot.* so
+    the status page shows them; the process never exits."""
+    try:
+        from sentihome_shared.topology import load_topology
 
-    client: HAClient | None = None
-    tools: HATools | None = None
-    ha_url = topology.ha_agent.ha_url
+        topology = load_topology()
+        boot.topology_summary = {
+            "profile": topology.deployment.profile,
+            "household_id": topology.deployment.household_id,
+            "nats": topology.bus.nats_url,
+            "postgres": topology.memory.postgres_url.split("@")[-1],
+            "ha_url": topology.ha_agent.ha_url,
+            "vlm_backends": ", ".join(b.name for b in topology.vlm_router.backends) or "none",
+        }
+        boot.ha_url = topology.ha_agent.ha_url
+        boot.stage = "topology_loaded"
+    except Exception:
+        boot.topology_error = traceback.format_exc()
+        boot.stage = "fatal"
+        logger.exception("ha_agent.topology_load_failed")
+        return
+
     try:
         settings = HAAgentSettings.from_topology(topology)
         client = HAClient(
@@ -191,28 +259,51 @@ async def _run() -> None:
             )
         )
         await client.start()
-        tools = HATools(client)
-        logger.info("ha_agent.connected", ha_url=ha_url)
+        boot.client = client
+        boot.tools = HATools(client)
+        boot.stage = "ha_connected"
+        logger.info("ha_agent.connected", ha_url=boot.ha_url)
     except Exception as e:
+        boot.ha_error = str(e)
+        boot.stage = "ha_failed"
         logger.warning(
             "ha_agent.no_ha_connection",
             error=str(e),
-            hint="set ha_token in add-on options, or wait for SUPERVISOR_TOKEN bootstrap",
+            hint="set ha_token in add-on Configuration, or check that SUPERVISOR_TOKEN reaches the container",
         )
 
-    app = _build_app(tools=tools, alert_log=alert_log, ha_url=ha_url)
+
+async def _run() -> None:
+    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+    boot = BootState()
+    alert_log = AlertLog()
+
+    # Bring the HTTP server up FIRST. If this fails, there's a real
+    # network-level problem (port in use, no interface, etc.) and there's
+    # nothing the status page can do about it.
+    app = _build_app(boot=boot, alert_log=alert_log)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, LISTEN_HOST, LISTEN_PORT)
     await site.start()
     logger.info("ha_agent.listening", host=LISTEN_HOST, port=LISTEN_PORT)
 
+    # Now do the rest in the background. Any failure surfaces on the page.
+    bootstrap_task = asyncio.create_task(_bootstrap_topology_and_ha(boot))
+    bootstrap_task.add_done_callback(
+        lambda t: (
+            logger.warning("ha_agent.bootstrap_exception", error=str(t.exception()))
+            if t.exception()
+            else None
+        )
+    )
+
     try:
         await asyncio.Event().wait()
     finally:
         await runner.cleanup()
-        if client is not None:
-            await client.stop()
+        if boot.client is not None:
+            await boot.client.stop()
 
 
 def main() -> None:

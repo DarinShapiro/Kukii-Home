@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.5 — 2026-05-26
+
+- Fix "connection refused" on the Web UI button. Two changes:
+  - **Drop `host_network: true`**: standard container networking with a
+    NAT'd port (`8765/tcp: 8765`) is more reliable on HA OS. host_network
+    caused the aiohttp bind to land on an interface the host port mapping
+    didn't reach on some setups.
+  - **HTTP server starts before topology / HA connection**: the ha-agent
+    `__main__` now binds 0.0.0.0:8765 first and only then attempts to
+    load the topology and connect to HA. Any failure in those later
+    stages becomes a visible card on the status page (with the full
+    traceback for topology errors) instead of a silent process crash.
+  - The status page also shows the current bootstrap stage
+    (`starting` → `topology_loaded` → `ha_connected` or `ha_failed`)
+    so it's obvious where things broke.
+
 ## 0.1.4 — 2026-05-26
 
 - Fix stale image: `RUN git clone` was being cached by Docker, so rebuilds
