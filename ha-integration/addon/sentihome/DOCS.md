@@ -5,13 +5,13 @@ topology config schema. Field-level reference:
 
 ## Top-level options
 
-| Option         | Description                                                                                | Default             |
-| -------------- | ------------------------------------------------------------------------------------------ | ------------------- |
-| `profile`      | Deployment shape: `yellow_single_box`, `yellow_plus_inference`, or `distributed`           | `yellow_single_box` |
-| `household_id` | Stable identifier used in logs + metrics                                                   | `my_home`           |
-| `timezone`     | IANA tz name, e.g. `America/New_York`                                                      | `UTC`               |
-| `ha_token`     | Long-lived access token. Leave empty — Supervisor injects `SUPERVISOR_TOKEN` automatically | _empty_             |
-| `log_level`    | `DEBUG` / `INFO` / `WARNING` / `ERROR`                                                     | `INFO`              |
+| Option         | Description                                                                                                                                                                                                                                                                                                                    | Default             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| `profile`      | Deployment shape: `yellow_single_box`, `yellow_plus_inference`, or `distributed`                                                                                                                                                                                                                                               | `yellow_single_box` |
+| `household_id` | Stable identifier used in logs + metrics                                                                                                                                                                                                                                                                                       | `my_home`           |
+| `timezone`     | IANA tz name, e.g. `America/New_York`                                                                                                                                                                                                                                                                                          | `UTC`               |
+| `ha_token`     | **Leave empty in normal add-on use.** Supervisor injects `SUPERVISOR_TOKEN` automatically and that's what `http://supervisor/core` accepts. Long-lived access tokens from HA's user UI only work against HA Core directly — if you want to use one, ALSO change a `ha_url` override to e.g. `http://homeassistant.local:8123`. | _empty_             |
+| `log_level`    | `DEBUG` / `INFO` / `WARNING` / `ERROR`                                                                                                                                                                                                                                                                                         | `INFO`              |
 
 ## Nested sections
 

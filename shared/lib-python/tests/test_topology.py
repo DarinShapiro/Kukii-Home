@@ -223,6 +223,38 @@ def test_load_topology_layered_profile_then_user_then_env(tmp_path, monkeypatch)
     assert t.memory.rules_top_k == 77
 
 
+def test_supervisor_options_prefer_supervisor_token_over_long_lived_token(tmp_path, monkeypatch):
+    """v0.1.12 regression: a user-pasted long-lived token AGAINST the
+    Supervisor proxy URL gives 401. The mapper must use SUPERVISOR_TOKEN
+    when ha_url is the proxy, regardless of what's in options."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "supervisor_xyz")
+    opts = {
+        "profile": "yellow_single_box",
+        "ha_token": "user_pasted_long_lived_token_that_wont_work_here",
+    }
+    p = tmp_path / "options.json"
+    p.write_text(json.dumps(opts), encoding="utf-8")
+    t = load_topology(path=p, apply_env=False)
+    assert t.ha_agent.ha_url == "http://supervisor/core"
+    assert t.ha_agent.ha_token == "supervisor_xyz"  # NOT the user's token
+
+
+def test_supervisor_options_use_user_token_when_url_is_direct(tmp_path, monkeypatch):
+    """If the user points ha_url at HA Core directly, their long-lived
+    token IS valid and should be used in preference to SUPERVISOR_TOKEN."""
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "supervisor_xyz")
+    opts = {
+        "profile": "distributed",
+        "ha_url": "http://homeassistant.local:8123",
+        "ha_token": "user_pasted_long_lived_token",
+    }
+    p = tmp_path / "options.json"
+    p.write_text(json.dumps(opts), encoding="utf-8")
+    t = load_topology(path=p, apply_env=False)
+    assert t.ha_agent.ha_url == "http://homeassistant.local:8123"
+    assert t.ha_agent.ha_token == "user_pasted_long_lived_token"
+
+
 def test_load_topology_supervisor_options_json(tmp_path, monkeypatch):
     monkeypatch.setenv("SUPERVISOR_TOKEN", "supervisor_xyz")
     opts = {

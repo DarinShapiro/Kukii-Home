@@ -374,9 +374,24 @@ def _load_file(path: Path) -> dict[str, Any]:
 def _supervisor_options_to_topology(opts: dict[str, Any]) -> dict[str, Any]:
     """Map HA Supervisor add-on options.json → topology dict.
 
-    The add-on options schema is flat (HA's options UI is one-level); we
-    project it back into the topology sections here. See
-    docs/architecture/02-deployment-topologies.md for the full mapping.
+    Auth selection rule:
+      The Supervisor proxy (``http://supervisor/core``) only accepts the
+      ``SUPERVISOR_TOKEN`` env var that Supervisor injects automatically.
+      Long-lived access tokens from HA's user UI work ONLY against HA Core
+      directly (e.g. ``http://homeassistant.local:8123``). Mixing them
+      gives 401.
+
+      So:
+        ha_url == http://supervisor/core  →  always use SUPERVISOR_TOKEN
+                                              (ignore user-provided ha_token;
+                                              it can't work here anyway)
+        ha_url anything else              →  use user-provided ha_token
+                                              (long-lived access token)
+                                              and fall back to SUPERVISOR_TOKEN
+                                              only if empty
+
+    This lets a user paste a long-lived token in the add-on Configuration
+    tab IF they also override ha_url to a direct HA address.
     """
     out: dict[str, Any] = {"deployment": {}, "ha_agent": {}}
     if "profile" in opts:
@@ -385,13 +400,22 @@ def _supervisor_options_to_topology(opts: dict[str, Any]) -> dict[str, Any]:
         out["deployment"]["household_id"] = opts["household_id"]
     if "timezone" in opts:
         out["deployment"]["timezone"] = opts["timezone"]
-    # Supervisor injects SUPERVISOR_TOKEN; ha_url defaults to the proxy.
-    out["ha_agent"]["ha_url"] = opts.get("ha_url", "http://supervisor/core")
-    if "ha_token" in opts:
-        out["ha_agent"]["ha_token"] = opts["ha_token"]
-    elif token := os.environ.get("SUPERVISOR_TOKEN"):
-        out["ha_agent"]["ha_token"] = token
-    # Pass-through sections users can declare in add-on options.
+
+    ha_url = opts.get("ha_url", "http://supervisor/core")
+    out["ha_agent"]["ha_url"] = ha_url
+
+    is_supervisor_proxy = ha_url.rstrip("/") == "http://supervisor/core"
+    supervisor_token = os.environ.get("SUPERVISOR_TOKEN")
+    user_token = (opts.get("ha_token") or "").strip()
+
+    if is_supervisor_proxy and supervisor_token:
+        # The proxy only accepts SUPERVISOR_TOKEN; anything else 401s.
+        out["ha_agent"]["ha_token"] = supervisor_token
+    elif user_token:
+        out["ha_agent"]["ha_token"] = user_token
+    elif supervisor_token:
+        out["ha_agent"]["ha_token"] = supervisor_token
+
     for section in ("bus", "memory", "vlm_router", "notify"):
         if section in opts:
             out[section] = opts[section]

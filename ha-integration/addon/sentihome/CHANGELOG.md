@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.12 — 2026-05-26
+
+- Fix `401 Unauthorized` against `http://supervisor/core` after pasting a
+  long-lived access token in the Configuration tab.
+- Root cause: the Supervisor proxy only accepts the `SUPERVISOR_TOKEN`
+  env var that Supervisor injects automatically. Long-lived access tokens
+  from HA's user UI work against HA Core _directly_ (port 8123). Mixing
+  the two paths gives 401.
+- Fix in `topology._supervisor_options_to_topology`: when `ha_url` is the
+  Supervisor proxy AND `SUPERVISOR_TOKEN` is present in env, always use
+  the supervisor token — ignore whatever the user put in `ha_token`
+  (which couldn't work there anyway). When `ha_url` points at HA Core
+  directly, the user's long-lived token is used as before.
+- The status page now updates on the next 10s refresh once SUPERVISOR_TOKEN
+  takes over (no further user action needed).
+
+For most users: clear the `ha_token` field in the Configuration tab,
+restart the add-on, and SUPERVISOR_TOKEN auto-wires. To use a long-lived
+token instead, ALSO set `ha_url` to e.g. `http://homeassistant.local:8123`.
+
 ## 0.1.11 — 2026-05-26
 
 **Fix `s6-overlay-suexec: fatal: can only run as pid 1` restart loop.**
