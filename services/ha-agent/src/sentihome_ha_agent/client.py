@@ -108,6 +108,8 @@ class HAClient:
         )
         self._ws_connector = ws_connector or websockets.connect
         self._ws_task: asyncio.Task[None] | None = None
+        self._ws_active: Any | None = None  # live websocket inside the loop
+        self._ws_pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
         self._stop_event = asyncio.Event()
         self._ws_msg_id = 0
         self._handlers: list[StateChangeHandler] = []
@@ -174,29 +176,91 @@ class HAClient:
         return dict(self._state_cache)
 
     async def fetch_camera_snapshot(self, entity_id: str) -> bytes:
-        """Return the current frame for ``entity_id`` as JPEG bytes.
+        """Return the current frame for ``entity_id`` as image bytes.
 
-        Hits HA Core's ``/api/camera_proxy/{entity_id}`` endpoint, which
-        returns the most recent stream frame as image/jpeg. Auth comes
-        from the bearer token we configured on the http client.
+        Tries two paths in order:
 
-        Why this rather than ``camera.snapshot`` service:
+        1. **WebSocket `camera/get_image`** — uses HA's
+           ``async_camera_image()`` getter which most integrations
+           implement properly (Reolink, Frigate, generic). The image
+           is returned as base64 inside the WS response.
 
-          The service writes the file on HA Core's filesystem. HA Core
-          and the SentiHome add-on are separate containers with separate
-          ``/data`` mountpoints — so a file HA writes at ``/data/foo.jpg``
-          is NOT the same path SentiHome reads at ``/data/foo.jpg``. Plus
-          the service is gated by HA's ``allowlist_external_dirs``.
+        2. **REST `/api/camera_proxy/{entity_id}`** as a fallback —
+           proxies through HA Core but for some camera entities
+           (notably ONVIF-configured ones with broken still-image
+           URLs) returns HTML error pages instead of bytes.
 
-          camera_proxy avoids both problems: bytes come over HTTP, the
-          add-on writes them wherever it wants in its own filesystem.
+        We validate Content-Type on the REST fallback so we never
+        silently write a non-image as a `.jpg` on disk.
         """
+        # Path 1 — WebSocket get_image
+        try:
+            blob = await self._ws_get_camera_image(entity_id)
+            if blob is not None:
+                return blob
+        except HAClientError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "ha_client.ws_get_image_failed", entity_id=entity_id, error=str(e)
+            )
+
+        # Path 2 — REST camera_proxy fallback
         resp = await self._http.get(f"/api/camera_proxy/{entity_id}")
         if resp.status_code >= 400:
             raise HAClientError(
-                f"camera_proxy {entity_id} failed: HTTP {resp.status_code} {resp.text}"
+                f"camera_proxy {entity_id} failed: HTTP {resp.status_code} {resp.text[:200]}"
+            )
+        ctype = resp.headers.get("content-type", "")
+        if not ctype.startswith("image/"):
+            # HA proxied an HTML error page (e.g. ONVIF integration
+            # with broken still URL → camera's login HTML). Don't
+            # write garbage to disk.
+            preview = resp.text[:200].replace("\n", " ")
+            raise HAClientError(
+                f"camera_proxy {entity_id} returned content-type={ctype!r} "
+                f"(expected image/*) — first 200 chars: {preview!r}"
             )
         return resp.content
+
+    async def _ws_get_camera_image(self, entity_id: str) -> bytes | None:
+        """Send a ``camera/get_image`` command over the WebSocket and
+        decode the base64 image bytes from the response.
+
+        Returns None if the WebSocket isn't connected (so callers can
+        fall back to REST).
+        """
+        import base64
+
+        ws = self._ws_active
+        if ws is None:
+            return None
+        self._ws_msg_id += 1
+        msg_id = self._ws_msg_id
+        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        self._ws_pending[msg_id] = future
+        try:
+            await ws.send(
+                json.dumps(
+                    {
+                        "id": msg_id,
+                        "type": "camera/get_image",
+                        "entity_id": entity_id,
+                    }
+                )
+            )
+            response = await asyncio.wait_for(future, timeout=10.0)
+        finally:
+            self._ws_pending.pop(msg_id, None)
+
+        if not response.get("success"):
+            err = (response.get("error") or {}).get("message", str(response))
+            raise HAClientError(f"ws camera/get_image failed: {err}")
+        result = response.get("result") or {}
+        content_b64 = result.get("content")
+        if not content_b64:
+            return None
+        return base64.b64decode(content_b64)
 
     # ─── REST: service calls ───────────────────────────────────────
 
@@ -250,9 +314,18 @@ class HAClient:
                 async with self._ws_connector(ws_url) as ws:
                     await self._ws_authenticate(ws)
                     await self._ws_subscribe(ws)
+                    self._ws_active = ws
                     self._ready.set()
                     backoff = 1.0
-                    await self._ws_consume(ws)
+                    try:
+                        await self._ws_consume(ws)
+                    finally:
+                        self._ws_active = None
+                        # Fail any in-flight requests so callers don't hang.
+                        for fut in list(self._ws_pending.values()):
+                            if not fut.done():
+                                fut.set_exception(HAClientError("ws closed mid-request"))
+                        self._ws_pending.clear()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -301,7 +374,18 @@ class HAClient:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if msg.get("type") != "event":
+
+            # Route command responses (result with our id) to the
+            # pending Future for that request.
+            msg_type = msg.get("type")
+            msg_id = msg.get("id")
+            if msg_type == "result" and msg_id in self._ws_pending:
+                fut = self._ws_pending.pop(msg_id)
+                if not fut.done():
+                    fut.set_result(msg)
+                continue
+
+            if msg_type != "event":
                 continue
             event = msg.get("event") or {}
             if event.get("event_type") != "state_changed":
