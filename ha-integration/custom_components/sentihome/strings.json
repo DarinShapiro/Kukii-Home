@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to SentiHome",
+        "description": "Enter the host and port of your SentiHome add-on. Default port is 8765.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "poll_seconds": "Poll interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the SentiHome add-on at the given host:port. Is the add-on running?"
+    },
+    "abort": {
+      "already_configured": "This SentiHome instance is already configured."
+    }
+  }
+}
