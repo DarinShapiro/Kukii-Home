@@ -2,7 +2,7 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: SentiHome
-version: '0.1.2'
+version: '0.1.3'
 slug: sentihome
 description: AI-powered home security and presence understanding
 url: https://github.com/DarinShapiro/SentiHome
@@ -31,9 +31,14 @@ map:
   - share:rw
 
 ports:
-  '8001/tcp': 8001 # SentiHome operator dashboard
+  '8765/tcp': 8765 # ha-agent HTTP API + status page (Web UI)
 ports_description:
-  '8001/tcp': SentiHome operator dashboard
+  '8765/tcp': SentiHome ha-agent API + status page
+
+# Tells Supervisor to surface an "OPEN WEB UI" button on the add-on info
+# page. [HOST] expands to the HA host; [PORT:8765] resolves to whatever
+# port the user mapped 8765/tcp to (defaults to 8765 above).
+webui: http://[HOST]:[PORT:8765]/
 
 startup: services
 boot: auto

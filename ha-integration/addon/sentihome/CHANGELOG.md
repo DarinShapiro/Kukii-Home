@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.3 — 2026-05-26
+
+- The add-on now has a Web UI (Supervisor surfaces an "OPEN WEB UI"
+  button). The ha-agent service hosts an aiohttp server on port 8765
+  serving a minimal HTML status page showing HA connection state,
+  visible entity count, recent alerts, and capability domains. Also
+  exposes the JSON API the custom integration polls (`/healthz`,
+  `/snapshot`, `/capabilities`, `/recent_alerts`, `/service`,
+  `/acknowledge_alert`).
+- Replaced the `NotImplementedError`-on-startup stubs in all six service
+  entry points with topology-loading idle loops. Previously each service
+  crashed at startup and s6 restart-looped them indefinitely; now they
+  cleanly idle until the bus runtime wires in (Epic 10+).
+- Added `aiohttp` to the ha-agent dependency list.
+- Bumped declared port from 8001 → 8765 (the actual port the API binds
+  to) and added the `webui:` directive.
+
 ## 0.1.2 — 2026-05-26
 
 - Fix install failure on ARM64 hosts (HA Yellow, Raspberry Pi, etc.):

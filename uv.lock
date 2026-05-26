@@ -1948,6 +1948,7 @@ name = "sentihome-ha-agent"
 version = "0.1.0"
 source = { editable = "services/ha-agent" }
 dependencies = [
+    { name = "aiohttp" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "sentihome-shared" },
@@ -1956,6 +1957,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.10.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "sentihome-shared", editable = "shared/lib-python" },
