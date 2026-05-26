@@ -70,6 +70,32 @@ class CapabilitySummary:
     sample_entities: list[str] = field(default_factory=list)
 
 
+@dataclass
+class HACameraEntity:
+    """An HA camera the user could point a SentiHome adapter at."""
+
+    camera_entity: str
+    """e.g. ``camera.pool_cam``."""
+    friendly_name: str | None
+    state: str
+    """``idle`` / ``recording`` / ``streaming`` etc."""
+    motion_candidates: list[str] = field(default_factory=list)
+    """``binary_sensor.*`` entities heuristically matched as motion / AI
+    triggers for this camera (substring match on the camera's id-suffix
+    + ``motion`` / ``person`` / ``vehicle`` / ``animal`` keywords)."""
+
+
+_MOTION_KEYWORDS = (
+    "motion",
+    "person",
+    "vehicle",
+    "animal",
+    "package",
+    "pet",
+    "occupancy",
+)
+
+
 class HATools:
     """The MCP-shaped surface SentiHome services interact with."""
 
@@ -124,6 +150,48 @@ class HATools:
             for d, entities in buckets.items()
             if entities
         ]
+
+    async def list_ha_cameras(self) -> list[HACameraEntity]:
+        """Return every ``camera.*`` entity HA has, with heuristically-matched
+        motion / AI binary sensors. Used by the Web UI's "HA cameras
+        detected" card so users can see what's available before configuring
+        a SentiHome adapter.
+
+        Heuristic: for each ``camera.X``, find all ``binary_sensor.Y`` where
+        ``Y`` starts with the camera's id-suffix AND ``Y`` contains one of
+        the motion keywords (motion / person / vehicle / animal / package /
+        pet / occupancy).
+        """
+        states = await self._client.get_states()
+        cameras: list[HAState] = []
+        binary_sensors: list[HAState] = []
+        for s in states:
+            domain = s.entity_id.split(".", 1)[0]
+            if domain == "camera":
+                cameras.append(s)
+            elif domain == "binary_sensor":
+                binary_sensors.append(s)
+
+        results: list[HACameraEntity] = []
+        for cam in cameras:
+            cam_slug = cam.entity_id.split(".", 1)[1]  # e.g. "pool_cam"
+            motion: list[str] = []
+            for bs in binary_sensors:
+                bs_slug = bs.entity_id.split(".", 1)[1]
+                if not bs_slug.startswith(cam_slug):
+                    continue
+                if not any(kw in bs_slug for kw in _MOTION_KEYWORDS):
+                    continue
+                motion.append(bs.entity_id)
+            results.append(
+                HACameraEntity(
+                    camera_entity=cam.entity_id,
+                    friendly_name=(cam.attributes or {}).get("friendly_name"),
+                    state=cam.state,
+                    motion_candidates=motion,
+                )
+            )
+        return results
 
     async def get_calendar_events(
         self, calendar_entity: str, *, start: datetime, end: datetime

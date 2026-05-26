@@ -135,6 +135,7 @@ class AdapterConfig(_StrictModel):
     """Unique identifier used in logs + metrics."""
     kind: Literal[
         "rtsp-direct",
+        "ha-camera",
         "agent-dvr",
         "frigate",
         "blueiris",
@@ -148,6 +149,16 @@ class AdapterConfig(_StrictModel):
     mqtt_host: str | None = None
     streams: list[dict[str, Any]] = Field(default_factory=list)
     """For rtsp-direct: per-camera ``{id, rtsp_url, ...}`` dicts."""
+
+    # ─── ha-camera fields ─────────────────────────────────────────
+    camera_entity: str | None = None
+    """For ha-camera: HA camera entity id, e.g. ``camera.pool_cam``."""
+    motion_entities: list[str] = Field(default_factory=list)
+    """For ha-camera: list of ``binary_sensor.*`` entities whose
+    off→on transitions trigger a snapshot + alert. Typically the camera's
+    onboard-AI motion / person / vehicle sensors."""
+    snapshot_cooldown_seconds: float = 30.0
+    """For ha-camera: minimum seconds between snapshots from this camera."""
 
 
 class Topology(_StrictModel):

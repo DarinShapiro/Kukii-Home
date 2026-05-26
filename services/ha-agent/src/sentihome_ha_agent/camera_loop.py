@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 if TYPE_CHECKING:
+    from sentihome_ha_agent.client import HAClient, HAState
     from sentihome_ha_agent.http_api import AlertLog
 
 logger = structlog.get_logger(__name__)
@@ -227,4 +228,202 @@ def build_camera_loops_from_topology(
                     registry=registry,
                 )
             )
+    return loops
+
+
+# ─────────────────────────────────────────────────────────────────────
+# HACameraLoop — ride on HA's camera integration
+# ─────────────────────────────────────────────────────────────────────
+
+
+class HACameraLoop:
+    """One HA camera entity → motion sensor subscribed → snapshot on event.
+
+    No RTSP, no MOG2, no per-frame CPU. We let HA's existing camera
+    integration handle the stream, then subscribe to the motion / AI
+    binary sensors that camera exposes. On off→on transition:
+
+      1. Call ``camera.snapshot`` HA service to capture the frame
+      2. Record an alert in :class:`AlertLog` with snapshot URL +
+         the sensor that fired (so the alert headline can say
+         "Person detected at pool cam" — using HA's onboard AI's
+         classification, not just generic "motion")
+      3. Debounce per the configured ``snapshot_cooldown_seconds``
+
+    Designed to be the preferred adapter for any camera HA already
+    manages. :class:`CameraLoop` (RTSP-direct) remains for cameras HA
+    doesn't see.
+    """
+
+    def __init__(
+        self,
+        *,
+        camera_id: str,
+        camera_entity: str,
+        motion_entities: list[str],
+        camera_name: str | None,
+        client: HAClient,
+        alert_log: AlertLog,
+        registry: CameraLoopRegistry,
+        cooldown_seconds: float = 30.0,
+        snapshot_dir: str = "/data/sentihome/snapshots",
+    ) -> None:
+        self._camera_id = camera_id
+        self._camera_entity = camera_entity
+        self._motion_entities = set(motion_entities)
+        self._camera_name = camera_name or camera_entity
+        self._client = client
+        self._alert_log = alert_log
+        self._cooldown_seconds = cooldown_seconds
+        self._snapshot_dir = snapshot_dir
+        self._status = CameraStreamStatus(camera_id=camera_id, rtsp_url=camera_entity)
+        self._status.state = "subscribed"
+        registry.register(self._status)
+        self._last_snapshot_at = 0.0
+        self._stop_event = asyncio.Event()
+
+    async def run(self) -> None:
+        """Subscribe to motion-sensor state changes for the lifetime of the
+        add-on. Self-heals via :class:`HAClient`'s own reconnect logic."""
+        from pathlib import Path
+
+        # mkdir is sync but extremely fast; not worth pulling in anyio.path
+        Path(self._snapshot_dir).mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
+        self._client.on_state_change(self._on_state_change)
+        logger.info(
+            "ha_camera_loop.subscribed",
+            camera=self._camera_entity,
+            motion_entities=sorted(self._motion_entities),
+        )
+        # Hold the task alive — HAClient's WebSocket loop does the work.
+        await self._stop_event.wait()
+        self._status.state = "stopped"
+
+    async def stop(self) -> None:
+        self._stop_event.set()
+
+    async def _on_state_change(self, new: HAState, old: HAState | None) -> None:
+        if new.entity_id not in self._motion_entities:
+            return
+        # Only care about off → on (or unknown → on) transitions.
+        if new.state != "on":
+            return
+        if old is not None and old.state == "on":
+            return
+        # Debounce.
+        now = time.monotonic()
+        if now - self._last_snapshot_at < self._cooldown_seconds:
+            logger.debug(
+                "ha_camera_loop.debounced",
+                camera=self._camera_entity,
+                sensor=new.entity_id,
+            )
+            return
+        self._last_snapshot_at = now
+        await self._capture_and_alert(triggering_sensor=new.entity_id, sensor_state=new)
+
+    async def _capture_and_alert(self, *, triggering_sensor: str, sensor_state: HAState) -> None:
+        # Build a unique snapshot filename. /data is persistent inside the
+        # add-on; /share would also work for HA-side access.
+        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+        snapshot_filename = f"{self._camera_id}_{ts}_{uuid.uuid4().hex[:6]}.jpg"
+        snapshot_path = f"{self._snapshot_dir}/{snapshot_filename}"
+
+        try:
+            await self._client.call_service(
+                "camera",
+                "snapshot",
+                entity_id=self._camera_entity,
+                data={"filename": snapshot_path},
+            )
+        except Exception as e:
+            logger.warning(
+                "ha_camera_loop.snapshot_failed",
+                camera=self._camera_entity,
+                error=str(e),
+            )
+
+        self._status.motion_events += 1
+        self._status.last_motion_at = datetime.now(UTC)
+        self._status.frames_read += 1
+        self._status.last_frame_at = self._status.last_motion_at
+
+        sensor_kind = _kind_from_sensor(triggering_sensor)
+        headline = (
+            f"{sensor_kind.capitalize()} at {self._camera_name}"
+            if sensor_kind
+            else f"Motion at {self._camera_name}"
+        )
+
+        self._alert_log.record(
+            {
+                "alert_id": f"ha_motion_{self._camera_id}_{uuid.uuid4().hex[:8]}",
+                "headline": headline,
+                "tier": "tier_1_in_app",
+                "confidence": 0.85,  # HA AI is reasonably reliable
+                "rules_fired": [],
+                "evidence_ref": snapshot_path,
+                "camera_id": self._camera_id,
+                "camera_entity": self._camera_entity,
+                "triggering_sensor": triggering_sensor,
+                "sensor_classification": sensor_kind,
+                "ha_sensor_attributes": sensor_state.attributes,
+                "source": "ha_camera_event",
+            }
+        )
+        logger.info(
+            "ha_camera_loop.motion_recorded",
+            camera=self._camera_entity,
+            sensor=triggering_sensor,
+            kind=sensor_kind,
+            snapshot=snapshot_path,
+        )
+
+
+def _kind_from_sensor(entity_id: str) -> str | None:
+    """Heuristically extract the AI classification from a motion sensor's id.
+
+    ``binary_sensor.pool_cam_person`` → ``person``
+    ``binary_sensor.pool_cam_motion`` → ``motion``
+    ``binary_sensor.front_yard_vehicle`` → ``vehicle``
+    """
+    eid = entity_id.lower()
+    for kw in ("person", "vehicle", "animal", "package", "pet"):
+        if kw in eid:
+            return kw
+    if "motion" in eid:
+        return "motion"
+    return None
+
+
+def build_ha_camera_loops_from_topology(
+    topology, *, client: HAClient, alert_log: AlertLog, registry: CameraLoopRegistry
+) -> list[HACameraLoop]:
+    """Scan topology.adapters for `ha-camera` entries → :class:`HACameraLoop`s."""
+    loops: list[HACameraLoop] = []
+    for adapter in getattr(topology, "adapters", []) or []:
+        if adapter.kind != "ha-camera":
+            continue
+        if not adapter.camera_entity:
+            logger.warning("ha_camera_loop.skipping_no_camera_entity", adapter=adapter.name)
+            continue
+        if not adapter.motion_entities:
+            logger.warning(
+                "ha_camera_loop.skipping_no_motion_entities",
+                adapter=adapter.name,
+                camera=adapter.camera_entity,
+            )
+            continue
+        loops.append(
+            HACameraLoop(
+                camera_id=adapter.name,
+                camera_entity=adapter.camera_entity,
+                motion_entities=adapter.motion_entities,
+                camera_name=adapter.name,
+                client=client,
+                alert_log=alert_log,
+                registry=registry,
+                cooldown_seconds=adapter.snapshot_cooldown_seconds,
+            )
+        )
     return loops

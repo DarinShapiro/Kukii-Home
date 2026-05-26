@@ -26,7 +26,9 @@ from aiohttp import web
 from sentihome_ha_agent.camera_loop import (
     CameraLoop,
     CameraLoopRegistry,
+    HACameraLoop,
     build_camera_loops_from_topology,
+    build_ha_camera_loops_from_topology,
 )
 from sentihome_ha_agent.client import HAClient, HAClientSettings
 from sentihome_ha_agent.config import HAAgentSettings
@@ -59,6 +61,8 @@ class BootState:
     ha_url: str = "(not loaded)"
     camera_registry: CameraLoopRegistry = field(default_factory=CameraLoopRegistry)
     camera_loops: list[CameraLoop] = field(default_factory=list)
+    ha_camera_loops: list[HACameraLoop] = field(default_factory=list)
+    topology: Any | None = None
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -93,6 +97,7 @@ _STATUS_PAGE = """<!doctype html>
 <p class="muted">v__VERSION__ &middot; stage: <code>__STAGE__</code> &middot; auto-refresh every 10 s</p>
 
 __TOPOLOGY_CARD__
+__HA_CAMERAS_CARD__
 __CAMERAS_CARD__
 __HA_CARD__
 __ALERTS_CARD__
@@ -191,6 +196,53 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         f"<p>{caps_html}</p></div>"
     )
 
+    # ─── HA cameras detected card (read-only discovery) ───────────
+    # Shows every camera HA already knows about, with heuristically-matched
+    # motion sensors. User pastes the camera_entity + motion_candidates
+    # into the add-on Configuration to wire SentiHome to it.
+    ha_cameras_card = '<div class="card"><h3>HA cameras detected</h3>'
+    if boot.tools is None:
+        ha_cameras_card += '<p class="muted">Connect to HA first (see card below).</p></div>'
+    else:
+        try:
+            ha_cams = await boot.tools.list_ha_cameras()
+        except Exception as e:
+            ha_cams = []
+            ha_cameras_card += f'<p class="bad">Discovery failed: {e}</p>'
+        if not ha_cams:
+            ha_cameras_card += (
+                '<p class="muted">HA has no camera.* entities. Add a camera '
+                "via an HA integration (Generic Camera, ONVIF, Reolink, etc.) "
+                "and refresh.</p></div>"
+            )
+        else:
+            rows = []
+            for c in ha_cams:
+                name = c.friendly_name or c.camera_entity
+                motion_html = (
+                    ", ".join(f"<code>{m}</code>" for m in c.motion_candidates)
+                    if c.motion_candidates
+                    else '<span class="muted">none detected</span>'
+                )
+                rows.append(
+                    f"<tr><td><code>{c.camera_entity}</code><br/>"
+                    f'<span class="muted">{name}</span></td>'
+                    f"<td>{c.state}</td>"
+                    f"<td>{motion_html}</td></tr>"
+                )
+            ha_cameras_card += (
+                "<table><tr><th>Camera entity</th><th>State</th>"
+                "<th>Motion / AI sensors</th></tr>" + "".join(rows) + "</table>"
+                '<p class="muted">To wire one of these into SentiHome, paste '
+                "into the add-on Configuration:</p>"
+                "<pre>adapters:\n"
+                "  - name: my-cam\n"
+                "    kind: ha-camera\n"
+                "    camera_entity: camera.YOUR_CAMERA\n"
+                "    motion_entities:\n"
+                "      - binary_sensor.YOUR_MOTION_SENSOR</pre></div>"
+            )
+
     # ─── cameras card ──────────────────────────────────────────────
     cam_statuses = boot.camera_registry.all()
     if not cam_statuses:
@@ -207,28 +259,34 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         for cs in cam_statuses:
             state_class = {
                 "running": "ok",
+                "subscribed": "ok",
                 "starting": "muted",
                 "opening": "muted",
                 "error": "bad",
                 "stopped": "muted",
             }.get(cs.state, "muted")
-            last_frame = cs.last_frame_at.strftime("%H:%M:%S") if cs.last_frame_at else "—"
             last_motion = cs.last_motion_at.strftime("%H:%M:%S") if cs.last_motion_at else "—"
             detail = f"<br/><span class='muted'>{cs.last_error}</span>" if cs.last_error else ""
+            # Inline snapshot thumbnail when one exists for this camera.
+            # Cache-bust on motion count so a new snapshot replaces the old
+            # without manual reload.
+            thumb_html = (
+                f"<img src='/cameras/{cs.camera_id}/snapshot?v={cs.motion_events}' "
+                "style='max-width: 160px; max-height: 90px; border-radius: 4px;'"
+                " onerror=\"this.style.display='none'\"/>"
+                if cs.motion_events > 0
+                else '<span class="muted">no snapshot yet</span>'
+            )
             rows.append(
-                f"<tr><td>{cs.camera_id}</td>"
+                f"<tr><td>{cs.camera_id}<br/>{thumb_html}</td>"
                 f"<td><span class='{state_class}'>{cs.state}</span>{detail}</td>"
-                f"<td>{cs.frames_read}</td>"
                 f"<td>{cs.motion_events}</td>"
-                f"<td>{last_frame}</td>"
                 f"<td>{last_motion}</td></tr>"
             )
         cameras_card = (
-            '<div class="card"><h3>Cameras</h3>'
-            "<table><tr><th>ID</th><th>State</th><th>Frames</th>"
-            "<th>Motion</th><th>Last frame</th><th>Last motion</th></tr>"
-            + "".join(rows)
-            + "</table></div>"
+            '<div class="card"><h3>Cameras configured for SentiHome</h3>'
+            "<table><tr><th>ID</th><th>State</th><th>Motion events</th>"
+            "<th>Last motion</th></tr>" + "".join(rows) + "</table></div>"
         )
 
     return (
@@ -239,6 +297,7 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         .replace("__ALERTS_CARD__", alerts_card)
         .replace("__CAPABILITIES_CARD__", caps_card)
         .replace("__CAMERAS_CARD__", cameras_card)
+        .replace("__HA_CAMERAS_CARD__", ha_cameras_card)
     )
 
 
@@ -248,6 +307,25 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     async def status_page(_request: web.Request) -> web.Response:
         body = await _render_status(boot, alert_log)
         return web.Response(text=body, content_type="text/html")
+
+    async def snapshot_for_camera(request: web.Request) -> web.Response:
+        """Return the latest snapshot captured for ``camera_id``.
+
+        File path is taken from the most recent alert whose
+        ``camera_id`` matches and whose ``evidence_ref`` is set. This
+        lets the Web UI embed inline thumbnails per camera without us
+        tracking snapshot state separately.
+        """
+        cam_id = request.match_info["camera_id"]
+        recent = alert_log.recent(50)
+        for alert in reversed(recent):
+            if alert.get("camera_id") == cam_id and alert.get("evidence_ref"):
+                path = alert["evidence_ref"]
+                try:
+                    return web.FileResponse(path)
+                except FileNotFoundError:
+                    return web.Response(status=404, text=f"snapshot file missing: {path}")
+        return web.Response(status=404, text=f"no snapshots for {cam_id}")
 
     async def api_get(request: web.Request) -> web.Response:
         body: dict = dict(request.rel_url.query)
@@ -268,7 +346,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
 
     app = web.Application()
     app.router.add_get("/", status_page)
-    for path in ("/healthz", "/snapshot", "/capabilities", "/recent_alerts"):
+    app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
+    for path in ("/healthz", "/snapshot", "/capabilities", "/recent_alerts", "/ha_cameras"):
         app.router.add_get(path, api_get)
     for path in ("/service", "/acknowledge_alert"):
         app.router.add_post(path, api_post)
@@ -282,6 +361,7 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
         from sentihome_shared.topology import load_topology
 
         topology = load_topology()
+        boot.topology = topology
         boot.topology_summary = {
             "profile": topology.deployment.profile,
             "household_id": topology.deployment.household_id,
@@ -328,6 +408,27 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
         boot.tools = HATools(client)
         boot.stage = "ha_connected"
         logger.info("ha_agent.connected", ha_url=boot.ha_url)
+
+        # ha-camera loops need the live HAClient — spawn them now.
+        ha_loops = build_ha_camera_loops_from_topology(
+            boot.topology,
+            client=client,
+            alert_log=alert_log,
+            registry=boot.camera_registry,
+        )
+        boot.ha_camera_loops = ha_loops
+        for ha_loop in ha_loops:
+            ha_task = asyncio.create_task(
+                ha_loop.run(),
+                name=f"ha_camera_{ha_loop._camera_id}",
+            )
+            ha_task.add_done_callback(
+                lambda t: (
+                    logger.warning("ha_camera_loop.task_exception", error=str(t.exception()))
+                    if t.exception()
+                    else None
+                )
+            )
     except Exception as e:
         boot.ha_error = str(e)
         boot.stage = "ha_failed"
@@ -368,6 +469,8 @@ async def _run() -> None:
     finally:
         for loop in boot.camera_loops:
             await loop.stop()
+        for ha_loop in boot.ha_camera_loops:
+            await ha_loop.stop()
         await runner.cleanup()
         if boot.client is not None:
             await boot.client.stop()

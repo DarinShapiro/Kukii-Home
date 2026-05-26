@@ -82,6 +82,20 @@ class HAAgentAPI:
                     ]
                 }
 
+            if method == "GET" and path == "/ha_cameras":
+                cams = await self._tools.list_ha_cameras()
+                return 200, {
+                    "cameras": [
+                        {
+                            "camera_entity": c.camera_entity,
+                            "friendly_name": c.friendly_name,
+                            "state": c.state,
+                            "motion_candidates": c.motion_candidates,
+                        }
+                        for c in cams
+                    ]
+                }
+
             if method == "POST" and path == "/service":
                 domain = body.get("domain")
                 service = body.get("service")

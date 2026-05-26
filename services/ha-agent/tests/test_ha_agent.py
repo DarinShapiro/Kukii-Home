@@ -204,6 +204,100 @@ async def test_tools_list_capabilities_buckets_by_domain():
     assert "sensor" not in by_domain
 
 
+async def test_tools_list_ha_cameras_matches_motion_sensors_by_substring():
+    """v0.3.0: HATools.list_ha_cameras pairs each camera.* with its
+    binary_sensor.* siblings whose ids contain motion keywords."""
+    routes = {
+        ("GET", "/api/states"): httpx.Response(
+            200,
+            json=[
+                {
+                    "entity_id": "camera.pool_cam",
+                    "state": "idle",
+                    "attributes": {"friendly_name": "Dahua Pool Cam"},
+                },
+                {
+                    "entity_id": "binary_sensor.pool_cam_motion",
+                    "state": "off",
+                    "attributes": {},
+                },
+                {
+                    "entity_id": "binary_sensor.pool_cam_person",
+                    "state": "off",
+                    "attributes": {},
+                },
+                {
+                    "entity_id": "binary_sensor.pool_cam_zone_1",  # NOT motion keyword
+                    "state": "off",
+                    "attributes": {},
+                },
+                {
+                    "entity_id": "camera.front_yard_south",
+                    "state": "idle",
+                    "attributes": {"friendly_name": "Front Yard South"},
+                },
+                {
+                    "entity_id": "binary_sensor.front_yard_south_motion",
+                    "state": "off",
+                    "attributes": {},
+                },
+            ],
+        )
+    }
+    client = _client_with_mocks(routes)
+    tools = HATools(client)
+    cams = await tools.list_ha_cameras()
+    by_entity = {c.camera_entity: c for c in cams}
+    assert set(by_entity) == {"camera.pool_cam", "camera.front_yard_south"}
+    assert by_entity["camera.pool_cam"].friendly_name == "Dahua Pool Cam"
+    assert set(by_entity["camera.pool_cam"].motion_candidates) == {
+        "binary_sensor.pool_cam_motion",
+        "binary_sensor.pool_cam_person",
+    }
+    # Not matched: pool_cam_zone_1 lacks a motion keyword
+    assert "binary_sensor.pool_cam_zone_1" not in by_entity["camera.pool_cam"].motion_candidates
+    # Front Yard South should not have the Pool Cam sensors leaking in
+    assert by_entity["camera.front_yard_south"].motion_candidates == [
+        "binary_sensor.front_yard_south_motion"
+    ]
+
+
+async def test_tools_list_ha_cameras_empty_when_no_cameras():
+    routes = {
+        ("GET", "/api/states"): httpx.Response(
+            200, json=[{"entity_id": "light.kitchen", "state": "on"}]
+        )
+    }
+    client = _client_with_mocks(routes)
+    tools = HATools(client)
+    cams = await tools.list_ha_cameras()
+    assert cams == []
+
+
+def test_topology_accepts_ha_camera_adapter_kind():
+    """v0.3.0: AdapterConfig now accepts kind='ha-camera' with
+    camera_entity + motion_entities + snapshot_cooldown_seconds."""
+    from sentihome_shared.topology import AdapterConfig, Topology
+
+    cfg = AdapterConfig(
+        name="pool-cam",
+        kind="ha-camera",
+        camera_entity="camera.pool_cam",
+        motion_entities=[
+            "binary_sensor.pool_cam_motion",
+            "binary_sensor.pool_cam_person",
+        ],
+        snapshot_cooldown_seconds=15.0,
+    )
+    assert cfg.kind == "ha-camera"
+    assert cfg.camera_entity == "camera.pool_cam"
+    assert len(cfg.motion_entities) == 2
+    assert cfg.snapshot_cooldown_seconds == 15.0
+    # And confirm Topology.adapters accepts it
+    t = Topology(adapters=[cfg])
+    assert t.adapters[0].kind == "ha-camera"
+
+
 async def test_tools_get_changes_filters_by_timestamp():
     routes = {
         ("GET", "/api/states"): httpx.Response(

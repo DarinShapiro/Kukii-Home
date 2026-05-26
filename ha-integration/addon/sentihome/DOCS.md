@@ -13,6 +13,45 @@ topology config schema. Field-level reference:
 | `ha_token`     | **Leave empty in normal add-on use.** Supervisor injects `SUPERVISOR_TOKEN` automatically and that's what `http://supervisor/core` accepts. Long-lived access tokens from HA's user UI only work against HA Core directly — if you want to use one, ALSO change a `ha_url` override to e.g. `http://homeassistant.local:8123`. | _empty_             |
 | `log_level`    | `DEBUG` / `INFO` / `WARNING` / `ERROR`                                                                                                                                                                                                                                                                                         | `INFO`              |
 
+## Configuring a camera
+
+Two ways:
+
+### Option A — `ha-camera` (preferred when the camera is already in HA)
+
+```yaml
+adapters:
+  - name: pool-cam
+    kind: ha-camera
+    camera_entity: camera.pool_cam
+    motion_entities:
+      - binary_sensor.pool_cam_motion
+      - binary_sensor.pool_cam_person
+    snapshot_cooldown_seconds: 30
+```
+
+SentiHome rides on HA's existing camera integration: subscribes to the
+listed motion / AI sensors, snapshots via `camera.snapshot` service on
+trigger, surfaces alerts in the Web UI. No RTSP credentials in topology.
+
+To find your camera's entity ids: open the Web UI status page and read
+the **"HA cameras detected"** card — it lists everything HA exposes, with
+heuristically-matched motion sensors. Copy from there.
+
+### Option B — `rtsp-direct` (cameras HA doesn't manage)
+
+```yaml
+adapters:
+  - name: front-cam
+    kind: rtsp-direct
+    streams:
+      - id: cam_front
+        rtsp_url: rtsp://USER:PASS@192.168.1.50:554/stream
+```
+
+SentiHome pulls the RTSP stream itself, runs MOG2 motion detection. Use
+when the camera isn't in HA or doesn't expose motion events to HA.
+
 ## Nested sections
 
 The `bus`, `memory`, `vlm_router`, `notify`, and `adapters` keys accept

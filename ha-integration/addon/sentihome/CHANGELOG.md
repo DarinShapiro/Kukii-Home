@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.3.0 — 2026-05-27
+
+**Ride on HA's camera integration instead of duplicating it.** New
+`ha-camera` adapter kind that subscribes to a camera's motion / AI
+binary sensors and snapshots on event — no RTSP credentials in topology,
+no MOG2 false positives, no per-frame CPU.
+
+### Web UI
+
+- **"HA cameras detected"** card on the status page lists every
+  `camera.*` entity HA exposes, with heuristically-matched motion
+  sensors (`binary_sensor.<cam>_motion`, `binary_sensor.<cam>_person`,
+  etc.) — so you can see what's available before configuring anything.
+  Card includes a ready-to-paste YAML snippet.
+- **Cameras** card (previously "no cameras configured") now renders
+  inline snapshot thumbnails per camera, cache-busted on each new
+  motion event. Subscribed adapters show `state=subscribed` instead
+  of just `running`.
+
+### New adapter kind: `ha-camera`
+
+Paste into the add-on Configuration tab:
+
+```yaml
+adapters:
+  - name: pool-cam
+    kind: ha-camera
+    camera_entity: camera.pool_cam
+    motion_entities:
+      - binary_sensor.pool_cam_motion
+      - binary_sensor.pool_cam_person # Reolink/Dahua AI classification
+      - binary_sensor.pool_cam_vehicle
+    snapshot_cooldown_seconds: 30
+```
+
+Pipeline per camera:
+
+1. ha-agent subscribes to state-changes on the listed motion entities
+2. On `off → on` transition: call `camera.snapshot` HA service →
+   write to `/data/sentihome/snapshots/<camera>_<ts>.jpg`
+3. Record alert in `AlertLog` with headline derived from the sensor's
+   AI classification ("Person at pool cam", not just "Motion at pool cam")
+4. Web UI shows the snapshot as an inline thumbnail in the Cameras card
+
+### New endpoints
+
+- `GET /ha_cameras` — list HA's camera + motion entities (JSON)
+- `GET /cameras/<id>/snapshot` — latest captured snapshot bytes (jpg)
+
+### Topology schema
+
+`AdapterConfig` now accepts:
+
+- `kind: "ha-camera"` (added to the Literal type)
+- `camera_entity: str | None`
+- `motion_entities: list[str]`
+- `snapshot_cooldown_seconds: float = 30.0`
+
+### Migration
+
+The `rtsp-direct` adapter still works unchanged. Use `ha-camera` whenever
+the camera is already in HA — significantly less config, no creds in YAML,
+benefits from any AI classification the camera or its HA integration
+provides.
+
 ## 0.2.0 — 2026-05-26
 
 **First end-to-end runtime: cameras feed in, motion events surface in the
