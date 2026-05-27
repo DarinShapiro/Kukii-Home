@@ -222,6 +222,47 @@ class HATools:
             if entities
         ]
 
+    async def find_motion_switches(self, camera_entity: str) -> list[dict[str, str]]:
+        """Return HA ``switch.*motion*`` entities that belong to a camera.
+
+        Uses the same token-overlap heuristic as
+        :meth:`list_ha_cameras` motion matching: a switch is a match
+        when its slug shares at least one meaningful token with the
+        camera slug AND its name contains ``motion`` or ``detection``.
+
+        Returned list of ``{entity_id, friendly_name, state}`` is
+        sorted alphabetically for deterministic UI rendering. State
+        is the live state ("on" / "off" / "unavailable" / etc.).
+
+        Used by v0.3.16's per-device card to surface a Turn-on button
+        when the camera's HA motion-detection switch is off (common
+        misconfig — sensors don't fire if the parent switch is off).
+        """
+        slug = camera_entity.removeprefix("camera.")
+        cam_tokens = _meaningful_tokens(slug)
+        if not cam_tokens:
+            return []
+        states = await self._client.get_states()
+        matches: list[dict[str, str]] = []
+        for s in states:
+            if not s.entity_id.startswith("switch."):
+                continue
+            eid_lower = s.entity_id.lower()
+            if "motion" not in eid_lower and "detection" not in eid_lower:
+                continue
+            switch_tokens = _meaningful_tokens(s.entity_id.removeprefix("switch."))
+            if not (switch_tokens & cam_tokens):
+                continue
+            matches.append(
+                {
+                    "entity_id": s.entity_id,
+                    "friendly_name": s.attributes.get("friendly_name", "") or s.entity_id,
+                    "state": s.state,
+                }
+            )
+        matches.sort(key=lambda m: m["entity_id"])
+        return matches
+
     async def list_notify_services(self) -> list[str]:
         """Return every ``notify.*`` service HA exposes, sorted.
 

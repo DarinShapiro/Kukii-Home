@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.16 — 2026-05-27
+
+**Per-device motion-switch toggles + one-click fallback to generic
+motion alarm.**
+
+Two related diagnostics surfaces on the HA cameras card, both
+addressing the same class of "alerts aren't firing" misconfig:
+
+- **HA motion-detection switch is off** → orange banner with a
+  Turn-on button. Heuristic match: any `switch.*motion*` /
+  `switch.*detection*` entity sharing the camera's device tokens.
+  Common Dahua + ONVIF misconfig: the parent switch is off, so
+  none of the `binary_sensor.*motion*` ever transitions on.
+  Click → POST `/discovery/switch_toggle` → HA `switch.turn_on` →
+  reconcile → the next render shows the switch on (banner gone).
+- **AI sensors picked but silent + a generic motion_alarm
+  exists** → blue banner with a "Use generic motion alarm"
+  button. One-click fallback for cameras whose AI plan isn't
+  configured (Dahua Smart Plan trap and equivalents). Click →
+  POST `/discovery/use_generic_motion` → motion override
+  persisted → loop restarts subscribed to the alarm sensor.
+  Noisier than AI (fires on leaves / shadows / pool ripples)
+  but recovers the alert path without camera-side setup.
+
+New backend:
+
+- `HATools.find_motion_switches(camera_entity)` — token-overlap
+  heuristic over HA's switch.* entities.
+- `DiscoveryDecision.motion_switches` (list of switch states)
+  populated by `_reconcile_discovery` on every reconcile.
+- `DiscoveryDecision.suggest_generic_motion` (entity id of a
+  matching motion_alarm when one's available and AI sensors are
+  currently picked).
+- Two new POST endpoints (`/discovery/switch_toggle` +
+  `/discovery/use_generic_motion`).
+
+Heuristic detail: the AI/fallback suggestion only fires when
+EVERY currently-picked motion entity is AI-classified — if the
+user already overrode to motion_alarm or mixed in a generic
+sensor, no banner. Keeps the UI quiet when the user already
+made a deliberate choice.
+
 ## 0.3.15 — 2026-05-27
 
 **Notifications now open SentiHome on tap + render the snapshot + read

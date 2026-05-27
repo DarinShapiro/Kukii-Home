@@ -2,10 +2,74 @@
 
 > **Resumption document** for agents continuing implementation work. This is a snapshot of where the code is, what's done, what's next, and the conventions established so far.
 
-**Last updated:** 2026-05-26 (Epic 8.5, 8.6, and 9 closed — repo is HA-installable end-to-end)
+**Last updated:** 2026-05-27 (add-on v0.3.0 → v0.3.15 — zero-config camera onboarding + UI-configurable notifications + diagnostic loop closed)
 **Branch:** `main`
 **CI status:** ✅ green
 **Tests:** 330 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
+
+---
+
+## Milestone: add-on v0.3 — from "installable skeleton" to a working zero-handwriting product
+
+Between v0.3.0 (2026-05-27) and v0.3.15 (same day, sixteen iterations later) the
+add-on went from "Supervisor can install it and the services boot" to a
+product the user can configure end-to-end without ever writing YAML, with a
+visible diagnostic loop for verifying the system live.
+
+**End-to-end alert path stood up.** v0.3.0 introduced the `ha-camera` adapter
+kind — instead of duplicating RTSP + motion detection, SentiHome subscribes
+to the camera's HA motion / AI binary sensors and snapshots on event. The
+Cameras card on the Web UI started rendering inline thumbnails per camera.
+v0.3.2 made the `adapters` field actually editable in the Supervisor
+Configuration tab (v0.3.1's loose `match(.+)?` schema had hidden it). v0.3.3
+fixed snapshot capture across the add-on / HA Core container boundary by
+switching from `camera.snapshot` (writes to HA Core's `/data`, invisible to
+SentiHome) to `/api/camera_proxy/<entity>` (HTTP fetch → write to
+SentiHome's own `/data`).
+
+**The ONVIF snapshot trap.** v0.3.7-v0.3.9 chased a bug where Reolink
+cameras returned 21 KB of login HTML stamped as `image/jpeg`. Root cause
+diagnosed live: the camera entity was being created by HA's ONVIF
+integration, whose still-image URL hit a Reolink endpoint requiring
+camera-side auth we don't have. v0.3.9 documented the two fix paths
+(re-add the camera via HA's Reolink integration, or switch SentiHome to
+`rtsp-direct`) and surfaced the actual content-type / preview to the
+Cameras card so future configuration issues diagnose themselves.
+v0.3.10 added a click-to-zoom lightbox so thumbnails are useful at a glance.
+
+**No-handwriting mandate.** Two releases collapsed the YAML surface to zero.
+v0.3.11 introduced `auto_discover: true` (default ON): at boot the add-on
+lists every HA camera, groups by device, AI-picks the substream + the
+AI-classified motion sensors (preferring `_smart_motion_human` /
+`_person_detection` over noisy `_motion_alarm` / `_cell_motion`), with a
+clickable Enable / Disable / Override card per device. Per-device overrides
+persist to `/data/sentihome/adapter_overrides.json` with a live reconciler
+(no restart). v0.3.13 did the same for notifications — discovered every
+`notify.*` HA service, rendered one checkbox per service in a Notifications
+card, persisted to `/data/sentihome/notify_overrides.json`. v0.3.12 fixed
+three UI bugs that surfaced once real users hit the page (redirect-after-POST
+404 under Ingress, auto-refresh clobbering forms mid-edit, alerts wiped on
+restart → now persistent on `/data`).
+
+**Closed-loop debug.** A parallel thread through the arc: the user (and the
+assistant, via curl from the dev box) need to be able to verify the system
+without waiting for real motion. v0.3.5 added in-memory log ring buffer at
+`/logs` plus `/debug/topology` and a live Recent logs card on the Web UI.
+v0.3.8 added `/debug/test_snapshot` (force a fresh fetch right now) and
+`/debug/version` (returns the add-on manifest version, not just the Python
+package version). v0.3.14 closed the loop in the UI itself: Send test
+notification + per-camera Send test alert buttons that capture a real
+snapshot, record a synthetic `[TEST]` alert, fire the notifier, and render
+per-service results inline. v0.3.15 made notifications themselves useful —
+the add-on now fetches its own Ingress URL from Supervisor at boot, so the
+notification's tap-action lands on the SentiHome status page (not HA's
+random startup page) and the snapshot image renders via HA Companion's
+auth session; friendly camera names replace slugs; `data.tag` per camera
+makes sequential alerts collapse on the phone instead of stacking.
+
+Net result: a user installs the add-on, ticks the cameras and notify
+services they want, clicks Send test alert, and sees a real snapshot land
+on their phone — no handwritten YAML anywhere in that path.
 
 ---
 

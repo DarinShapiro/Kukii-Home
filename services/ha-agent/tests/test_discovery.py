@@ -301,3 +301,59 @@ def test_build_decisions_auto_disables_when_no_usable_stream():
     assert decisions[0].spec is None
     assert decisions[0].auto_disabled_reason is not None
     assert "no usable stream" in decisions[0].auto_disabled_reason
+
+
+# ─── v0.3.16: suggest_generic_motion heuristic ──────────────────────
+
+
+def test_suggest_generic_motion_when_ai_picked_and_alarm_available():
+    """The Dahua scenario: AI sensors picked but a generic motion_alarm
+    is also discovered → UI should offer the fallback."""
+    cams = [
+        _cam(
+            "camera.dahuapoolcam_main",
+            motions=[
+                "binary_sensor.dahuapoolcam_motion_alarm",
+                "binary_sensor.dahuapoolcam_smart_motion_human",
+                "binary_sensor.dahuapoolcam_smart_motion_vehicle",
+            ],
+        ),
+    ]
+    decisions = build_decisions(cams)
+    assert decisions[0].suggest_generic_motion == ("binary_sensor.dahuapoolcam_motion_alarm")
+
+
+def test_no_generic_motion_suggestion_when_user_already_overrode():
+    """If the user explicitly overrode motion to non-AI sensors (e.g.
+    already using motion_alarm), don't badger them with the banner."""
+    cams = [
+        _cam(
+            "camera.dahuapoolcam_main",
+            motions=[
+                "binary_sensor.dahuapoolcam_motion_alarm",
+                "binary_sensor.dahuapoolcam_smart_motion_human",
+            ],
+        ),
+    ]
+    decisions = build_decisions(
+        cams,
+        overrides={
+            "dahuapoolcam": {
+                "motion_override": ["binary_sensor.dahuapoolcam_motion_alarm"],
+            }
+        },
+    )
+    assert decisions[0].suggest_generic_motion is None
+
+
+def test_no_generic_motion_suggestion_when_no_motion_alarm_exists():
+    """If only AI sensors exist (no _motion_alarm), nothing to fall
+    back to → no suggestion."""
+    cams = [
+        _cam(
+            "camera.x_main",
+            motions=["binary_sensor.x_smart_motion_human"],
+        ),
+    ]
+    decisions = build_decisions(cams)
+    assert decisions[0].suggest_generic_motion is None

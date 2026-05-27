@@ -172,6 +172,20 @@ class DiscoveryDecision:
     unavailable, or the chosen stream failed the snapshot health
     check). UI surfaces the reason; user can override manually."""
 
+    motion_switches: list[dict[str, str]] | None = None
+    """v0.3.16: HA ``switch.*motion*`` entities heuristically matched
+    to this device (each ``{entity_id, friendly_name, state}``). When
+    any are ``off``, the UI shows a banner + Turn-on button — common
+    misconfig where the parent motion switch is off and so all
+    binary_sensor.*_motion_* stay off too."""
+
+    suggest_generic_motion: str | None = None
+    """v0.3.16: when AI-only sensors are picked and a ``_motion_alarm``
+    is among the candidates, this holds that entity_id so the UI can
+    offer a one-click "Use generic motion alarm" override. Useful
+    when AI sensors stay silent (e.g. Dahua Smart Plan not
+    configured)."""
+
 
 # ─── device grouping ─────────────────────────────────────────────────
 
@@ -394,6 +408,22 @@ def build_decisions(
             source=source,
         )
 
+        # v0.3.16: if the chosen motion entities are all AI-classified
+        # (smart_motion_human, _person_detection, etc.) AND a generic
+        # _motion_alarm exists in the candidate pool, suggest it as a
+        # one-click fallback. This catches the common Dahua trap where
+        # the camera's Smart Plan isn't configured so AI sensors stay
+        # silent — but motion_alarm still fires.
+        suggest_generic: str | None = None
+        all_chosen_are_ai = bool(chosen_motions) and all(
+            any(kw in m for kw in _MOTION_AI_KEYWORDS) for m in chosen_motions
+        )
+        if all_chosen_are_ai:
+            for m in candidate_motions:
+                if "motion_alarm" in m:
+                    suggest_generic = m
+                    break
+
         decisions.append(
             DiscoveryDecision(
                 device_id=device_id,
@@ -402,6 +432,7 @@ def build_decisions(
                 spec=spec,
                 candidate_streams=candidate_streams,
                 candidate_motions=candidate_motions,
+                suggest_generic_motion=suggest_generic,
             )
         )
 

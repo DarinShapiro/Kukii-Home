@@ -562,6 +562,53 @@ def _render_device_block(d: DiscoveryDecision) -> str:
         )
     out.append("</div>")
 
+    # ─── v0.3.16: motion-switch + fallback banners ────────────────
+    if d.enabled and d.spec is not None:
+        # 1. Any parent HA motion-detection switch in "off"? Surface
+        #    a one-click Turn-on form. (Common misconfig: AI sensors
+        #    can't fire if the device-level switch is off.)
+        off_switches = [s for s in (d.motion_switches or []) if s.get("state") == "off"]
+        for sw in off_switches:
+            eid = _escape(sw["entity_id"])
+            name = _escape(sw.get("friendly_name") or sw["entity_id"])
+            out.append(
+                '<div style="margin-top:0.5rem;padding:0.5rem 0.75rem;'
+                'background:#fff8e1;border-radius:6px;border-left:3px solid #e36209">'
+                f"<strong>⚠ HA switch is off:</strong> <code>{eid}</code> "
+                f"({name})<br/>"
+                '<span class="muted">Motion sensors won\'t fire while this '
+                "switch is off.</span><br/>"
+                '<form method="post" action="discovery/switch_toggle" '
+                'style="display:inline;margin-top:0.3rem">'
+                f'<input type="hidden" name="entity_id" value="{eid}"/>'
+                f'<input type="hidden" name="action" value="turn_on"/>'
+                '<button type="submit">Turn on</button></form>'
+                "</div>"
+            )
+
+        # 2. AI sensors picked but a generic _motion_alarm is also
+        #    available? Offer one-click fallback — useful when the
+        #    camera-side AI Plan isn't enabled (Dahua Smart Plan
+        #    trap) and the user wants alerts NOW regardless of
+        #    noise.
+        if d.suggest_generic_motion:
+            alarm = _escape(d.suggest_generic_motion)
+            out.append(
+                '<div style="margin-top:0.5rem;padding:0.5rem 0.75rem;'
+                'background:#f1f8ff;border-radius:6px;border-left:3px solid #0366d6">'
+                "<strong>💡 AI sensors not firing?</strong> "
+                "If you've waited a few minutes and nothing's coming through "
+                "(common cause: camera-side AI plan not configured), "
+                f"you can fall back to <code>{alarm}</code> — fires on any "
+                "motion (noisier, but works without camera-side setup).<br/>"
+                '<form method="post" action="discovery/use_generic_motion" '
+                'style="display:inline;margin-top:0.3rem">'
+                f'<input type="hidden" name="device_id" value="{dev_id}"/>'
+                f'<input type="hidden" name="motion_entity" value="{alarm}"/>'
+                '<button type="submit">Use generic motion alarm</button></form>'
+                "</div>"
+            )
+
     # ─── Override section (collapsed by default) ──────────────────
     out.append(
         '<details style="margin-top:0.5rem"><summary>Override stream / motion / cooldown</summary>'
@@ -1182,6 +1229,61 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
         )
         return await _redirect_home()
 
+    async def discovery_switch_toggle(request: web.Request) -> web.Response:
+        """Toggle a HA switch entity from a per-device card (v0.3.16).
+
+        Posts ``entity_id`` + ``action`` (``turn_on`` / ``turn_off``).
+        Validates: entity must be a switch, action must be one of the
+        two service names. After the call, re-runs discovery so the
+        updated switch state is reflected on the next render.
+        """
+        form = await request.post()
+        entity_id = str(form.get("entity_id", "")).strip()
+        action = str(form.get("action", "")).strip()
+        if not entity_id.startswith("switch.") or action not in {"turn_on", "turn_off"}:
+            return web.Response(
+                status=400,
+                text=f"bad params: entity_id={entity_id!r} action={action!r}",
+            )
+        if boot.client is None:
+            return web.Response(status=503, text="HA client not connected")
+        try:
+            await boot.client.call_service("switch", action, entity_id=entity_id)
+            logger.info("discovery.switch_toggled", entity_id=entity_id, action=action)
+        except Exception as e:
+            logger.warning(
+                "discovery.switch_toggle_failed",
+                entity_id=entity_id,
+                action=action,
+                error=str(e),
+            )
+            # Don't 500 — surface it via the discovery_error banner on
+            # the next render.
+            boot.discovery_error = f"switch {entity_id} {action} failed: {e}"
+        # Re-poll discovery so the user sees the new switch state.
+        await _reconcile_discovery(boot)
+        return await _redirect_home()
+
+    async def discovery_use_generic_motion(request: web.Request) -> web.Response:
+        """Override a device's motion sensors to a single generic
+        ``_motion_alarm`` entity (v0.3.16).
+
+        One-click recovery from the Dahua Smart Plan trap (and
+        equivalents): AI sensors picked but silent. Persists the
+        override + triggers a live reconcile so the camera loop
+        re-subscribes to the new sensor without restart.
+        """
+        form = await request.post()
+        device_id = str(form.get("device_id", "")).strip()
+        motion_entity = str(form.get("motion_entity", "")).strip()
+        if not device_id or not motion_entity:
+            return web.Response(status=400, text="missing device_id or motion_entity")
+        overrides = load_overrides()
+        set_device_override(overrides, device_id, motion_override=[motion_entity])
+        save_overrides(overrides)
+        await _reconcile_discovery(boot)
+        return await _redirect_home()
+
     async def camera_test_alert(request: web.Request) -> web.Response:
         """Fire a synthetic alert for a specific device (v0.3.14).
 
@@ -1323,6 +1425,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     # v0.3.14 diagnostic surface.
     app.router.add_post("/notify/test", notify_test)
     app.router.add_post("/discovery/test_alert", camera_test_alert)
+    # v0.3.16 motion-switch toggle + generic-motion fallback.
+    app.router.add_post("/discovery/switch_toggle", discovery_switch_toggle)
+    app.router.add_post("/discovery/use_generic_motion", discovery_use_generic_motion)
     return app
 
 
@@ -1343,6 +1448,22 @@ async def _reconcile_discovery(boot: BootState) -> None:
         discovery = await boot.tools.discover_ha_cameras()
         overrides = load_overrides()
         decisions = build_decisions(discovery.cameras, overrides=overrides)
+        # v0.3.16: annotate each enabled decision with the live state
+        # of its parent HA motion-detection switches so the UI can
+        # render a Turn-on banner when one is off. Done here so the
+        # data refreshes on every reconcile / periodic re-discover
+        # without callers having to remember to update it.
+        for d in decisions:
+            if d.enabled and d.spec is not None:
+                try:
+                    d.motion_switches = await boot.tools.find_motion_switches(d.spec.camera_entity)
+                except Exception as e:
+                    logger.debug(
+                        "discovery.find_motion_switches_failed",
+                        device_id=d.device_id,
+                        error=str(e),
+                    )
+                    d.motion_switches = []
         boot.discovery_decisions = decisions
         target_specs = [d.spec for d in decisions if d.enabled and d.spec is not None]
         await boot.reconciler.apply(target_specs)
