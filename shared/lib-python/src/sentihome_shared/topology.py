@@ -128,6 +128,16 @@ class NotifyConfig(_StrictModel):
     """resident_id → ``notify.mobile_app_<device_id>`` HA service."""
     tts_service: str = "tts.cloud_say"
     media_players: list[str] = Field(default_factory=list)
+    alert_services: list[str] = Field(default_factory=list)
+    """v0.3.12+: HA notify.* services to push every SentiHome alert
+    to. Each entry is a full service name like
+    ``notify.mobile_app_pixel_8`` or ``notify.alexa_media``. Empty
+    list = no notifications (current default; opt-in).
+
+    Payload: ``title`` = alert headline, ``message`` = sensor +
+    camera + time, ``data.image`` = link to the snapshot,
+    ``data.url`` = link to the SentiHome status page. The HA
+    Companion app renders the image inline."""
 
 
 class AdapterConfig(_StrictModel):

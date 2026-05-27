@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.3.12 — 2026-05-27
+
+**Bug bundle + HA notifications.**
+
+Fixes:
+
+- **Save override → 404.** POST `/discovery/override` redirected to
+  `./` which resolved to `/discovery/` (no GET route). Changed to
+  `../` so the redirect lands on `/` under both HA Ingress and
+  direct port access.
+- **Auto-refresh clobbered forms.** The `<meta http-equiv="refresh"
+content="10">` re-rendered the page every 10 s, wiping any
+  override form mid-edit. Removed the meta refresh; added a
+  manual **↻ Refresh** button in the page header. Re-discovery
+  still runs every 5 min in the background.
+- **Alerts non-persistent.** `AlertLog` was in-memory only;
+  restarting the add-on wiped the history. Now persists to
+  `/data/sentihome/alerts.json` (atomic writes; survives add-on
+  updates because `/data` is the persistent volume).
+
+New feature — HA notifications on every alert:
+
+- New `notify.alert_services: list[str]` config field. Each entry
+  is a full HA notify service like `notify.mobile_app_pixel_8` or
+  `notify.alexa_media_kitchen`. Empty list = no notifications
+  (default; opt-in).
+- Payload per service:
+  - `title`: the alert headline (e.g. "Person at Pool Cam")
+  - `message`: classification + camera + timestamp
+  - `data.url`: link to the SentiHome status page
+  - `data.image`: link to the alert's snapshot (HA Companion app
+    renders inline). Included only when a snapshot file exists.
+- Fires concurrently to all configured services. One service
+  failing doesn't block the others.
+- The Capabilities card on the Web UI now shows which services
+  are wired so you can verify the configuration at a glance.
+
+To enable notifications, in the add-on Configuration tab → YAML
+mode, add:
+
+```yaml
+notify:
+  alert_services:
+    - notify.mobile_app_YOUR_DEVICE
+```
+
+Save → Restart. Trigger motion and your phone should buzz with the
+snapshot.
+
+Heads-up — if a camera's HA motion-detection switches are off
+(`switch.<camera>_motion_detection`, `switch.<camera>_smart_motion_detection`),
+none of the `binary_sensor.*_motion_*` sensors will fire. Turn them
+on in HA's device page. A future version will surface this in the
+SentiHome UI with a one-click toggle.
+
 ## 0.3.11 — 2026-05-27
 
 **Zero-config camera onboarding — stop hand-writing adapter YAML.**

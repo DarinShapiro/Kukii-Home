@@ -37,6 +37,7 @@ from sentihome_ha_agent.config import HAAgentSettings
 from sentihome_ha_agent.discovery import DiscoveryDecision, build_decisions
 from sentihome_ha_agent.http_api import AlertLog, HAAgentAPI
 from sentihome_ha_agent.mcp_tools import HATools
+from sentihome_ha_agent.notifier import AlertNotifier
 from sentihome_ha_agent.overrides import (
     load_overrides,
     reset_device,
@@ -116,6 +117,11 @@ class BootState:
     discovery_error: str | None = None
     auto_discover: bool = True
     periodic_rediscover_task: asyncio.Task | None = None
+    notifier: Any | None = None
+    """v0.3.12: live AlertNotifier when topology.notify.alert_services
+    is non-empty. Subscribes to AlertLog and fans each alert out to
+    HA notify.* services. Held here so we can surface its config on
+    the status page + report send errors."""
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -123,7 +129,10 @@ _STATUS_PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <title>SentiHome</title>
-<meta http-equiv="refresh" content="10">
+<!-- v0.3.12: meta-refresh removed. Filling out an override form
+     while a 10s refresh was pending kept clobbering the inputs;
+     using a manual "Refresh" button is friendlier. The refresh
+     button is in the page header below. -->
 <!-- base href="./" makes all relative URLs resolve against the current
      document's directory. Belt-and-suspenders for HA Ingress, which
      may or may not preserve the trailing slash on the page URL. -->
@@ -173,8 +182,12 @@ _STATUS_PAGE = """<!doctype html>
 </style>
 </head>
 <body>
-<h1>SentiHome</h1>
-<p class="muted">v__VERSION__ &middot; stage: <code>__STAGE__</code> &middot; auto-refresh every 10 s</p>
+<h1>SentiHome
+<a href="." style="font-size:0.6em;font-weight:normal;margin-left:1rem;
+  background:#f6f8fa;padding:0.25rem 0.6rem;border-radius:6px;
+  border:1px solid #d1d5da;text-decoration:none">↻ Refresh</a>
+</h1>
+<p class="muted">v__VERSION__ &middot; stage: <code>__STAGE__</code></p>
 
 __TOPOLOGY_CARD__
 __HA_CAMERAS_CARD__
@@ -536,10 +549,23 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
 
     # ─── capabilities card ─────────────────────────────────────────
     caps_html = boot.topology_summary.pop("__caps_html", "—")
+    # Surface what notify.* services receive alerts (v0.3.12). Helpful
+    # debugging signal when "I configured notifications but my phone
+    # isn't buzzing" — confirms the wiring happened at boot.
+    notify_html = ""
+    if boot.notifier is not None and boot.notifier.notify_services:
+        svcs = ", ".join(f"<code>{_escape(s)}</code>" for s in boot.notifier.notify_services)
+        notify_html = f'<p class="muted">Alert notifications go to: {svcs}</p>'
+    else:
+        notify_html = (
+            '<p class="muted">Alert notifications: <strong>off</strong>. '
+            "Set <code>notify.alert_services</code> in add-on Configuration "
+            "to enable (e.g. <code>[notify.mobile_app_pixel_8]</code>).</p>"
+        )
     caps_card = (
         '<div class="card"><h3>Capabilities</h3>'
         '<p class="muted">Domains SentiHome can act on in your HA:</p>'
-        f"<p>{caps_html}</p></div>"
+        f"<p>{caps_html}</p>{notify_html}</div>"
     )
 
     # ─── HA cameras detected card ─────────────────────────────────
@@ -820,10 +846,13 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     # application/x-www-form-urlencoded out of the box).
 
     async def _redirect_home() -> web.Response:
-        # Relative redirect so it works under both HA Ingress and
-        # direct port access — see :data:`_STATUS_PAGE` for context on
-        # base-href + relative URLs.
-        return web.HTTPSeeOther(location="./")
+        # The POST URL is always /discovery/<verb>, so "../" resolves
+        # to "/" — both under HA Ingress (where the browser sees
+        # /api/hassio_ingress/<token>/discovery/<verb>) and under
+        # direct port access. Using "./" (the previous version) is
+        # wrong: it resolves to /discovery/ which has no GET route
+        # and returns 404. See v0.3.12 fix.
+        return web.HTTPSeeOther(location="../")
 
     async def discovery_enable(request: web.Request) -> web.Response:
         form = await request.post()
@@ -1050,6 +1079,19 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
                 )
             )
 
+        # v0.3.12: wire HA notifications when the user has populated
+        # notify.alert_services. The notifier subscribes to AlertLog,
+        # so every alert (legacy adapter OR auto-discovered) fans out.
+        alert_services = getattr(getattr(boot.topology, "notify", None), "alert_services", [])
+        if alert_services:
+            notifier = AlertNotifier(client=client, notify_services=list(alert_services))
+            alert_log.add_on_record(notifier.on_alert)
+            boot.notifier = notifier
+            logger.info(
+                "ha_agent.alert_notifier_wired",
+                services=list(alert_services),
+            )
+
         # v0.3.11 zero-config path: run discovery + reconciler when
         # `auto_discover` is on (the default). The reconciler manages
         # the lifecycle of HACameraLoops based on auto-picked specs +
@@ -1082,7 +1124,9 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
 async def _run() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     boot = BootState()
-    alert_log = AlertLog()
+    # v0.3.12: persistent alerts. /data is the Supervisor persistent
+    # volume, so alerts survive add-on restarts + updates.
+    alert_log = AlertLog(persist_path="/data/sentihome/alerts.json")
 
     # Bring the HTTP server up FIRST. If this fails, there's a real
     # network-level problem (port in use, no interface, etc.) and there's

@@ -14,6 +14,28 @@ topology config schema. Field-level reference:
 | `log_level`     | `DEBUG` / `INFO` / `WARNING` / `ERROR`                                                                                                                                                                                                                                                                                         | `INFO`              |
 | `auto_discover` | Zero-config camera onboarding (v0.3.11+). When ON, the add-on auto-discovers HA cameras and AI-picks the best stream + motion sensors per device. Per-device overrides live in the Web UI — no YAML editing required.                                                                                                          | `true`              |
 
+## HA notifications (v0.3.12+)
+
+To get pushed when an alert fires, add to the add-on Configuration
+(YAML mode):
+
+```yaml
+notify:
+  alert_services:
+    - notify.mobile_app_YOUR_DEVICE
+    # Add more services for fan-out:
+    # - notify.alexa_media_kitchen
+```
+
+Each alert fans out concurrently to every service. Payload includes
+title (the alert headline), message (classification + camera +
+timestamp), a link to the SentiHome status page, and the snapshot
+image (HA Companion app renders it inline). Empty list = no
+notifications (default; opt-in).
+
+The Web UI's Capabilities card shows which services are wired so you
+can verify the configuration without checking logs.
+
 ## Configuring cameras
 
 ### Zero-config (recommended — the default)
