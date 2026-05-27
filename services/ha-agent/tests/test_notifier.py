@@ -94,6 +94,20 @@ def test_render_omits_image_when_no_camera_entity():
     assert "url" in data
 
 
+def test_render_marks_high_priority_for_fast_delivery():
+    """v0.3.18 — alerts are time-sensitive. Flag them so APNs/FCM
+    don't defer delivery in low-power / Focus mode."""
+    n, _ = _make_notifier([])
+    _, _, data = n._render(_alert())
+    # Android / FCM
+    assert data["priority"] == "high"
+    # iOS APNs headers
+    assert data["apns_headers"]["apns-priority"] == "10"
+    assert data["apns_headers"]["apns-push-type"] == "alert"
+    # iOS 15+ bypass Focus modes
+    assert data["push"]["interruption-level"] == "time-sensitive"
+
+
 def test_render_handles_missing_timestamp():
     n, _ = _make_notifier([])
     title, message, _data = n._render(_alert(recorded_at=""))

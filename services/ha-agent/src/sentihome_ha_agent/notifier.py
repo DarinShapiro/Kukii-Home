@@ -251,4 +251,26 @@ class AlertNotifier:
         if camera_id:
             data["tag"] = f"sentihome_{camera_id}"
 
+        # v0.3.18 — high-priority delivery flags. SentiHome's portion
+        # of notify latency is ~300ms (LAN → HA → return); the user-
+        # perceived delay is dominated by APNs/FCM delivery. Defaults
+        # are NORMAL priority, which on iOS gets deferred when the
+        # device is in low-power mode, Focus mode, screen-off, etc.
+        # We're a security/presence app — alerts are time-sensitive.
+        #
+        # iOS (apns headers + iOS 15+ interruption-level):
+        #   apns-priority: 10 → immediate delivery
+        #   apns-push-type: alert → not background, surface NOW
+        #   interruption-level: time-sensitive → bypasses Focus modes
+        # Android (FCM):
+        #   priority: high → bypasses Doze / App Standby
+        data["priority"] = "high"
+        data["apns_headers"] = {
+            "apns-priority": "10",
+            "apns-push-type": "alert",
+        }
+        data["push"] = {
+            "interruption-level": "time-sensitive",
+        }
+
         return title, message, data

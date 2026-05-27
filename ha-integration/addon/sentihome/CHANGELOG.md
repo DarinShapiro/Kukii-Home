@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.18 — 2026-05-27
+
+**Faster notification delivery — mark alerts as high-priority +
+time-sensitive.**
+
+User report: "notifications seem slow." Measured: SentiHome's
+portion is ~270-400 ms (POST → call HA `notify` service → return).
+Rest is HA + APNs/FCM push delivery — which on iOS specifically
+defers NORMAL-priority pushes when the phone is in low-power
+mode, Focus mode, screen-off, etc. SentiHome alerts are
+security/presence events; they should not be deferred.
+
+Added flags to every notify payload:
+
+- `data.priority = "high"` — Android FCM, bypasses Doze / App
+  Standby.
+- `data.apns_headers = {apns-priority: "10", apns-push-type:
+  "alert"}` — iOS APNs, immediate delivery, surface-now.
+- `data.push.interruption-level = "time-sensitive"` — iOS 15+,
+  bypasses Focus modes so you get the buzz even when "Do Not
+  Disturb" is on.
+
+If you want truly silent alerts (e.g. an evening Focus mode that
+suppresses everything), that's now a per-Focus-mode setting on
+the phone itself — HA Companion + iOS handle it correctly when
+the notification is tagged time-sensitive.
+
 ## 0.3.17 — 2026-05-27
 
 **Fix: tap notification → 401 unauthorized.**
