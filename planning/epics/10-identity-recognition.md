@@ -1,6 +1,7 @@
 # Epic 10: Identity & Recognition
 
 **Architecture refs:** §11 (memory model), §12 (recognition & identity), §12.5 (dynamic identity refinement), §04 (model router & inference), §08 (detection pipeline), §09 (VLM prompt contract), §10.5 (feedback-driven rule optimization), §17 (observability), §19 (failure modes)
+**Research refs:** `planning/research/2026-05-27-memory-architecture-papers.md` — concrete adoptions from Mnemosyne, MemORAI, Trainable Graph Memory
 **Components:** services/preprocessor (new), services/recognition (shared types), services/ha-agent, services/dispatcher (new or extended)
 **Priority:** P1
 **Blocked by:** Epic 04 (event bus minimal), Epic 06 (memory storage scaffold); ALSO requires the inference box rebuild (Agent DVR's host)
@@ -123,6 +124,89 @@ Postgres is demoted to OLTP-only (HA config snapshots, alert log, audit log, str
 
 **Critical: audit log from day one.** Even the simplest milestone (preprocessor stub + mock VLM) must write CITED + INFLUENCED + YIELDED edges. The retention math only becomes useful with months of data; we can't start collecting late.
 
+### Edge-weight dynamics (adopted from Mnemosyne; see research file)
+
+The functional forms for reinforcement and decay are no longer TBD. We adopt Mnemosyne's reverse-sigmoid + sigmoidal habituation model wholesale, with parameters retuned for the security/presence domain.
+
+**Decay** (replaces any plan for pure exponential):
+
+```
+τ(e_eff) = (1 − d) / (1 + exp((e_eff − a) / b))     for e_eff ≥ c
+τ(e_eff) = −e_eff · (1 − τ(c)) / c                  for 0 ≤ e_eff < c
+```
+
+- `e_eff = t_now − t_last_reinforce − Δ_cumulative` (effective age, subtracting rewind boost)
+- `d = 0.05` — **non-zero floor**, no memory ever fully unreachable (directly addresses long-tail protection)
+- `a` — sigmoid midpoint (Mnemosyne uses 4 weeks for human recall; **we'll retune for weekly household cycles** during the test harness phase)
+- `b` — steepness
+- `c` — linear-correction transition point
+
+**Reinforcement habituation** (replaces flat-increment-per-citation):
+
+```
+Δ_e(t) = Δ_max · 1 / (1 + exp(−t + e_boosted + t_crit))
+```
+
+Sigmoidal — a memory cited 50 times in an hour does NOT get 50× the boost a single citation gets. Prevents runaway reinforcement of dominant patterns; lets rare-but-cited memories still gain weight.
+
+**Pruning score** (when graph maintenance runs):
+
+```
+PS(n) = max_{m ∈ N(n)} (e_nm · τ(e_eff))
+```
+
+A node's best-supported edge defines its survival. Pruning starts from lowest PS when graph hits capacity. Memories with at least one strong recent connection survive; orphaned/decayed ones don't.
+
+These functions are normative — the test harness in tasks #53-#55 verifies the system's behavior under them across simulated weeks and months. Parameters (`a`, `b`, `d`, `c`, `Δ_max`, `t_crit`) are tunable starting from Mnemosyne's defaults and refined by differential-runner comparison.
+
+### Three-tier abstraction with REINFORCE updates (adopted from Trainable Graph Memory)
+
+Our memory layers — episodic, semantic, identity — gain a concrete promotion + reinforcement mechanism:
+
+```
+Tier 1: Events / Visits        ←  raw observations (episodic)
+Tier 2: Canonical Incident Paths
+        (FSM over states like
+         Approach → Linger →
+         Interaction → Departure
+         → Anomaly)            ←  abstracted from clusters of Tier 1
+Tier 3: Authored Policies + Emergent Rules
+        (DismissalPolicy,
+         TransientIntent,
+         household-specific
+         heuristics)           ←  cross-incident strategy (semantic)
+```
+
+Inter-tier edges (`Event → IncidentPath`, `IncidentPath → Policy`) carry weights updated by **REINFORCE on a reward gap**:
+
+```
+ΔR = R_with(policy) − R_without(policy)
+ℒ_RL = −E[ΔR · log p(policy | event_context)]
+w ← w − α · ∇_w ℒ
+```
+
+Where `R` is observable from feedback Loop 1: user-confirmed alert = +R, user-marked FP = −R, escalation FN traced to a too-aggressive dismissal = strong −R for that policy edge. Concrete signal, learned routing.
+
+**Cold-start fallback**: when a new event has no matching incident path, retrieve neighbors by `Sim(q_new, q_i)` over the Tier-1 layer and pull speculative policies via their successful Tier-2 paths. This handles the "first time we ever saw this scenario" case.
+
+**Explicit divergence from the source paper**: we do NOT fine-tune the VLM with these graph weights as a warm-start. Our VLM is read-only (per Q5). The graph weights are the only learnable parameters; the VLM stays fixed.
+
+### Compression: redundancy-driven pair-and-keep-oldest (adopted from Mnemosyne)
+
+For episodic→behavior-profile compression ("100 milkman events → 1 anchored pattern"):
+
+```
+RS(n, m) = α_NMI · MI(embedding_n, embedding_m) + (1 − α_NMI) · JS(keywords_n, keywords_m)
+```
+
+Defaults: `α_NMI = 0.6`, `RS_min = 0.25`. When two episodic events score `RS ≥ RS_min`:
+
+1. **Keep the older one as anchor** (preserves provenance + temporal origin)
+2. **Pair the newer event** to the anchor via a `REDUNDANT_WITH` edge
+3. **Boost** the connecting edge weight by the habituation function above
+
+The anchor's count + recency are queryable; the noise doesn't blow up node count. Reverses naturally if a new event scores `RS < RS_min` against existing anchors — that's a novel pattern and gets its own anchor.
+
 ### Tooling
 
 - **Neo4j Community edition** initially. Home scale never hits its ceiling.
@@ -236,9 +320,22 @@ Pre-assembled by triage; VLM receives complete packaged context — no tool roun
 5. Identity context for any KnownActor / KnownVehicle / KnownPet matches in preprocessor output
 6. Household state (residents home, SituationalContext, active TransientIntents)
 
-**RAG** (vector + graph hybrid, top-K configurable):
+**RAG via Dynamic Weighted PageRank** (adopted from MemORAI; vector + graph hybrid):
 
-7. Similar past situations (vector search over Event nodes' scene embeddings, filtered by camera/time/actor relevance)
+7. Similar past situations. Mechanism — replaces naive "vector-search-then-hop":
+
+```
+Step 1 (seed):    top-k=3 nodes by Sim(query_embedding, node.scene_embedding)
+Step 2 (weight):  edge weights computed per-query:
+                    w_query(u→v) = sim(q, edge.description_embedding)
+                  composed with persistent edge weight:
+                    w_final = w_persistent · w_query
+Step 3 (PageRank): PR_{t+1}(v) = (1−d)·seed(v) + d·Σ_u [w_final(u→v)/Σ_* w_final(u→*)]·PR_t(u)
+                   with d=0.85, propagate 1-2 hops
+Step 4 (return):  top-K Tier-1 + Tier-2 nodes by final PR score
+```
+
+Composition of `w_persistent · w_query` is our novel synthesis — neither source paper does both. Persistent Hebbian weights ride underneath the per-query weighting, so retrieval reflects both "this query is similar to that memory" AND "that memory has historically mattered." Implementable as a single Cypher query against Neo4j 5.x with vector indexes.
 
 **Tiered budget per call:**
 
@@ -322,12 +419,16 @@ Five signal sources:
 | Post-hoc review | Daily/weekly digest UI: grade summarized clusters |
 | Cross-validation conflict | AttentionMode flagged + user cancelled |
 
-All write `(Alert)-[CORRECTED_BY]->(UserFeedback)` edges. Dispatcher walks `(VLMDecision)-[CITED]->(Memory)` and adjusts INFLUENCED edge weights based on user verdict:
+All write `(Alert)-[CORRECTED_BY]->(UserFeedback)` edges. Dispatcher walks `(VLMDecision)-[CITED]->(Memory)` and adjusts INFLUENCED edge weights using the **REINFORCE-on-reward-gap update** (see Memory substrate / Three-tier abstraction section). User feedback supplies the `R` signal:
 
-- `good_catch` → cited edges strengthen
-- `false_alarm` → cited edges weaken on this outcome class
-- `escalation_FN` → dismissal policy TTL reduced or match narrowed
-- post-hoc FN → policy that short-circuited the VLM gets penalized
+- `good_catch` → `R = +1`, cited edges receive habituation-shaped boost
+- `false_alarm` → `R = −1`, cited edges weakened on this outcome class
+- `escalation_FN` → strong `R = −2` against the dismissal policy edge that short-circuited the VLM; policy TTL reduced or match narrowed
+- post-hoc FN → similar strong negative gradient on the policy edge
+- no user interaction in 24h → implicit `R = +0.1` (small reinforcement for "didn't have to override")
+
+Gradient update applied per cited edge:
+`w ← w − α · ∇_w ℒ = w + α · ΔR · ∇_w log p(memory_cited | event_context)`
 
 Two resolution paths:
 
@@ -411,12 +512,26 @@ Phases below assume the inference box is being rebuilt (Agent DVR's host is curr
 
 ## Open questions / deferred
 
+Architectural / scoping deferrals:
+
 - **AttentionMode** — full design deferred. Architectural seat reserved: trigger interface accepts non-motion sources (timer tick, external observer); area memory carries `attention_mode` flag. Detailed design happens when we approach the pool-cam/life-safety scenarios.
 - **Conversational setup wizard** — per earlier user direction, deferred to a separate later epic.
-- **Pruning + memory compression** — principle locked (edge-weight reinforcement + decay; Hebbian dynamics). Detailed tuning of decay functions, compression heuristics, and pruning thresholds deferred until we have months of audit data.
+- **Pruning + memory compression** — principle locked (Mnemosyne reverse-sigmoid decay + sigmoidal habituation + redundancy-pair-keep-oldest compression). Functional forms are now specified; **detailed parameter tuning** (`a`, `b`, `d`, `c`, `Δ_max`, `t_crit`, `α_NMI`, `RS_min`) deferred until we have audit data + can use the test harness's differential runner.
 - **Agent framework decision (CrewAI vs LangGraph vs custom async)** — not needed for the current design. All "agent loop" behavior is replaced by multi-call iteration via structured output. Revisit only if requirements push us back toward in-call tool use.
 - **Per-pet ID accuracy** — DINOv2 embeddings are the v1 mechanism. If accuracy is inadequate, future epic to fine-tune a per-pet model.
 - **Cross-household memory sharing** (e.g. neighborhood watch patterns) — out of scope.
+
+New questions surfaced by the 2026-05-27 paper review (see `planning/research/2026-05-27-memory-architecture-papers.md`):
+
+- **Q11 — w_persistent vs w_query schema**: how do we store and compose persistent Hebbian weights with per-query MemORAI-style weights? Single edge property `w_persistent`, computed `w_query` at retrieval time, composed `w_final = w_persistent · w_query`. Confirmed direction but the storage details (do we cache w_query for repeat-similar-queries within a session?) are open.
+- **Q12 — FSM state schema for incident canonicalization**: who authors the state set (Approach / Linger / Interaction / Departure / Anomaly + extensions)? Hand-designed gives reliability + opacity; learned (e.g. clustering trajectories) gives flexibility + brittleness. Initial direction: hand-designed FSM with ~10 states; extend as eval-corpus reveals gaps.
+- **Q13 — habituation parameters across multiple boost sources**: Mnemosyne has one boost source (re-encounter). We have two (citation-driven from VLM, user-confirmation-driven from feedback). Shared `e_boosted` + `t_crit`, or each gets its own? Initial direction: shared (simpler, fewer parameters to tune); revisit if user feedback gets drowned out by citation noise.
+- **Q14 — substance filter location**: filter "non-substantial" observations at the preprocessor (cheap, but rule-based) or at the VLM (expensive, but contextual)? Initial direction: preprocessor filter is a lightweight tag-set heuristic; VLM substance filter (deciding whether to commit to episodic) runs only on tier_0/1 calls where cost is already minimal.
+- **Q15 — redundancy-pairing as identity drift detector**: when a new face embedding pairs with high `RS` to a KnownActor but the embedding distance has slowly grown over time, flag drift + optionally update centroid. Promising; needs test-harness verification before adoption.
+
+Research gap (different subfield needed):
+
+- **Q6 (identity embedding drift), Q7 (multi-modal identity confidence), Q8 (cross-camera correlation)** — none of the three memory-architecture papers reviewed addresses these. They likely require literature from computer-vision face-recognition drift research and multi-camera tracking work. Separate research pass needed when we're closer to implementing the recognition layer.
 
 ---
 
@@ -527,9 +642,13 @@ The epic is "done" when, on a normal household day:
 - Every camera motion event writes a lightweight Event node to memory within 200 ms of HA's `last_changed`
 - Each VLM-invoked event has structured findings + tier + citations + (optional) authored policies, persisted with full audit chain
 - "Boring" patterns (e.g. known dogs in backyard) dismiss after the first VLM call, costing ~0 VLM calls per subsequent occurrence
-- User FP/FN feedback (one tap from a push notification) measurably adjusts memory edge weights within the next reasoning cycle
+- User FP/FN feedback (one tap from a push notification) measurably adjusts memory edge weights via REINFORCE update within the next reasoning cycle
+- Edge-weight decay follows the reverse-sigmoid + non-zero-floor model (no memory becomes fully unreachable; rare-but-important memories survive 90+ days)
+- Recurring patterns auto-compress via redundancy-pair-keep-oldest, keeping the graph bounded over time
+- Episodic RAG retrieval composes persistent + per-query weights via DW-PageRank-style traversal; tier_2 escalations get top-10 relevant historical context
 - A VLM-reported upstream quality issue (e.g. "low light, couldn't ID face") triggers a preprocessor knob adjustment, and the next event under similar conditions shows improved quality (tracked in graph)
 - The dev loop dashboard shows the queue of unresolved cases needing human attention, growing slowly (system is auto-resolving most things)
 - Trust metrics per camera trend toward stable values (FP rate flattens within weeks)
+- Memory test harness's canonical scenarios (Milkman, PoolDog, Drift, RareEvent, AdversarialQuiet, CrossCam) all pass on every PR touching memory/retention code
 
 The system is observably learning from its mistakes and getting cheaper to run over time, without sacrificing recall on the events that matter.
