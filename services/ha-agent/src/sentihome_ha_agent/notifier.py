@@ -215,33 +215,34 @@ class AlertNotifier:
             message_bits.append(f"at {time_str}")
         message = " ".join(message_bits)
 
-        # ─── data: url, image, tag ───────────────────────────────
-        # v0.3.17 — URLs must be auth'd by the mobile app's session, not
-        # by the add-on's server-side ingress token. The /api/hassio_ingress/
-        # <addon_token>/ URLs (which we tried in v0.3.15) 401 from the
-        # phone because that token is for browser ingress sessions, not
-        # mobile Companion sessions.
+        # ─── data: image, tag (NO url — see below) ───────────────
+        # v0.3.19 — we tried two URL strategies for the tap-action and
+        # both broke:
+        #   v0.3.15: /api/hassio_ingress/<addon_token>/ → 401 on phone
+        #     (token is bound to browser ingress sessions, not the
+        #      mobile Companion's auth session)
+        #   v0.3.17: /hassio/ingress/sentihome → 404 on phone
+        #     (HA 2026.5+ serves nothing on /hassio/* server-side;
+        #      probed live + every path 404s without auth)
         #
-        # Correct strategy:
-        #   url   → /hassio/ingress/sentihome   (HA frontend route;
-        #                                        per-user redirect)
-        #   image → /api/camera_proxy/<entity>  (HA's own image endpoint;
-        #                                        served with mobile
-        #                                        session auth)
+        # Until we work out the right deep-link form, we OMIT the
+        # tap-action. Tapping the notification just opens the HA
+        # Companion app to wherever it was — boring but doesn't
+        # 401/404. From there the user navigates to SentiHome
+        # manually (the panel's in the sidebar).
+        #
+        # data.image stays — HA's /api/camera_proxy/<entity> is its
+        # own image endpoint served with the mobile app's session
+        # auth, so it just works.
         #
         # Trade-off on image: it's the CURRENT camera frame, not the
         # at-alert-time snapshot. For security alerts this is arguably
-        # MORE useful — "what's happening right now" — and it just
-        # works without us trying to thread a SentiHome-served path
-        # through HA's auth.
-        url = "/hassio/ingress/sentihome"
+        # MORE useful — "what's happening right now". The historical
+        # snapshot is still on disk + visible in the SentiHome UI.
         camera_entity = alert.get("camera_entity") or ""
         image_url = f"/api/camera_proxy/{camera_entity}" if camera_entity else ""
 
-        data: dict[str, Any] = {
-            "url": url,
-            "clickAction": url,  # Android Companion uses this name
-        }
+        data: dict[str, Any] = {}
         if image_url:
             data["image"] = image_url
         # Tag per camera so sequential alerts from the same camera

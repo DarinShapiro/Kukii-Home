@@ -766,17 +766,44 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
             else:
                 thumb = '<span class="muted">—</span>'
 
+            # v0.3.19: latency summary inline. Most useful single
+            # number: HA's view of motion → snapshot in hand. Helps
+            # answer "is this snapshot likely to still reflect what
+            # triggered the alert?"
+            timings = a.get("timings") or {}
+            total_ms = timings.get("ha_to_snapshot_complete_ms")
+            ha_lag_ms = timings.get("ha_to_received_ms")
+            if total_ms is None:
+                latency_html = '<span class="muted">—</span>'
+            else:
+                total_s = total_ms / 1000.0
+                cls = "ok" if total_s < 1.5 else ("warn" if total_s < 4.0 else "bad")
+                lag_str = (
+                    f"<br/><span class='muted'>HA→us {ha_lag_ms:.0f}ms</span>"
+                    if ha_lag_ms is not None
+                    else ""
+                )
+                latency_html = f"<span class='{cls}'>{total_s:.1f}s</span>{lag_str}"
+
             row_strs.append(
                 f"<tr><td>{thumb}</td>"
                 f"<td>{when}</td>"
                 f"<td>{headline}</td>"
                 f"<td>{tier}</td>"
-                f"<td>{status}</td></tr>"
+                f"<td>{status}</td>"
+                f"<td>{latency_html}</td></tr>"
             )
         alerts_card = (
             '<div class="card"><h3>Recent alerts</h3>'
             "<table><tr><th>Snapshot</th><th>Time</th><th>Headline</th>"
-            "<th>Tier</th><th>Status</th></tr>" + "".join(row_strs) + "</table></div>"
+            "<th>Tier</th><th>Status</th><th>Latency</th></tr>" + "".join(row_strs) + "</table>"
+            '<p class="muted" style="font-size:0.8rem;margin-top:0.5rem">'
+            "Latency = HA's view of motion → snapshot in hand. "
+            "Green &lt;1.5s · orange &lt;4s · red &gt;4s. "
+            "HA→us = WebSocket lag. The camera→HA leg (real motion → "
+            "HA seeing the sensor flip) isn't shown — we can't measure "
+            "it without camera-side instrumentation."
+            "</p></div>"
         )
     else:
         alerts_card = (

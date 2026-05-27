@@ -310,6 +310,9 @@ class HACameraLoop:
             return
         if old is not None and old.state == "on":
             return
+        # v0.3.19: capture wall-clock as soon as the handler runs so
+        # we can measure the HA → SentiHome lag downstream.
+        received_at = datetime.now(UTC)
         # Debounce.
         now = time.monotonic()
         if now - self._last_snapshot_at < self._cooldown_seconds:
@@ -320,9 +323,19 @@ class HACameraLoop:
             )
             return
         self._last_snapshot_at = now
-        await self._capture_and_alert(triggering_sensor=new.entity_id, sensor_state=new)
+        await self._capture_and_alert(
+            triggering_sensor=new.entity_id,
+            sensor_state=new,
+            received_at=received_at,
+        )
 
-    async def _capture_and_alert(self, *, triggering_sensor: str, sensor_state: HAState) -> None:
+    async def _capture_and_alert(
+        self,
+        *,
+        triggering_sensor: str,
+        sensor_state: HAState,
+        received_at: datetime,
+    ) -> None:
         from pathlib import Path
 
         ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
@@ -333,6 +346,9 @@ class HACameraLoop:
         # it to OUR filesystem. Don't use the camera.snapshot service —
         # that runs HA-Core-side, writes to HA Core's filesystem, and
         # SentiHome's /data is a different mountpoint from HA Core's.
+        # v0.3.19: wrap the fetch in timing so we can report
+        # snapshot-fetch latency on each alert.
+        snapshot_started_at = datetime.now(UTC)
         snapshot_bytes: bytes | None = None
         try:
             snapshot_bytes = await self._client.fetch_camera_snapshot(self._camera_entity)
@@ -347,6 +363,7 @@ class HACameraLoop:
             # Surface the error on the Cameras card so the user sees the
             # diagnosis directly without checking logs.
             self._status.last_error = f"snapshot fetch failed: {err_msg[:300]}"
+        snapshot_completed_at = datetime.now(UTC)
 
         if snapshot_bytes is not None:
             try:
@@ -374,6 +391,17 @@ class HACameraLoop:
             else f"Motion at {self._camera_name}"
         )
 
+        # v0.3.19: per-alert timing waypoints. We can measure
+        # everything from HA's last_changed onward; the camera ↔ HA
+        # integration delay (T0 → last_changed) isn't visible to us
+        # without camera-side instrumentation.
+        timings = _compute_timings(
+            ha_last_changed=sensor_state.last_changed,
+            received_at=received_at,
+            snapshot_started_at=snapshot_started_at,
+            snapshot_completed_at=snapshot_completed_at,
+        )
+
         self._alert_log.record(
             {
                 "alert_id": f"ha_motion_{self._camera_id}_{uuid.uuid4().hex[:8]}",
@@ -392,6 +420,9 @@ class HACameraLoop:
                 "triggering_sensor": triggering_sensor,
                 "sensor_classification": sensor_kind,
                 "ha_sensor_attributes": sensor_state.attributes,
+                "ha_last_changed": sensor_state.last_changed,
+                "ha_last_updated": sensor_state.last_updated,
+                "timings": timings,
                 "source": "ha_camera_event",
             }
         )
@@ -402,6 +433,56 @@ class HACameraLoop:
             kind=sensor_kind,
             snapshot=snapshot_path,
         )
+
+
+def _compute_timings(
+    *,
+    ha_last_changed: str | None,
+    received_at: datetime,
+    snapshot_started_at: datetime,
+    snapshot_completed_at: datetime,
+) -> dict[str, float | None]:
+    """Compute per-alert latency waypoints in milliseconds.
+
+    We can measure everything from HA's view of the state change
+    onward; the **camera → HA integration** delay (real-world motion
+    → HA seeing the binary_sensor flip) is invisible to us without
+    camera-side instrumentation. The fields:
+
+    - ``ha_to_received_ms`` — HA Core saw the sensor change to our
+      WebSocket handler woke up. Should be a few ms on LAN; spikes
+      suggest WebSocket lag / HA Core overload.
+    - ``handler_to_snapshot_start_ms`` — time we spent in our handler
+      before issuing the snapshot fetch. Should be sub-ms.
+    - ``snapshot_duration_ms`` — HTTP fetch through ``camera_proxy``.
+      This is "how long the camera + HA integration took to give us a
+      frame." Heavy snapshots, slow cameras, and integration overhead
+      all land here.
+    - ``ha_to_snapshot_complete_ms`` — total "time to have a frame in
+      hand" from HA's view of motion. Most useful single number for
+      judging "is the snapshot likely to still reflect the alert?"
+
+    All values are floats in milliseconds. Any that can't be computed
+    (e.g. HA didn't send ``last_changed``) are ``None``.
+    """
+    out: dict[str, float | None] = {
+        "ha_to_received_ms": None,
+        "handler_to_snapshot_start_ms": (snapshot_started_at - received_at).total_seconds()
+        * 1000.0,
+        "snapshot_duration_ms": (snapshot_completed_at - snapshot_started_at).total_seconds()
+        * 1000.0,
+        "ha_to_snapshot_complete_ms": None,
+    }
+    if ha_last_changed:
+        try:
+            ha_dt = datetime.fromisoformat(ha_last_changed)
+            out["ha_to_received_ms"] = (received_at - ha_dt).total_seconds() * 1000.0
+            out["ha_to_snapshot_complete_ms"] = (
+                snapshot_completed_at - ha_dt
+            ).total_seconds() * 1000.0
+        except (ValueError, TypeError):
+            pass
+    return out
 
 
 def _kind_from_sensor(entity_id: str) -> str | None:

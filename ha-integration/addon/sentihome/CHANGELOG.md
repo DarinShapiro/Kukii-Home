@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.3.19 — 2026-05-27
+
+**Fix 404 on notification tap + per-alert latency capture.**
+
+Two changes, both prompted by the user asking "how can we track
+all forms of latency end-to-end?"
+
+### Fix: 404 on notification tap
+
+v0.3.17 used `/hassio/ingress/sentihome` for `data.url`. Probed
+live: HA 2026.5 returns 404 server-side for every `/hassio/*`
+path without an auth cookie. The HA Companion app fetches the
+URL first and renders 404 when the server doesn't respond.
+
+Both URL strategies we've tried so far broke:
+
+- v0.3.15: `/api/hassio_ingress/<addon_token>/` → 401
+  (token is for browser ingress sessions, not mobile auth)
+- v0.3.17: `/hassio/ingress/<slug>` → 404
+  (route doesn't exist server-side in HA 2026.5+)
+
+Until we work out the right deep-link form, **we omit the
+tap-action URL entirely**. Tapping a notification just opens
+the HA Companion app to wherever it was; from there the user
+navigates to SentiHome manually (it's in the sidebar). The
+image attachment + tag + body content all still work.
+
+### Per-alert latency capture
+
+Every alert now carries a `timings` sub-dict with:
+
+- `ha_to_received_ms` — HA Core's view of the sensor flip →
+  our WebSocket handler woke up. Should be a few ms on LAN.
+  Spikes indicate HA Core overload or WebSocket lag.
+- `handler_to_snapshot_start_ms` — our handler overhead.
+  Should be sub-millisecond.
+- `snapshot_duration_ms` — HTTP fetch through HA's
+  `camera_proxy`. This is the camera + integration's
+  round-trip time.
+- `ha_to_snapshot_complete_ms` — total "time to have a
+  frame in hand" from HA's view of motion. Best single
+  number for "is this snapshot still representative of
+  what triggered the alert?"
+
+The Recent alerts table on the Web UI now has a Latency
+column showing the total in seconds, color-coded:
+
+- Green <1.5 s — snapshot likely still shows the event
+- Orange <4 s — borderline
+- Red ≥4 s — snapshot may be stale; consider camera-side
+  buffering (future epic)
+
+What we CAN'T measure from HA events alone: the camera ↔ HA
+integration delay (real-world motion → HA's binary_sensor
+flipping). HA's `last_changed` is the moment HA Core
+observed the change, not the moment the camera detected
+motion. The camera-side delay is typically <100 ms for
+native push-based integrations (Reolink webhook, Dahua
+alarm-listen) but can be seconds for polling-based ones
+(ONVIF without subscription).
+
+For the stale-snapshot problem the user raised: the right
+long-term fix is continuous RTSP frame buffering so we can
+pick the frame closest to the alert time. That's a future
+epic. For now: measure + surface so you can SEE the
+staleness on each alert.
+
 ## 0.3.18 — 2026-05-27
 
 **Faster notification delivery — mark alerts as high-priority +
@@ -17,7 +84,7 @@ Added flags to every notify payload:
 - `data.priority = "high"` — Android FCM, bypasses Doze / App
   Standby.
 - `data.apns_headers = {apns-priority: "10", apns-push-type:
-  "alert"}` — iOS APNs, immediate delivery, surface-now.
+"alert"}` — iOS APNs, immediate delivery, surface-now.
 - `data.push.interruption-level = "time-sensitive"` — iOS 15+,
   bypasses Focus modes so you get the buzz even when "Do Not
   Disturb" is on.

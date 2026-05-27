@@ -61,28 +61,28 @@ def test_render_basic_alert():
     # Message uses friendly camera name, not the slug.
     assert "DahuaPoolCam Main" in message or "Person detected" in message
     assert "14:23:01" in message
-    # v0.3.17: url is the user-session-aware HA frontend route.
-    assert data["url"] == "/hassio/ingress/sentihome"
-    assert data["clickAction"] == "/hassio/ingress/sentihome"
-    # v0.3.17: image is HA's own camera_proxy — auth via mobile session.
+    # v0.3.19: no url/clickAction — both prior URL strategies broke
+    # (401 on token-based, 404 on /hassio/ingress/<slug>). Notification
+    # just opens HA Companion on tap; user navigates manually.
+    assert "url" not in data
+    assert "clickAction" not in data
+    # Image is HA's own camera_proxy — auth via mobile session.
     assert data["image"] == "/api/camera_proxy/camera.dahuapoolcam_sub"
     # Per-camera dedup tag is always present.
     assert data["tag"] == "sentihome_dahuapoolcam"
 
 
-def test_render_url_is_stable_ignores_ingress_base():
-    """v0.3.17: even when an ingress_url_base is supplied (v0.3.15
-    plumbing), the notification URLs use the stable /hassio/ingress/
-    path because the supervisor-issued token isn't valid for the
-    mobile app's session."""
+def test_render_no_url_regardless_of_ingress_base():
+    """v0.3.19: even with an ingress_url_base set (v0.3.15 plumbing),
+    we no longer emit url/clickAction. Both HA paths we tried for
+    tap-action broke; safer to omit until we work out the right form."""
     n, _ = _make_notifier(
         ["notify.mobile_app_x"],
         sentihome_ingress_base="/api/hassio_ingress/TOKEN123/",
     )
     _, _, data = n._render(_alert())
-    assert data["url"] == "/hassio/ingress/sentihome"
-    assert "TOKEN123" not in data["url"]
-    assert "TOKEN123" not in data.get("image", "")
+    assert "url" not in data
+    assert "clickAction" not in data
 
 
 def test_render_omits_image_when_no_camera_entity():
@@ -91,7 +91,9 @@ def test_render_omits_image_when_no_camera_entity():
     n, _ = _make_notifier([])
     _, _, data = n._render(_alert(camera_entity=""))
     assert "image" not in data
-    assert "url" in data
+    # url is unconditionally omitted in v0.3.19; just confirm there's
+    # at least the tag (so the notification has SOME data fields).
+    assert "tag" in data
 
 
 def test_render_marks_high_priority_for_fast_delivery():
