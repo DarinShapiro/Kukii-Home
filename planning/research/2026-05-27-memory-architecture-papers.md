@@ -34,18 +34,18 @@ MemORAI is a graph-based long-term memory system for LLM conversational agents t
 
 ### Relevance vs. our 10 open questions
 
-| # | Question | Applies? | Note |
-|---|---|---|---|
-| 1 | Edge weight reinforcement/decay | partial | Weights are query-derived, not learned/decayed over time. Different paradigm — no temporal weight evolution. |
-| 2 | Memory compression heuristics | yes | Dual-layer compression directly maps to our episodic compression problem. |
-| 3 | Long-tail protection | partial | Substance filter is binary persona-relevance only; no rarity protection. |
-| 4 | Hybrid graph + vector retrieval | **yes — strongly** | DW-PageRank is the most directly transferable idea in this paper. |
-| 5 | Memory layer transitions | no | MemORAI does not have working/session/episodic separation. |
-| 6 | Identity embedding drift | no | Not addressed. |
-| 7 | Multi-modal identity confidence | no | Text-only. |
-| 8 | Cross-camera correlation | no | N/A. |
-| 9 | Forgetting curve modeling | no | No temporal decay. |
-| 10 | Agentic memory dynamics | partial | Comparable to GraphRAG / Zep family but with query-adaptive weights. |
+| #   | Question                        | Applies?           | Note                                                                                                         |
+| --- | ------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------ |
+| 1   | Edge weight reinforcement/decay | partial            | Weights are query-derived, not learned/decayed over time. Different paradigm — no temporal weight evolution. |
+| 2   | Memory compression heuristics   | yes                | Dual-layer compression directly maps to our episodic compression problem.                                    |
+| 3   | Long-tail protection            | partial            | Substance filter is binary persona-relevance only; no rarity protection.                                     |
+| 4   | Hybrid graph + vector retrieval | **yes — strongly** | DW-PageRank is the most directly transferable idea in this paper.                                            |
+| 5   | Memory layer transitions        | no                 | MemORAI does not have working/session/episodic separation.                                                   |
+| 6   | Identity embedding drift        | no                 | Not addressed.                                                                                               |
+| 7   | Multi-modal identity confidence | no                 | Text-only.                                                                                                   |
+| 8   | Cross-camera correlation        | no                 | N/A.                                                                                                         |
+| 9   | Forgetting curve modeling       | no                 | No temporal decay.                                                                                           |
+| 10  | Agentic memory dynamics         | partial            | Comparable to GraphRAG / Zep family but with query-adaptive weights.                                         |
 
 ---
 
@@ -79,18 +79,18 @@ Mnemosyne is an unsupervised long-term memory system explicitly designed for **r
 
 ### Relevance vs. our 10 open questions
 
-| # | Question | Applies? | Note |
-|---|---|---|---|
-| 1 | Edge weight reinforcement/decay | **yes — direct fit** | Full functional form given. Reverse-sigmoid decay + sigmoidal boost is more sophisticated than vanilla exponential and explicitly avoids both runaway reinforcement and total forgetting. |
-| 2 | Memory compression heuristics | **yes** | Redundancy-driven pairing is functionally a soft-clustering compressor. Maps to "N functionally-identical events → behavior profile." |
-| 3 | Long-tail protection | **yes** | Floor `d = 0.05` ensures non-zero recall floor — no memory is ever fully unreachable. Pruning gated by `PS` which respects edge quality, not just age. |
-| 4 | Hybrid graph + vector | partial | Has edge weights from similarity; recall is probabilistic walk weighted by decay. Less elegant than MemORAI's PageRank. |
-| 5 | Memory layer transitions | no | No intermediate tier — asynchronous summarisation feeds graph and prompt directly. Mild conflict with our 5-layer model. |
-| 6 | Identity embedding drift | no | But `t_init` + boost timestamps give a primitive — tracking when a node's "freshness" was last reset is the analogue. |
-| 7 | Multi-modal identity confidence | no | Text only. |
-| 8 | Cross-camera correlation | no | Redundancy-pairing concept transfers: two camera events with high `RS` → mergeable. |
-| 9 | Forgetting curve modeling | **yes — direct fit** | Cites Ebbinghaus, Murre & Dros. Reverse-sigmoid chosen over pure exponential because exponential decays too aggressively in the tail. |
-| 10 | Agentic memory dynamics | yes | Explicit baseline comparison against MemGPT, Mem0, Memory-R1, OpenAI memory. |
+| #   | Question                        | Applies?             | Note                                                                                                                                                                                      |
+| --- | ------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Edge weight reinforcement/decay | **yes — direct fit** | Full functional form given. Reverse-sigmoid decay + sigmoidal boost is more sophisticated than vanilla exponential and explicitly avoids both runaway reinforcement and total forgetting. |
+| 2   | Memory compression heuristics   | **yes**              | Redundancy-driven pairing is functionally a soft-clustering compressor. Maps to "N functionally-identical events → behavior profile."                                                     |
+| 3   | Long-tail protection            | **yes**              | Floor `d = 0.05` ensures non-zero recall floor — no memory is ever fully unreachable. Pruning gated by `PS` which respects edge quality, not just age.                                    |
+| 4   | Hybrid graph + vector           | partial              | Has edge weights from similarity; recall is probabilistic walk weighted by decay. Less elegant than MemORAI's PageRank.                                                                   |
+| 5   | Memory layer transitions        | no                   | No intermediate tier — asynchronous summarisation feeds graph and prompt directly. Mild conflict with our 5-layer model.                                                                  |
+| 6   | Identity embedding drift        | no                   | But `t_init` + boost timestamps give a primitive — tracking when a node's "freshness" was last reset is the analogue.                                                                     |
+| 7   | Multi-modal identity confidence | no                   | Text only.                                                                                                                                                                                |
+| 8   | Cross-camera correlation        | no                   | Redundancy-pairing concept transfers: two camera events with high `RS` → mergeable.                                                                                                       |
+| 9   | Forgetting curve modeling       | **yes — direct fit** | Cites Ebbinghaus, Murre & Dros. Reverse-sigmoid chosen over pure exponential because exponential decays too aggressively in the tail.                                                     |
+| 10  | Agentic memory dynamics         | yes                  | Explicit baseline comparison against MemGPT, Mem0, Memory-R1, OpenAI memory.                                                                                                              |
 
 ---
 
@@ -118,18 +118,18 @@ Proposes a three-layer trainable graph memory for LLM agents: raw queries with t
 
 ### Relevance vs. our 10 open questions
 
-| # | Question | Applies? | Note |
-|---|---|---|---|
-| 1 | Edge weight reinforcement/decay | **yes — direct fit** | REINFORCE-style reward-gap updates are exactly the right primitive for our user-FP/FN feedback loop. No decay component — orthogonal to Mnemosyne. |
-| 2 | Memory compression heuristics | partial | Meta-cognition layer is a learned abstractor; deduplication by confidence-reinforce-or-new is a soft-clustering rule. |
-| 3 | Long-tail protection | partial | Confidence labels (high/medium/low) + uncertainty acknowledgment provide a softer pruning signal than thresholding. |
-| 4 | Hybrid graph + vector retrieval | yes | Vector sim only at `𝒬` layer; structural traversal carries the rest. Maps cleanly to our triage approach. |
-| 5 | Memory layer transitions | **yes** | Three distinct abstraction layers with explicit promotion (raw trajectory → canonical path → meta-cognition). Closest analogue to our session→episodic→semantic flow. |
-| 6 | Identity embedding drift | no | Not addressed. |
-| 7 | Multi-modal identity confidence | no | But the confidence-label idea is transferable to KnownActor recognition. |
-| 8 | Cross-camera correlation | no | N/A. |
-| 9 | Forgetting curve modeling | no | Edge weights learned, not time-decayed. |
-| 10 | Agentic memory dynamics | **yes** | Compared against A-Mem and Expel; positions in the RL-augmented memory family. |
+| #   | Question                        | Applies?             | Note                                                                                                                                                                  |
+| --- | ------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Edge weight reinforcement/decay | **yes — direct fit** | REINFORCE-style reward-gap updates are exactly the right primitive for our user-FP/FN feedback loop. No decay component — orthogonal to Mnemosyne.                    |
+| 2   | Memory compression heuristics   | partial              | Meta-cognition layer is a learned abstractor; deduplication by confidence-reinforce-or-new is a soft-clustering rule.                                                 |
+| 3   | Long-tail protection            | partial              | Confidence labels (high/medium/low) + uncertainty acknowledgment provide a softer pruning signal than thresholding.                                                   |
+| 4   | Hybrid graph + vector retrieval | yes                  | Vector sim only at `𝒬` layer; structural traversal carries the rest. Maps cleanly to our triage approach.                                                             |
+| 5   | Memory layer transitions        | **yes**              | Three distinct abstraction layers with explicit promotion (raw trajectory → canonical path → meta-cognition). Closest analogue to our session→episodic→semantic flow. |
+| 6   | Identity embedding drift        | no                   | Not addressed.                                                                                                                                                        |
+| 7   | Multi-modal identity confidence | no                   | But the confidence-label idea is transferable to KnownActor recognition.                                                                                              |
+| 8   | Cross-camera correlation        | no                   | N/A.                                                                                                                                                                  |
+| 9   | Forgetting curve modeling       | no                   | Edge weights learned, not time-decayed.                                                                                                                               |
+| 10  | Agentic memory dynamics         | **yes**              | Compared against A-Mem and Expel; positions in the RL-augmented memory family.                                                                                        |
 
 ---
 

@@ -1,0 +1,148 @@
+name: canonical
+description: |
+  Single-family suburban home modeled loosely on the dev user's setup.
+  Covers every architectural surface the memory subsystem cares about:
+  outdoor cameras (front_south_cam, driveway_cam, garage_cam),
+  indoor-relevant cameras (none yet — reserved slot), life-safety area
+  with AttentionMode flag (pool_cam + pool area), multi-actor (4
+  residents), multi-pet (1 dog + 1 cat), multi-vehicle (2 vehicles
+  with plates), recurring visitors (milkman, gardener, USPS, Amazon).
+
+  Ambient patterns capture the noise distributions for noise_profile
+  = moderate / realistic generation: squirrels, school bus, trash
+  truck, wind-driven leaf false-motion.
+
+geography:
+  areas: [front_porch, driveway, garage, backyard, pool, side_yard, street]
+  adjacencies:
+    front_porch: [driveway]
+    driveway: [front_porch, garage, street]
+    garage: [driveway, backyard]
+    backyard: [garage, pool, side_yard]
+    pool: [backyard]
+    side_yard: [backyard]
+    street: [driveway]
+
+cameras:
+  - id: front_south_cam
+    area: front_porch
+    fov_overlaps: [driveway_cam]
+    attention_mode: false
+  - id: driveway_cam
+    area: driveway
+    fov_overlaps: [front_south_cam, garage_cam]
+    attention_mode: false
+  - id: garage_cam
+    area: garage
+    fov_overlaps: [driveway_cam, backyard_cam]
+    attention_mode: false
+  - id: backyard_cam
+    area: backyard
+    fov_overlaps: [garage_cam, pool_cam]
+    attention_mode: false
+  - id: pool_cam
+    area: pool
+    fov_overlaps: [backyard_cam]
+    attention_mode: true
+
+residents:
+  - id: alice
+    role: resident
+    access_profile: full
+    typical_patterns:
+      - kind: morning_departure
+        time: '07:45 ± 15min'
+        weekdays: [mon, tue, wed, thu, fri]
+        route: [front_porch, driveway, street]
+      - kind: evening_return
+        time: '17:30 ± 45min'
+        weekdays: [mon, tue, wed, thu, fri]
+        route: [street, driveway, garage]
+      - kind: backyard_evening
+        time: '19:30 ± 60min'
+        route: [garage, backyard]
+  - id: bob
+    role: resident
+    access_profile: full
+    typical_patterns:
+      - kind: morning_departure
+        time: '08:15 ± 20min'
+        weekdays: [mon, tue, wed, thu, fri]
+        route: [front_porch, driveway, street]
+      - kind: evening_return
+        time: '18:00 ± 60min'
+        weekdays: [mon, tue, wed, thu, fri]
+        route: [street, driveway, garage]
+  - id: charlie
+    role: resident_minor
+    age: 10
+    access_profile: supervised
+    typical_patterns:
+      - kind: school_morning
+        time: '07:30 ± 5min'
+        weekdays: [mon, tue, wed, thu, fri]
+        route: [front_porch, driveway, street]
+  - id: diana
+    role: resident_minor
+    age: 6
+    access_profile: supervised
+    typical_patterns:
+      - kind: school_morning
+        time: '07:30 ± 5min'
+        weekdays: [mon, tue, wed, thu, fri]
+        route: [front_porch, driveway, street]
+
+known_visitors:
+  - id: milkman
+    access: front_porch_morning
+    typical: '06:30 ± 5min, mon/wed/fri'
+  - id: gardener
+    access: backyard_weekly
+    typical: '09:00 ± 20min, tue'
+  - id: usps_carrier
+    access: front_porch_afternoon
+    typical: '13:30 ± 90min, mon-sat'
+  - id: amazon_carrier
+    access: front_porch_anytime
+    typical: '12:00-20:00 random, 0-3/day'
+
+known_vehicles:
+  - id: alice_car
+    owner: alice
+    plate: 'ABC123'
+    color: silver
+    type: sedan
+  - id: bob_truck
+    owner: bob
+    plate: 'XYZ789'
+    color: blue
+    type: pickup
+
+known_pets:
+  - id: rex
+    owner: alice
+    species: dog
+    breed: golden_retriever
+    color: gold
+    indoor_outdoor: indoor_outdoor
+  - id: whiskey
+    owner: bob
+    species: cat
+    color: black
+    indoor_outdoor: indoor
+
+ambient_patterns:
+  - kind: squirrel
+    cams: [backyard_cam, front_south_cam]
+    rate: '0.4/hr'
+    daylight_only: true
+  - kind: school_bus
+    cams: [front_south_cam]
+    time: '07:30 ± 8min, mon-fri, school_year'
+  - kind: trash_truck
+    cams: [driveway_cam, front_south_cam]
+    time: '06:15 ± 20min, mon'
+  - kind: leaves_wind
+    cams: all
+    wind_threshold_mph: 12
+    false_motion_rate: '0.1/hr'

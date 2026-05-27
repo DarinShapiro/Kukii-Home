@@ -1997,6 +1997,11 @@ dependencies = [
     { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pyyaml" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20.0" },
@@ -2007,6 +2012,9 @@ requires-dist = [
     { name = "sentihome-shared", editable = "shared/lib-python" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pyyaml", specifier = ">=6.0.3" }]
 
 [[package]]
 name = "sentihome-notify"

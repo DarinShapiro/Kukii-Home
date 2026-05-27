@@ -23,3 +23,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sentihome_memory"]
+
+[dependency-groups]
+dev = [
+    "pyyaml>=6.0.3",
+]
