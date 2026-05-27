@@ -14,27 +14,36 @@ topology config schema. Field-level reference:
 | `log_level`     | `DEBUG` / `INFO` / `WARNING` / `ERROR`                                                                                                                                                                                                                                                                                         | `INFO`              |
 | `auto_discover` | Zero-config camera onboarding (v0.3.11+). When ON, the add-on auto-discovers HA cameras and AI-picks the best stream + motion sensors per device. Per-device overrides live in the Web UI — no YAML editing required.                                                                                                          | `true`              |
 
-## HA notifications (v0.3.12+)
+## HA notifications (v0.3.13+)
 
-To get pushed when an alert fires, add to the add-on Configuration
-(YAML mode):
+Open the Web UI status page → scroll to the **Notifications** card.
+Every `notify.*` service HA exposes appears as a checkbox. Tick the
+ones you want to receive alerts and click **Save selection**.
+Changes apply live (no restart). The "● Active" line at the top of
+the card confirms what's currently wired.
+
+Each alert fans out concurrently to every checked service. Payload
+includes title (the alert headline), message (classification +
+camera + timestamp), a link to the SentiHome status page, and the
+snapshot image (HA Companion app renders it inline).
+
+Selection is persisted at `/data/sentihome/notify_overrides.json` —
+survives add-on restarts and updates.
+
+### Advanced — YAML seed (back-compat)
+
+You can also pre-seed the selection via YAML in the add-on
+Configuration tab (only applied when no UI selection has been saved
+yet):
 
 ```yaml
 notify:
   alert_services:
     - notify.mobile_app_YOUR_DEVICE
-    # Add more services for fan-out:
-    # - notify.alexa_media_kitchen
 ```
 
-Each alert fans out concurrently to every service. Payload includes
-title (the alert headline), message (classification + camera +
-timestamp), a link to the SentiHome status page, and the snapshot
-image (HA Companion app renders it inline). Empty list = no
-notifications (default; opt-in).
-
-The Web UI's Capabilities card shows which services are wired so you
-can verify the configuration without checking logs.
+Once you click Save in the UI for the first time, the file
+overrides the YAML and the YAML stops mattering.
 
 ## Configuring cameras
 

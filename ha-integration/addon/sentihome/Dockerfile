@@ -10,7 +10,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.3.12" \
+    io.hass.version="0.3.13" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \

@@ -62,6 +62,15 @@ class AlertNotifier:
     _pending_tasks: set[asyncio.Task] = field(default_factory=set)
     """Holds task references so create_task doesn't lose them to GC."""
 
+    def set_services(self, services: list[str]) -> None:
+        """Swap the notify service list at runtime (v0.3.13+).
+
+        Called from the Notifications card's POST handler after the
+        user changes their selection — no add-on restart needed.
+        """
+        self.notify_services = list(services)
+        logger.info("notifier.services_updated", services=list(services))
+
     def on_alert(self, alert: dict[str, Any]) -> None:
         """Synchronous entry point — bridge to async notify call.
 

@@ -238,6 +238,25 @@ class HAClient:
         except json.JSONDecodeError:
             return {"_raw": resp.text}
 
+    async def list_services(self) -> list[dict[str, Any]]:
+        """Fetch HA's full service registry via ``GET /api/services``.
+
+        Returns a list of ``{"domain": str, "services": {svc_name: {...}}}``
+        entries — exactly the HA REST API's shape. Callers typically
+        filter to a single domain (e.g. ``notify``).
+
+        Used by :meth:`HATools.list_notify_services` to populate the
+        Notifications card without the user needing to hand-type service
+        names.
+        """
+        resp = await self._http.get("/api/services")
+        if resp.status_code >= 400:
+            raise HAClientError(
+                f"GET /api/services failed: HTTP {resp.status_code} {resp.text[:200]}"
+            )
+        body = resp.json()
+        return body if isinstance(body, list) else []
+
     # ─── subscriptions ─────────────────────────────────────────────
 
     def on_state_change(self, handler: StateChangeHandler) -> None:

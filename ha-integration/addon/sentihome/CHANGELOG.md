@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.3.13 — 2026-05-27
+
+**No more YAML for notifications. New Notifications card on the Web UI.**
+
+v0.3.12 shipped `notify.alert_services` as a YAML list — but the
+project mandate is "no handwriting." Fixed: SentiHome now discovers
+every `notify.*` service HA exposes and renders one checkbox per
+service in a new **Notifications** card. Tick the boxes you want →
+**Save selection** → changes apply live (no restart).
+
+- New backend `HATools.list_notify_services()` calls HA's
+  `/api/services` and returns the `notify.*` services sorted.
+- New persistent overrides at `/data/sentihome/notify_overrides.json`
+  (atomic writes; survives add-on updates).
+- New POST `/notify/services` endpoint persists selection +
+  `AlertNotifier.set_services(...)` updates the live notifier
+  without a restart.
+- New status-page card shows discovered services with checkboxes,
+  current active list, and instant feedback ("● Active: notify.X").
+
+Source-of-truth ordering at boot:
+
+1. If `notify_overrides.json` exists → use it (empty list is a
+   valid "all unchecked" choice).
+2. Else if `topology.notify.alert_services` (YAML) is non-empty →
+   use that as the initial seed. First UI save persists to the
+   file and YAML stops mattering.
+3. Else → no notifications.
+
+So v0.3.12 users with YAML config see their selection pre-checked
+on first load of v0.3.13's UI. Click Save → it's now in the file
+and the YAML is moot.
+
+The Capabilities card no longer doubles as a notify-config hint —
+the dedicated Notifications card owns that role now.
+
 ## 0.3.12 — 2026-05-27
 
 **Bug bundle + HA notifications.**

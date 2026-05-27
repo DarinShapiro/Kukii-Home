@@ -160,3 +160,25 @@ async def test_alert_log_callback_fires_on_record():
     log.record(_alert(alert_id="zzz"))
     await _drain(n)
     assert mock.call_service.call_count == 1
+
+
+# ─── set_services (v0.3.13 live reconfiguration) ─────────────────────
+
+
+async def test_set_services_swaps_services_at_runtime():
+    """User unchecks 'mobile_app' in the UI → no more sends to it."""
+    n, mock = _make_notifier(["notify.mobile_app_x"])
+    n.set_services(["notify.alexa"])
+    n.on_alert(_alert())
+    await _drain(n)
+    assert mock.call_service.call_count == 1
+    domain, svc = mock.call_service.call_args.args[:2]
+    assert (domain, svc) == ("notify", "alexa")
+
+
+async def test_set_services_empty_disables_notifications():
+    n, mock = _make_notifier(["notify.x"])
+    n.set_services([])
+    n.on_alert(_alert())
+    await _drain(n)
+    mock.call_service.assert_not_called()

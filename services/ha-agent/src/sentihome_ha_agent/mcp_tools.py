@@ -222,6 +222,30 @@ class HATools:
             if entities
         ]
 
+    async def list_notify_services(self) -> list[str]:
+        """Return every ``notify.*`` service HA exposes, sorted.
+
+        Powers the Notifications card on the Web UI: the user picks
+        from this list via checkboxes (no typing service names).
+
+        On any HA error, returns an empty list — the UI shows
+        "No notify services available" and falls back gracefully.
+        """
+        try:
+            services = await self._client.list_services()
+        except Exception:
+            return []
+        notify_block = next(
+            (s for s in services if s.get("domain") == "notify"),
+            None,
+        )
+        if notify_block is None:
+            return []
+        names = notify_block.get("services", {})
+        if not isinstance(names, dict):
+            return []
+        return sorted(f"notify.{n}" for n in names)
+
     async def list_ha_cameras(self) -> list[HACameraEntity]:
         """Return every ``camera.*`` entity HA has, with heuristically-matched
         motion / AI binary sensors.

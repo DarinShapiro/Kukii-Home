@@ -38,6 +38,10 @@ from sentihome_ha_agent.discovery import DiscoveryDecision, build_decisions
 from sentihome_ha_agent.http_api import AlertLog, HAAgentAPI
 from sentihome_ha_agent.mcp_tools import HATools
 from sentihome_ha_agent.notifier import AlertNotifier
+from sentihome_ha_agent.notify_overrides import (
+    resolve_initial_services,
+    save_notify_services,
+)
 from sentihome_ha_agent.overrides import (
     load_overrides,
     reset_device,
@@ -192,6 +196,7 @@ _STATUS_PAGE = """<!doctype html>
 __TOPOLOGY_CARD__
 __HA_CAMERAS_CARD__
 __CAMERAS_CARD__
+__NOTIFICATIONS_CARD__
 __HA_CARD__
 __ALERTS_CARD__
 __CAPABILITIES_CARD__
@@ -247,6 +252,64 @@ def _escape(s: str) -> str:
         .replace('"', "&quot;")
         .replace("'", "&#39;")
     )
+
+
+async def _render_notifications_card(boot: BootState) -> str:
+    """Render the Notifications card with available HA notify services
+    as checkboxes (v0.3.13 — no YAML editing required).
+
+    Always-on per design: even when no services are picked, the card
+    shows the discovered list so the user can opt in with a click.
+    """
+    header = '<div class="card"><h3>Notifications</h3>'
+    if boot.tools is None:
+        return header + '<p class="muted">Connect to HA first.</p></div>'
+
+    try:
+        available = await boot.tools.list_notify_services()
+    except Exception as e:
+        return f'{header}<p class="bad">Failed to list notify services: {_escape(str(e))}</p></div>'
+
+    active: list[str] = []
+    if boot.notifier is not None:
+        active = list(boot.notifier.notify_services)
+    active_set = set(active)
+
+    if not available:
+        return (
+            f'{header}<p class="muted">HA exposes no <code>notify.*</code> services. '
+            "Install the HA Companion app on a phone (creates "
+            "<code>notify.mobile_app_*</code>) or another notify integration, "
+            "then click <strong>Refresh</strong>.</p></div>"
+        )
+
+    parts = [header]
+    parts.append(
+        '<p class="muted">SentiHome pushes every alert to the checked services. '
+        "Each notification includes the alert headline, camera, time, and a "
+        "tap-through to the snapshot.</p>"
+    )
+
+    # Status line above the checkboxes — instant confirmation that
+    # changes saved.
+    if active:
+        active_html = ", ".join(f"<code>{_escape(s)}</code>" for s in active)
+        parts.append(f'<p><span class="ok">● Active:</span> {active_html}</p>')
+    else:
+        parts.append('<p class="muted"><span class="warn">○ No services selected</span></p>')
+
+    parts.append('<form method="post" action="notify/services" style="margin-top:0.5rem">')
+    for svc in available:
+        svc_esc = _escape(svc)
+        chk = " checked" if svc in active_set else ""
+        parts.append(
+            f'<label style="display:block;padding:0.2rem 0">'
+            f'<input type="checkbox" name="service" value="{svc_esc}"{chk}/> '
+            f"<code>{svc_esc}</code></label>"
+        )
+    parts.append('<button type="submit" style="margin-top:0.5rem">Save selection</button>')
+    parts.append("</form></div>")
+    return "".join(parts)
 
 
 def _render_ha_cameras_card(boot: BootState) -> str:
@@ -549,23 +612,12 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
 
     # ─── capabilities card ─────────────────────────────────────────
     caps_html = boot.topology_summary.pop("__caps_html", "—")
-    # Surface what notify.* services receive alerts (v0.3.12). Helpful
-    # debugging signal when "I configured notifications but my phone
-    # isn't buzzing" — confirms the wiring happened at boot.
-    notify_html = ""
-    if boot.notifier is not None and boot.notifier.notify_services:
-        svcs = ", ".join(f"<code>{_escape(s)}</code>" for s in boot.notifier.notify_services)
-        notify_html = f'<p class="muted">Alert notifications go to: {svcs}</p>'
-    else:
-        notify_html = (
-            '<p class="muted">Alert notifications: <strong>off</strong>. '
-            "Set <code>notify.alert_services</code> in add-on Configuration "
-            "to enable (e.g. <code>[notify.mobile_app_pixel_8]</code>).</p>"
-        )
+    # Notification config now lives in the dedicated Notifications
+    # card (v0.3.13). Capabilities is back to its original purpose.
     caps_card = (
         '<div class="card"><h3>Capabilities</h3>'
         '<p class="muted">Domains SentiHome can act on in your HA:</p>'
-        f"<p>{caps_html}</p>{notify_html}</div>"
+        f"<p>{caps_html}</p></div>"
     )
 
     # ─── HA cameras detected card ─────────────────────────────────
@@ -576,6 +628,11 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
     # When auto_discover is off, falls back to the legacy read-only
     # discovery view (the user has opted into hand-writing `adapters`).
     ha_cameras_card = _render_ha_cameras_card(boot)
+
+    # ─── Notifications card (v0.3.13) ─────────────────────────────
+    # Lists every notify.* service HA exposes as a checkbox. Save
+    # selection → POST /notify/services → notifier.set_services live.
+    notifications_card = await _render_notifications_card(boot)
 
     # ─── cameras card ──────────────────────────────────────────────
     cam_statuses = boot.camera_registry.all()
@@ -680,6 +737,7 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         .replace("__CAPABILITIES_CARD__", caps_card)
         .replace("__CAMERAS_CARD__", cameras_card)
         .replace("__HA_CAMERAS_CARD__", ha_cameras_card)
+        .replace("__NOTIFICATIONS_CARD__", notifications_card)
         .replace("__LOGS_CARD__", logs_card)
     )
 
@@ -925,6 +983,27 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
         await _reconcile_discovery(boot)
         return await _redirect_home()
 
+    async def notify_services_save(request: web.Request) -> web.Response:
+        """Save the user's notify-service checkbox selection (v0.3.13).
+
+        Empty checkbox set = no notifications. Both legal. The UI
+        choice always wins over the YAML seed once this file exists.
+        """
+        form = await request.post()
+        # form.getall("service") returns every checked checkbox value;
+        # unchecked checkboxes don't appear in the form at all (HTML
+        # form semantics), so dedupe via set just in case.
+        chosen = sorted({s for s in form.getall("service") if isinstance(s, str)})
+        save_notify_services(chosen)
+        if boot.notifier is not None:
+            boot.notifier.set_services(chosen)
+        else:
+            logger.warning(
+                "notify_services_save.no_notifier",
+                hint="HA not connected yet — selection saved to disk, will apply on next boot",
+            )
+        return await _redirect_home()
+
     async def api_get(request: web.Request) -> web.Response:
         body: dict = dict(request.rel_url.query)
         # Always re-bind tools off the current boot state so the API
@@ -960,6 +1039,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     app.router.add_post("/discovery/override", discovery_override)
     app.router.add_post("/discovery/reset", discovery_reset)
     app.router.add_post("/discovery/refresh", discovery_refresh)
+    # v0.3.13 UI-driven notify service selection.
+    app.router.add_post("/notify/services", notify_services_save)
     return app
 
 
@@ -1079,18 +1160,22 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
                 )
             )
 
-        # v0.3.12: wire HA notifications when the user has populated
-        # notify.alert_services. The notifier subscribes to AlertLog,
-        # so every alert (legacy adapter OR auto-discovered) fans out.
-        alert_services = getattr(getattr(boot.topology, "notify", None), "alert_services", [])
-        if alert_services:
-            notifier = AlertNotifier(client=client, notify_services=list(alert_services))
-            alert_log.add_on_record(notifier.on_alert)
-            boot.notifier = notifier
-            logger.info(
-                "ha_agent.alert_notifier_wired",
-                services=list(alert_services),
-            )
+        # v0.3.13: always install the notifier so the user can toggle
+        # services on/off live from the Web UI Notifications card. On
+        # boot we seed its service list from
+        # /data/sentihome/notify_overrides.json (UI choices) falling
+        # back to topology.notify.alert_services (YAML) if the file
+        # doesn't exist. After that, the UI is the source of truth.
+        yaml_services = getattr(getattr(boot.topology, "notify", None), "alert_services", [])
+        initial_services = resolve_initial_services(yaml_services or [])
+        notifier = AlertNotifier(client=client, notify_services=initial_services)
+        alert_log.add_on_record(notifier.on_alert)
+        boot.notifier = notifier
+        logger.info(
+            "ha_agent.alert_notifier_wired",
+            services=initial_services,
+            from_yaml_fallback=(initial_services == list(yaml_services or [])),
+        )
 
         # v0.3.11 zero-config path: run discovery + reconciler when
         # `auto_discover` is on (the default). The reconciler manages
