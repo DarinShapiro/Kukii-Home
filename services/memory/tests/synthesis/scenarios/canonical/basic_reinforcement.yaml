@@ -1,0 +1,72 @@
+name: basic_reinforcement
+description: |
+  5-day scenario that exercises the bare-bones harness path end-to-end:
+  bootstrap KnownActors, write daily Events, invoke mocked VLM that
+  cites the same actor each day, build up CITED edges in the graph.
+
+  Verifies:
+   1. Events are written on the right days (5 declared events, all on
+      front_south_cam).
+   2. VLM was invoked once per event (5 VLMDecisions total).
+   3. The CITED edge on day 5 exists with at least the default weight.
+   4. A KnownActor that's never cited (rex) shows up as a pruning
+      candidate at the default threshold.
+
+household: canonical
+seed: 1
+duration_days: 5
+noise_profile: none
+
+bootstrap:
+  known_actors:
+    - id: actor_alice
+      name: Alice
+      role: resident
+      access_profile: full
+    - id: actor_rex
+      name: Rex
+      role: pet_known
+      access_profile: full
+
+recurring_events:
+  - from_day: 1
+    to_day: 5
+    time: '17:30'
+    camera: front_south_cam
+    preprocessor_output:
+      tag_set: [person]
+      matched_actor_ids: [actor_alice]
+    vlm_response_template:
+      id: dec_d{day}
+      citations: [actor_alice]
+      findings_summary: 'Alice returning home in the evening; normal pattern.'
+      citation_weight: 0.7
+    truth:
+      actor_id: actor_alice
+      intent: routine_arrival
+      should_fire_alert: false
+      expected_tier: tier_0
+
+assertions:
+  - kind: event_count
+    camera: front_south_cam
+    expected: 5
+    description: 'Five days of Alice arriving on front_south_cam.'
+
+  - kind: vlm_invocation_count
+    expected: 5
+    description: 'VLM oracle invoked once per event.'
+
+  - kind: edge_weight_at_least
+    decision_id: dec_d5
+    memory_id: actor_alice
+    min_weight: 0.5
+    description: 'Day-5 citation edge should carry the template default (0.7).'
+
+  - kind: pruning_candidate_exists
+    node_kind: KnownActor
+    threshold: 0.5
+    must_include: actor_rex
+    description: |
+      Rex is bootstrapped but never cited; should appear as a pruning
+      candidate at the default threshold.

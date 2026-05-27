@@ -1,0 +1,1 @@
+"""Hand-curated canonical scenarios."""

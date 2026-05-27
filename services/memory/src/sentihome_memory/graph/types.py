@@ -117,6 +117,27 @@ class CitedEdge:
 
 
 @dataclass
+class VLMDecision:
+    """One VLM invocation's structured output (Phase 1B minimum).
+
+    The full schema will grow to include findings, tier, recommendations,
+    upstream_quality_issues, etc. — see Epic 10. For Phase 1B we only
+    need enough to write the node + attach CITED edges so harness
+    scenarios can drive reinforcement dynamics.
+    """
+
+    id: str
+    ts: float
+    triggered_by_event_id: str | None = None
+    """Event that this VLM call was invoked for. None for synthetic
+    bootstrap decisions."""
+
+    findings_summary: str = ""
+    """Human-readable summary; not used for assertions (the structured
+    fields are). Useful for audit + the eventual Bloom visualization."""
+
+
+@dataclass
 class PruneCandidate:
     """A node up for potential pruning, with its score + reason.
 

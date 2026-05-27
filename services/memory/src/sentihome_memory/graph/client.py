@@ -29,6 +29,7 @@ from sentihome_memory.graph.types import (
     KnownActor,
     NodeKind,
     PruneCandidate,
+    VLMDecision,
 )
 
 if TYPE_CHECKING:
@@ -73,6 +74,15 @@ class GraphClient(Protocol):
         """Fetch one actor by id. ``None`` if not enrolled."""
         ...
 
+    def write_vlm_decision(self, decision: VLMDecision) -> None:
+        """Insert or update a VLMDecision node. Idempotent on
+        ``decision.id``. Source endpoint for CITED edges."""
+        ...
+
+    def read_vlm_decision(self, decision_id: str) -> VLMDecision | None:
+        """Fetch one decision by id. ``None`` if it doesn't exist."""
+        ...
+
     # ─── edges ──────────────────────────────────────────────────────
 
     def write_cited_edge(self, edge: CitedEdge) -> None:
@@ -91,6 +101,17 @@ class GraphClient(Protocol):
     def get_citations_to(self, memory_id: str) -> list[CitedEdge]:
         """All CITED edges pointing at ``memory_id``. Used by retention
         scoring to find how much influence a memory has accumulated."""
+        ...
+
+    # ─── queries / counts ───────────────────────────────────────────
+
+    def count_events(self, *, camera_id: str | None = None) -> int:
+        """Total Event nodes; optionally filtered by camera."""
+        ...
+
+    def count_vlm_decisions(self) -> int:
+        """Total VLMDecision nodes. Useful for asserting "VLM was/wasn't
+        invoked N times in this scenario.\""""
         ...
 
     # ─── pruning ────────────────────────────────────────────────────
@@ -121,6 +142,7 @@ class InMemoryGraphClient:
 
     _events: dict[str, Event] = field(default_factory=dict)
     _actors: dict[str, KnownActor] = field(default_factory=dict)
+    _decisions: dict[str, VLMDecision] = field(default_factory=dict)
     _cited_edges: dict[tuple[str, str], CitedEdge] = field(default_factory=dict)
     """Keyed by (decision_id, memory_id)."""
 
@@ -131,6 +153,7 @@ class InMemoryGraphClient:
     def clear_all(self) -> None:
         self._events.clear()
         self._actors.clear()
+        self._decisions.clear()
         self._cited_edges.clear()
 
     def write_event(self, event: Event) -> None:
@@ -145,6 +168,12 @@ class InMemoryGraphClient:
     def read_known_actor(self, actor_id: str) -> KnownActor | None:
         return self._actors.get(actor_id)
 
+    def write_vlm_decision(self, decision: VLMDecision) -> None:
+        self._decisions[decision.id] = decision
+
+    def read_vlm_decision(self, decision_id: str) -> VLMDecision | None:
+        return self._decisions.get(decision_id)
+
     def write_cited_edge(self, edge: CitedEdge) -> None:
         self._cited_edges[(edge.decision_id, edge.memory_id)] = edge
 
@@ -153,6 +182,14 @@ class InMemoryGraphClient:
 
     def get_citations_to(self, memory_id: str) -> list[CitedEdge]:
         return [e for (_, m), e in self._cited_edges.items() if m == memory_id]
+
+    def count_events(self, *, camera_id: str | None = None) -> int:
+        if camera_id is None:
+            return len(self._events)
+        return sum(1 for e in self._events.values() if e.camera_id == camera_id)
+
+    def count_vlm_decisions(self) -> int:
+        return len(self._decisions)
 
     def candidates_for_pruning(
         self, *, threshold: float, kind: NodeKind | None = None
@@ -316,6 +353,52 @@ class Neo4jGraphClient:
             face_embedding=tuple(emb) if emb else None,
             access_profile=node.get("access_profile", "none"),
         )
+
+    def write_vlm_decision(self, decision: VLMDecision) -> None:
+        with self.driver.session() as session:
+            session.run(
+                """
+                MERGE (d:VLMDecision {id: $id})
+                SET d.ts                     = $ts,
+                    d.triggered_by_event_id  = $triggered_by_event_id,
+                    d.findings_summary       = $findings_summary
+                """,
+                id=decision.id,
+                ts=decision.ts,
+                triggered_by_event_id=decision.triggered_by_event_id,
+                findings_summary=decision.findings_summary,
+            )
+
+    def read_vlm_decision(self, decision_id: str) -> VLMDecision | None:
+        with self.driver.session() as session:
+            record = session.run(
+                "MATCH (d:VLMDecision {id: $id}) RETURN d", id=decision_id
+            ).single()
+        if record is None:
+            return None
+        node = record["d"]
+        return VLMDecision(
+            id=node["id"],
+            ts=node["ts"],
+            triggered_by_event_id=node.get("triggered_by_event_id"),
+            findings_summary=node.get("findings_summary", ""),
+        )
+
+    def count_events(self, *, camera_id: str | None = None) -> int:
+        with self.driver.session() as session:
+            if camera_id is None:
+                record = session.run("MATCH (e:Event) RETURN count(e) AS n").single()
+            else:
+                record = session.run(
+                    "MATCH (e:Event {camera_id: $cam}) RETURN count(e) AS n",
+                    cam=camera_id,
+                ).single()
+        return int(record["n"]) if record else 0
+
+    def count_vlm_decisions(self) -> int:
+        with self.driver.session() as session:
+            record = session.run("MATCH (d:VLMDecision) RETURN count(d) AS n").single()
+        return int(record["n"]) if record else 0
 
     def write_cited_edge(self, edge: CitedEdge) -> None:
         with self.driver.session() as session:

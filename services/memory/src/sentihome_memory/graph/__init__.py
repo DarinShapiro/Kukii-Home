@@ -25,6 +25,7 @@ from sentihome_memory.graph.types import (
     KnownActor,
     NodeKind,
     PruneCandidate,
+    VLMDecision,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "Neo4jGraphClient",
     "NodeKind",
     "PruneCandidate",
+    "VLMDecision",
 ]
