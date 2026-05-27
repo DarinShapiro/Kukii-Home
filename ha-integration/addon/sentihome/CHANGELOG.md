@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.17 — 2026-05-27
+
+**Fix: tap notification → 401 unauthorized.**
+
+v0.3.15 set `data.url` and `data.image` to
+`/api/hassio_ingress/<token>/...` using the token fetched from
+Supervisor at boot. That token is the add-on's server-side
+ingress token — bound to browser ingress sessions, not the
+HA Companion mobile app's session. Result: tap notification →
+HA → 401 unauthorized page.
+
+Correct strategy (now shipped):
+
+- `data.url` = `/hassio/ingress/sentihome` — HA's user-session-
+  aware frontend route. Tap → HA resolves it for the current
+  user → opens the SentiHome status page in the Companion app.
+- `data.image` = `/api/camera_proxy/<camera_entity>` — HA's own
+  image endpoint. Served with the mobile app's session auth.
+
+Trade-off on the image: it's the **current camera frame** at
+the moment your phone fetches the notification, not the
+at-alert-time snapshot. For security alerts this is arguably
+more useful — "what's happening right now" — and it just works
+without us trying to thread a SentiHome-served path through
+HA's auth.
+
+The supervisor ingress URL discovery from v0.3.15 stays in
+place (we may need it for other surfaces later), but the
+notifier no longer uses it.
+
 ## 0.3.16 — 2026-05-27
 
 **Per-device motion-switch toggles + one-click fallback to generic
@@ -27,7 +57,7 @@ addressing the same class of "alerts aren't firing" misconfig:
 New backend:
 
 - `HATools.find_motion_switches(camera_entity)` — token-overlap
-  heuristic over HA's switch.* entities.
+  heuristic over HA's switch.\* entities.
 - `DiscoveryDecision.motion_switches` (list of switch states)
   populated by `_reconcile_discovery` on every reconcile.
 - `DiscoveryDecision.suggest_generic_motion` (entity id of a

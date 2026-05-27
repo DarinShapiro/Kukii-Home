@@ -14,6 +14,7 @@ def _alert(
     headline: str = "Person at Pool Cam",
     camera_id: str = "dahuapoolcam",
     camera_name: str = "DahuaPoolCam Main",
+    camera_entity: str = "camera.dahuapoolcam_sub",
     sensor_classification: str = "person",
     recorded_at: str = "2026-05-27T14:23:01+00:00",
     evidence_ref: str | None = "/data/sentihome/snapshots/x.jpg",
@@ -25,6 +26,7 @@ def _alert(
         "headline": headline,
         "camera_id": camera_id,
         "camera_name": camera_name,
+        "camera_entity": camera_entity,
         "sensor_classification": sensor_classification,
         "recorded_at": recorded_at,
         "evidence_ref": evidence_ref,
@@ -59,34 +61,35 @@ def test_render_basic_alert():
     # Message uses friendly camera name, not the slug.
     assert "DahuaPoolCam Main" in message or "Person detected" in message
     assert "14:23:01" in message
-    # No ingress base → fallback stable URL.
+    # v0.3.17: url is the user-session-aware HA frontend route.
     assert data["url"] == "/hassio/ingress/sentihome"
-    # Without ingress base, image attachment is omitted (HA won't
-    # redirect deep paths) to avoid broken-image rendering on the app.
-    assert "image" not in data
+    assert data["clickAction"] == "/hassio/ingress/sentihome"
+    # v0.3.17: image is HA's own camera_proxy — auth via mobile session.
+    assert data["image"] == "/api/camera_proxy/camera.dahuapoolcam_sub"
     # Per-camera dedup tag is always present.
     assert data["tag"] == "sentihome_dahuapoolcam"
 
 
-def test_render_uses_ingress_base_when_set():
+def test_render_url_is_stable_ignores_ingress_base():
+    """v0.3.17: even when an ingress_url_base is supplied (v0.3.15
+    plumbing), the notification URLs use the stable /hassio/ingress/
+    path because the supervisor-issued token isn't valid for the
+    mobile app's session."""
     n, _ = _make_notifier(
         ["notify.mobile_app_x"],
-        sentihome_ingress_base="/api/hassio_ingress/TOKEN123",
+        sentihome_ingress_base="/api/hassio_ingress/TOKEN123/",
     )
     _, _, data = n._render(_alert())
-    assert data["url"] == "/api/hassio_ingress/TOKEN123/"
-    assert data["clickAction"] == "/api/hassio_ingress/TOKEN123/"
-    assert data["image"] == "/api/hassio_ingress/TOKEN123/alerts/abc123/snapshot"
+    assert data["url"] == "/hassio/ingress/sentihome"
+    assert "TOKEN123" not in data["url"]
+    assert "TOKEN123" not in data.get("image", "")
 
 
-def test_render_omits_image_when_no_snapshot():
-    """No evidence_ref means we never captured a snapshot — don't
-    pass a broken URL to the HA app."""
-    n, _ = _make_notifier(
-        [],
-        sentihome_ingress_base="/api/hassio_ingress/X/",
-    )
-    _, _, data = n._render(_alert(evidence_ref=None))
+def test_render_omits_image_when_no_camera_entity():
+    """Synthetic test alerts (camera_entity = '') get no image
+    attachment — there's no HA entity to fetch a current frame from."""
+    n, _ = _make_notifier([])
+    _, _, data = n._render(_alert(camera_entity=""))
     assert "image" not in data
     assert "url" in data
 
@@ -166,21 +169,17 @@ async def test_on_alert_rejects_malformed_service_string():
     mock.call_service.assert_not_called()
 
 
-async def test_on_alert_payload_includes_image_when_snapshot_exists():
-    """With an ingress base set, the image URL is built absolutely
-    against the ingress prefix so HA Companion can fetch it through
-    its auth session."""
-    n, mock = _make_notifier(
-        ["notify.mobile_app_x"],
-        sentihome_ingress_base="/api/hassio_ingress/TOK/",
-    )
-    n.on_alert(_alert())
+async def test_on_alert_payload_includes_image_when_camera_entity_present():
+    """v0.3.17: when the alert carries a camera_entity, the image URL
+    is HA's /api/camera_proxy/ path which the mobile Companion can
+    fetch with its existing session auth."""
+    n, mock = _make_notifier(["notify.mobile_app_x"])
+    n.on_alert(_alert(camera_entity="camera.front_south_camera_fluent"))
     await _drain(n)
     call = mock.call_service.call_args
     body = call.kwargs["data"]
     assert "data" in body
-    assert "image" in body["data"]
-    assert body["data"]["image"].startswith("/api/hassio_ingress/TOK/")
+    assert body["data"]["image"] == "/api/camera_proxy/camera.front_south_camera_fluent"
 
 
 # ─── AlertLog integration ────────────────────────────────────────────

@@ -216,23 +216,33 @@ class AlertNotifier:
         message = " ".join(message_bits)
 
         # ─── data: url, image, tag ───────────────────────────────
-        alert_id = alert.get("alert_id") or ""
-        if self.sentihome_ingress_base:
-            base = self.sentihome_ingress_base.rstrip("/")
-            url = base + "/"
-            image_url = f"{base}/alerts/{alert_id}/snapshot" if alert_id else ""
-        else:
-            # Fallback: use the stable HA path that redirects to the
-            # current ingress URL. Tap-action works; image attachment
-            # may not (HA only redirects the root, not deep paths).
-            url = "/hassio/ingress/sentihome"
-            image_url = ""
+        # v0.3.17 — URLs must be auth'd by the mobile app's session, not
+        # by the add-on's server-side ingress token. The /api/hassio_ingress/
+        # <addon_token>/ URLs (which we tried in v0.3.15) 401 from the
+        # phone because that token is for browser ingress sessions, not
+        # mobile Companion sessions.
+        #
+        # Correct strategy:
+        #   url   → /hassio/ingress/sentihome   (HA frontend route;
+        #                                        per-user redirect)
+        #   image → /api/camera_proxy/<entity>  (HA's own image endpoint;
+        #                                        served with mobile
+        #                                        session auth)
+        #
+        # Trade-off on image: it's the CURRENT camera frame, not the
+        # at-alert-time snapshot. For security alerts this is arguably
+        # MORE useful — "what's happening right now" — and it just
+        # works without us trying to thread a SentiHome-served path
+        # through HA's auth.
+        url = "/hassio/ingress/sentihome"
+        camera_entity = alert.get("camera_entity") or ""
+        image_url = f"/api/camera_proxy/{camera_entity}" if camera_entity else ""
 
         data: dict[str, Any] = {
             "url": url,
             "clickAction": url,  # Android Companion uses this name
         }
-        if image_url and alert.get("evidence_ref"):
+        if image_url:
             data["image"] = image_url
         # Tag per camera so sequential alerts from the same camera
         # collapse on the phone instead of stacking. Users who WANT
