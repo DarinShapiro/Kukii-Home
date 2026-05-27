@@ -34,6 +34,12 @@ class NodeKind(StrEnum):
     """One VLM invocation's structured output. CITED edges from this
     node point at the Memory nodes the VLM cited as pertinent."""
 
+    POLICY = "Policy"
+    """A VLM-authored dismissal policy or a user-authored
+    TransientIntent. Carries scope (camera/area) + match condition
+    (tag-set subset) + TTL + rationale. Active policies short-circuit
+    VLM invocation for matching events."""
+
 
 @dataclass
 class Event:
@@ -114,6 +120,51 @@ class CitedEdge:
     """When this edge was most recently boosted by a citation event.
     None = never boosted since creation; the dispatcher uses None
     to mean "first ever citation" in habituation_boost()."""
+
+
+@dataclass
+class Policy:
+    """A VLM-authored dismissal policy or a user-authored TransientIntent.
+
+    When a new event arrives, the runner checks every active policy
+    (TTL not yet expired) whose scope matches the event's camera. If
+    the event's tag_set is a subset of the policy's match_tag_subset,
+    the policy short-circuits: the event is recorded but the VLM is
+    NOT invoked.
+
+    Phase 1B keeps the match condition simple — just a tag-subset
+    rule scoped to one camera. Time-of-day windows + area scoping +
+    actor-specific matches are Phase 2 extensions.
+    """
+
+    id: str
+    kind: str
+    """``dismissal`` (skip VLM on match) or ``transient_intent``
+    (escalate on match — not implemented in Phase 1B)."""
+
+    scope_camera: str | None
+    """Camera id the policy applies to. ``None`` = any camera."""
+
+    match_tag_subset: tuple[str, ...]
+    """If ``set(event.tag_set) ⊆ set(policy.match_tag_subset)``,
+    the policy fires. Empty set = matches events with no tags."""
+
+    ttl_seconds: float
+    """Policy lifetime from ``created_ts``."""
+
+    created_ts: float
+    rationale: str = ""
+    """Human-readable reason the VLM (or user) authored this policy.
+    Surfaced in audit logs + dev-loop dashboard."""
+
+    def is_active(self, now_ts: float) -> bool:
+        return now_ts < self.created_ts + self.ttl_seconds
+
+    def matches_event(self, camera_id: str, tag_set: tuple[str, ...]) -> bool:
+        """True if this policy fires for an event with these properties."""
+        if self.scope_camera is not None and self.scope_camera != camera_id:
+            return False
+        return set(tag_set).issubset(set(self.match_tag_subset))
 
 
 @dataclass

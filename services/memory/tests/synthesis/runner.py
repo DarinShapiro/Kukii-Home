@@ -26,14 +26,17 @@ from sentihome_memory.graph import (
     GraphClient,
     KnownActor,
     NodeKind,
+    Policy,
     VLMDecision,
 )
 
 from synthesis.scenarios.schema import (
     AssertEdgeWeightAtLeast,
     AssertEventCount,
+    AssertPolicyCount,
     AssertPruningCandidate,
     AssertVLMInvocationCount,
+    AssertVLMInvocationsBelow,
     DeclaredEvent,
     PreprocessorOutput,
     RecurringEvent,
@@ -71,6 +74,8 @@ class ScenarioResult:
     events_written: int
     vlm_decisions_written: int
     citations_written: int
+    policies_written: int
+    events_dismissed_by_policy: int
     assertion_failures: list[str]
 
     @property
@@ -106,47 +111,83 @@ def run_scenario(scenario: Scenario, client: GraphClient) -> ScenarioResult:
     events_written = 0
     vlm_decisions_written = 0
     citations_written = 0
+    policies_written = 0
+    events_dismissed_by_policy = 0
 
     for i, ev in enumerate(resolved):
         tp.advance_to(ev.ts)
+        now = tp.now()
 
         event_id = f"evt_{ev.camera}_{int(ev.ts)}_{i:04d}"
+        tag_set = tuple(sorted(ev.preprocessor_output.tag_set))
         event = Event(
             id=event_id,
-            ts=tp.now(),
+            ts=now,
             camera_id=ev.camera,
-            tag_set=tuple(sorted(ev.preprocessor_output.tag_set)),
+            tag_set=tag_set,
             matched_actor_ids=tuple(ev.preprocessor_output.matched_actor_ids),
             metadata={"intent": ev.truth.intent} if ev.truth.intent else {},
         )
         client.write_event(event)
         events_written += 1
 
-        # If the scenario specifies a VLM response, invoke the oracle.
-        if ev.vlm_response is not None:
-            decision = VLMDecision(
-                id=ev.vlm_response.id,
-                ts=tp.now(),
-                triggered_by_event_id=event_id,
-                findings_summary=ev.vlm_response.findings_summary,
-            )
-            client.write_vlm_decision(decision)
-            vlm_decisions_written += 1
+        # Check active dismissal policies BEFORE invoking VLM. This is
+        # the content-based throttle from Epic 10: an event whose tag
+        # set fits inside an active dismissal scope is short-circuited,
+        # recorded but not analyzed.
+        dismissal_match = _find_dismissal_match(
+            client, now=now, camera_id=ev.camera, tag_set=tag_set
+        )
+        if dismissal_match is not None:
+            events_dismissed_by_policy += 1
+            continue  # skip VLM invocation entirely
 
-            for cited_memory_id in ev.vlm_response.citations:
-                client.write_cited_edge(
-                    CitedEdge(
-                        decision_id=decision.id,
-                        memory_id=cited_memory_id,
-                        weight=ev.vlm_response.citation_weight,
-                        created_ts=tp.now(),
-                        last_reinforced_ts=tp.now(),
-                    )
+        # No active dismissal — invoke the oracle if the scenario
+        # supplied one. (An event without an oracle response and
+        # without a matching dismissal is just a recorded observation
+        # the VLM didn't consider — also a real scenario shape.)
+        if ev.vlm_response is None:
+            continue
+
+        decision = VLMDecision(
+            id=ev.vlm_response.id,
+            ts=now,
+            triggered_by_event_id=event_id,
+            findings_summary=ev.vlm_response.findings_summary,
+        )
+        client.write_vlm_decision(decision)
+        vlm_decisions_written += 1
+
+        for cited_memory_id in ev.vlm_response.citations:
+            client.write_cited_edge(
+                CitedEdge(
+                    decision_id=decision.id,
+                    memory_id=cited_memory_id,
+                    weight=ev.vlm_response.citation_weight,
+                    created_ts=now,
+                    last_reinforced_ts=now,
                 )
-                citations_written += 1
+            )
+            citations_written += 1
+
+        # The VLM may author one or more policies. Each becomes an
+        # active Policy node from this moment forward (until TTL).
+        for ap in ev.vlm_response.authored_policies:
+            client.write_policy(
+                Policy(
+                    id=ap.id,
+                    kind=ap.kind,
+                    scope_camera=ap.scope_camera,
+                    match_tag_subset=tuple(sorted(ap.match_tag_subset)),
+                    ttl_seconds=ap.ttl_seconds,
+                    created_ts=now,
+                    rationale=ap.rationale,
+                )
+            )
+            policies_written += 1
 
     # 4. Evaluate assertions.
-    failures = _evaluate_assertions(scenario, client)
+    failures = _evaluate_assertions(scenario, client, vlm_decisions_written)
 
     return ScenarioResult(
         scenario_name=scenario.name,
@@ -154,8 +195,26 @@ def run_scenario(scenario: Scenario, client: GraphClient) -> ScenarioResult:
         events_written=events_written,
         vlm_decisions_written=vlm_decisions_written,
         citations_written=citations_written,
+        policies_written=policies_written,
+        events_dismissed_by_policy=events_dismissed_by_policy,
         assertion_failures=failures,
     )
+
+
+def _find_dismissal_match(
+    client: GraphClient, *, now: float, camera_id: str, tag_set: tuple[str, ...]
+) -> Policy | None:
+    """First active dismissal policy whose scope + tag-subset match.
+
+    Phase 1B: only ``dismissal`` policies short-circuit. Phase 2 will
+    add ``transient_intent`` policies that escalate instead.
+    """
+    for policy in client.list_active_policies(now_ts=now):
+        if policy.kind != "dismissal":
+            continue
+        if policy.matches_event(camera_id, tag_set):
+            return policy
+    return None
 
 
 # ─── Internal: event resolution ──────────────────────────────────────
@@ -233,11 +292,13 @@ def _weekday_for_day(start_ts: float, day: int) -> int:
 # ─── Internal: assertion evaluation ──────────────────────────────────
 
 
-def _evaluate_assertions(scenario: Scenario, client: GraphClient) -> list[str]:
+def _evaluate_assertions(
+    scenario: Scenario, client: GraphClient, vlm_invocations: int
+) -> list[str]:
     failures: list[str] = []
     for assertion in scenario.assertions:
         try:
-            err = _eval_one(assertion, client)
+            err = _eval_one(assertion, client, vlm_invocations)
         except Exception as e:
             err = f"{assertion.kind}: evaluator raised: {e}"
         if err is not None:
@@ -245,7 +306,7 @@ def _evaluate_assertions(scenario: Scenario, client: GraphClient) -> list[str]:
     return failures
 
 
-def _eval_one(assertion, client: GraphClient) -> str | None:
+def _eval_one(assertion, client: GraphClient, vlm_invocations: int) -> str | None:
     """Return None if the assertion holds, an error message if it fails."""
     if isinstance(assertion, AssertEventCount):
         actual = client.count_events(camera_id=assertion.camera)
@@ -293,6 +354,25 @@ def _eval_one(assertion, client: GraphClient) -> str | None:
                 f"to be a pruning candidate (threshold {assertion.threshold}, "
                 f"kind {assertion.node_kind}), but it isn't. "
                 f"Candidates found: {sorted(ids)}"
+                + (f" — {assertion.description}" if assertion.description else "")
+            )
+        return None
+
+    if isinstance(assertion, AssertPolicyCount):
+        actual = client.count_policies(kind=assertion.policy_kind)
+        if actual != assertion.expected:
+            return (
+                f"policy_count[kind={assertion.policy_kind}]: "
+                f"expected {assertion.expected}, got {actual}"
+                + (f" — {assertion.description}" if assertion.description else "")
+            )
+        return None
+
+    if isinstance(assertion, AssertVLMInvocationsBelow):
+        if vlm_invocations > assertion.max_invocations:
+            return (
+                f"vlm_invocations_below: expected at most "
+                f"{assertion.max_invocations}, got {vlm_invocations}"
                 + (f" — {assertion.description}" if assertion.description else "")
             )
         return None

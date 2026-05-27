@@ -28,6 +28,7 @@ from sentihome_memory.graph.types import (
     Event,
     KnownActor,
     NodeKind,
+    Policy,
     PruneCandidate,
     VLMDecision,
 )
@@ -103,6 +104,20 @@ class GraphClient(Protocol):
         scoring to find how much influence a memory has accumulated."""
         ...
 
+    # ─── policies ───────────────────────────────────────────────────
+
+    def write_policy(self, policy: Policy) -> None:
+        """Insert or update a Policy node. Idempotent on ``policy.id``."""
+        ...
+
+    def read_policy(self, policy_id: str) -> Policy | None:
+        """Fetch one policy by id."""
+        ...
+
+    def list_active_policies(self, *, now_ts: float) -> list[Policy]:
+        """All policies whose TTL hasn't yet expired at ``now_ts``."""
+        ...
+
     # ─── queries / counts ───────────────────────────────────────────
 
     def count_events(self, *, camera_id: str | None = None) -> int:
@@ -112,6 +127,11 @@ class GraphClient(Protocol):
     def count_vlm_decisions(self) -> int:
         """Total VLMDecision nodes. Useful for asserting "VLM was/wasn't
         invoked N times in this scenario.\""""
+        ...
+
+    def count_policies(self, *, kind: str | None = None) -> int:
+        """Total Policy nodes; optionally filtered by kind
+        (``dismissal`` / ``transient_intent``)."""
         ...
 
     # ─── pruning ────────────────────────────────────────────────────
@@ -143,6 +163,7 @@ class InMemoryGraphClient:
     _events: dict[str, Event] = field(default_factory=dict)
     _actors: dict[str, KnownActor] = field(default_factory=dict)
     _decisions: dict[str, VLMDecision] = field(default_factory=dict)
+    _policies: dict[str, Policy] = field(default_factory=dict)
     _cited_edges: dict[tuple[str, str], CitedEdge] = field(default_factory=dict)
     """Keyed by (decision_id, memory_id)."""
 
@@ -154,6 +175,7 @@ class InMemoryGraphClient:
         self._events.clear()
         self._actors.clear()
         self._decisions.clear()
+        self._policies.clear()
         self._cited_edges.clear()
 
     def write_event(self, event: Event) -> None:
@@ -183,6 +205,15 @@ class InMemoryGraphClient:
     def get_citations_to(self, memory_id: str) -> list[CitedEdge]:
         return [e for (_, m), e in self._cited_edges.items() if m == memory_id]
 
+    def write_policy(self, policy: Policy) -> None:
+        self._policies[policy.id] = policy
+
+    def read_policy(self, policy_id: str) -> Policy | None:
+        return self._policies.get(policy_id)
+
+    def list_active_policies(self, *, now_ts: float) -> list[Policy]:
+        return [p for p in self._policies.values() if p.is_active(now_ts)]
+
     def count_events(self, *, camera_id: str | None = None) -> int:
         if camera_id is None:
             return len(self._events)
@@ -190,6 +221,11 @@ class InMemoryGraphClient:
 
     def count_vlm_decisions(self) -> int:
         return len(self._decisions)
+
+    def count_policies(self, *, kind: str | None = None) -> int:
+        if kind is None:
+            return len(self._policies)
+        return sum(1 for p in self._policies.values() if p.kind == kind)
 
     def candidates_for_pruning(
         self, *, threshold: float, kind: NodeKind | None = None
@@ -250,8 +286,11 @@ _SCHEMA_STATEMENTS: tuple[str, ...] = (
     "CREATE CONSTRAINT event_id IF NOT EXISTS FOR (e:Event) REQUIRE e.id IS UNIQUE",
     "CREATE CONSTRAINT actor_id IF NOT EXISTS FOR (a:KnownActor) REQUIRE a.id IS UNIQUE",
     "CREATE CONSTRAINT decision_id IF NOT EXISTS FOR (d:VLMDecision) REQUIRE d.id IS UNIQUE",
+    "CREATE CONSTRAINT policy_id IF NOT EXISTS FOR (p:Policy) REQUIRE p.id IS UNIQUE",
     "CREATE INDEX event_ts IF NOT EXISTS FOR (e:Event) ON (e.ts)",
     "CREATE INDEX event_camera IF NOT EXISTS FOR (e:Event) ON (e.camera_id)",
+    "CREATE INDEX policy_scope_camera IF NOT EXISTS FOR (p:Policy) ON (p.scope_camera)",
+    "CREATE INDEX policy_expires_at IF NOT EXISTS FOR (p:Policy) ON (p.expires_at)",
     """CREATE VECTOR INDEX actor_face_embedding IF NOT EXISTS
        FOR (a:KnownActor) ON (a.face_embedding)
        OPTIONS { indexConfig: {
@@ -384,6 +423,44 @@ class Neo4jGraphClient:
             findings_summary=node.get("findings_summary", ""),
         )
 
+    def write_policy(self, policy: Policy) -> None:
+        with self.driver.session() as session:
+            session.run(
+                """
+                MERGE (p:Policy {id: $id})
+                SET p.kind              = $kind,
+                    p.scope_camera      = $scope_camera,
+                    p.match_tag_subset  = $match_tag_subset,
+                    p.ttl_seconds       = $ttl_seconds,
+                    p.created_ts        = $created_ts,
+                    p.expires_at        = $expires_at,
+                    p.rationale         = $rationale
+                """,
+                id=policy.id,
+                kind=policy.kind,
+                scope_camera=policy.scope_camera,
+                match_tag_subset=list(policy.match_tag_subset),
+                ttl_seconds=policy.ttl_seconds,
+                created_ts=policy.created_ts,
+                expires_at=policy.created_ts + policy.ttl_seconds,
+                rationale=policy.rationale,
+            )
+
+    def read_policy(self, policy_id: str) -> Policy | None:
+        with self.driver.session() as session:
+            record = session.run("MATCH (p:Policy {id: $id}) RETURN p", id=policy_id).single()
+        if record is None:
+            return None
+        return _node_to_policy(record["p"])
+
+    def list_active_policies(self, *, now_ts: float) -> list[Policy]:
+        with self.driver.session() as session:
+            records = session.run(
+                "MATCH (p:Policy) WHERE $now < p.expires_at RETURN p",
+                now=now_ts,
+            )
+            return [_node_to_policy(r["p"]) for r in records]
+
     def count_events(self, *, camera_id: str | None = None) -> int:
         with self.driver.session() as session:
             if camera_id is None:
@@ -398,6 +475,17 @@ class Neo4jGraphClient:
     def count_vlm_decisions(self) -> int:
         with self.driver.session() as session:
             record = session.run("MATCH (d:VLMDecision) RETURN count(d) AS n").single()
+        return int(record["n"]) if record else 0
+
+    def count_policies(self, *, kind: str | None = None) -> int:
+        with self.driver.session() as session:
+            if kind is None:
+                record = session.run("MATCH (p:Policy) RETURN count(p) AS n").single()
+            else:
+                record = session.run(
+                    "MATCH (p:Policy {kind: $kind}) RETURN count(p) AS n",
+                    kind=kind,
+                ).single()
         return int(record["n"]) if record else 0
 
     def write_cited_edge(self, edge: CitedEdge) -> None:
@@ -529,6 +617,19 @@ def _decode_dict(s: str | None) -> dict[str, str]:
             k, _, v = part.partition("=")
             out[k] = v
     return out
+
+
+def _node_to_policy(node) -> Policy:
+    """Turn a Neo4j Policy node into a :class:`Policy` dataclass."""
+    return Policy(
+        id=node["id"],
+        kind=node["kind"],
+        scope_camera=node.get("scope_camera"),
+        match_tag_subset=tuple(node.get("match_tag_subset") or ()),
+        ttl_seconds=node["ttl_seconds"],
+        created_ts=node["created_ts"],
+        rationale=node.get("rationale", ""),
+    )
 
 
 def _record_to_edge(record) -> CitedEdge:

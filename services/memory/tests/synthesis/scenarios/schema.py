@@ -58,6 +58,28 @@ class TruthLabel(_Strict):
     notes: str = ""
 
 
+class AuthoredPolicySpec(_Strict):
+    """A policy the VLM authors as part of its response.
+
+    Becomes a Policy node in the graph. Future events whose
+    ``preprocessor_output.tag_set`` is a subset of
+    ``match_tag_subset`` (and that fire on ``scope_camera``) short-
+    circuit the VLM — they're recorded but not analyzed.
+    """
+
+    id: str
+    kind: Literal["dismissal", "transient_intent"] = "dismissal"
+    scope_camera: str | None = None
+    """None = any camera. Most policies scope to one camera."""
+
+    match_tag_subset: list[str] = Field(default_factory=list)
+    """The allowed tag set. An event matches when its tag_set is a
+    subset of this set."""
+
+    ttl_seconds: float
+    rationale: str = ""
+
+
 class VLMResponseSpec(_Strict):
     """Inline VLM oracle response for one event.
 
@@ -78,6 +100,11 @@ class VLMResponseSpec(_Strict):
     """Initial weight for CITED edges. Phase 2+ this will be
     computed by the dispatcher from tier + outcome quality;
     Phase 1B uses a flat default."""
+
+    authored_policies: list[AuthoredPolicySpec] = Field(default_factory=list)
+    """Dismissal policies + TransientIntents the VLM authored in
+    this response. Each becomes a Policy node; active policies
+    short-circuit future matching events."""
 
 
 class DeclaredEvent(_Strict):
@@ -157,8 +184,30 @@ class AssertPruningCandidate(_Strict):
     description: str = ""
 
 
+class AssertPolicyCount(_Strict):
+    kind: Literal["policy_count"]
+    policy_kind: Literal["dismissal", "transient_intent"] | None = None
+    expected: int
+    description: str = ""
+
+
+class AssertVLMInvocationsBelow(_Strict):
+    """Dismissal-policy scenarios: assert the VLM was invoked FEWER
+    than this many times despite there being more events. Proves the
+    policy short-circuited subsequent VLM calls."""
+
+    kind: Literal["vlm_invocations_below"]
+    max_invocations: int
+    description: str = ""
+
+
 Assertion = (
-    AssertEventCount | AssertVLMInvocationCount | AssertEdgeWeightAtLeast | AssertPruningCandidate
+    AssertEventCount
+    | AssertVLMInvocationCount
+    | AssertEdgeWeightAtLeast
+    | AssertPruningCandidate
+    | AssertPolicyCount
+    | AssertVLMInvocationsBelow
 )
 
 

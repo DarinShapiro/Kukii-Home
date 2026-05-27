@@ -72,3 +72,53 @@ def test_scenario_runner_produces_expected_counts(scenario_client: GraphClient):
     assert len(edges) == 1
     assert edges[0].memory_id == "actor_alice"
     assert edges[0].weight == 0.7
+
+
+# ─── Milkman: dismissal-policy short-circuit ──────────────────────────
+
+
+def test_milkman_scenario(scenario_client: GraphClient):
+    """30-day recurring pattern; VLM authors a dismissal on day 1;
+    subsequent matching events are silenced.
+
+    This is the central efficiency property of the dismissal-policy
+    design: one VLM call buys ~12 silenced subsequent events.
+    """
+    scenario_path = CANONICAL_DIR / "milkman.yaml"
+    scenario = load_scenario(scenario_path)
+
+    result = run_scenario(scenario, scenario_client)
+
+    print(  # noqa: T201
+        f"\nMilkman: events={result.events_written}, "
+        f"vlm_calls={result.vlm_decisions_written}, "
+        f"policies={result.policies_written}, "
+        f"dismissed={result.events_dismissed_by_policy}, "
+        f"simulated_days={result.elapsed_simulated_seconds / 86400:.1f}"
+    )
+
+    assert result.passed, "Milkman scenario assertions failed:\n  " + "\n  ".join(
+        result.assertion_failures
+    )
+
+
+def test_milkman_dismissal_silences_subsequent_events(scenario_client: GraphClient):
+    """Concrete check: VLM invoked exactly once (day 1), all
+    subsequent events recorded but dismissed by policy."""
+    scenario_path = CANONICAL_DIR / "milkman.yaml"
+    scenario = load_scenario(scenario_path)
+    result = run_scenario(scenario, scenario_client)
+
+    assert result.vlm_decisions_written == 1, (
+        f"expected 1 VLM call (day 1 only), got {result.vlm_decisions_written}"
+    )
+    assert result.policies_written == 1
+    assert scenario_client.count_policies(kind="dismissal") == 1
+
+    total_events = scenario_client.count_events(camera_id="front_porch")
+    assert total_events >= 10, f"only {total_events} events written"
+
+    # All events past day 1 should have been dismissed by the policy.
+    assert result.events_dismissed_by_policy == total_events - 1, (
+        f"expected {total_events - 1} dismissals, got {result.events_dismissed_by_policy}"
+    )

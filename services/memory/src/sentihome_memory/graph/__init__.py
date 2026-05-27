@@ -24,6 +24,7 @@ from sentihome_memory.graph.types import (
     Event,
     KnownActor,
     NodeKind,
+    Policy,
     PruneCandidate,
     VLMDecision,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "KnownActor",
     "Neo4jGraphClient",
     "NodeKind",
+    "Policy",
     "PruneCandidate",
     "VLMDecision",
 ]

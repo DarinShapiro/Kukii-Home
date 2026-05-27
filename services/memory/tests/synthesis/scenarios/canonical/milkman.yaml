@@ -1,0 +1,100 @@
+name: milkman
+description: |
+  30-day recurring milkman pattern that exercises VLM-authored
+  dismissal policies. Days are mon-wed-fri at ~06:30 on the
+  front_porch camera.
+
+  Day 1: VLM is invoked, cites actor_milkman, authors a dismissal
+  policy: "on front_porch, if tag_set ⊆ {person, vehicle},
+  dismiss for 30 days."
+
+  Days 3, 5, 8, 10, 12, 15, ...: the recurring event template
+  fires but does NOT carry its own oracle response. The runner
+  checks active policies, finds the dismissal, short-circuits.
+  Event is recorded, VLM is NOT invoked.
+
+  Verifies: a single VLM call on day 1 produces a policy that
+  silences ~12 subsequent events over the next 29 days. This is
+  the central efficiency property of the dismissal-policy design.
+
+household: canonical
+seed: 11
+duration_days: 30
+noise_profile: none
+
+bootstrap:
+  known_actors:
+    - id: actor_milkman
+      name: Milkman
+      role: visitor_known
+      access_profile: front_porch_morning
+
+# Day 1: VLM invoked, authors dismissal policy.
+events:
+  - day: 1
+    time: '06:32'
+    camera: front_porch
+    preprocessor_output:
+      tag_set: [person, vehicle]
+      matched_actor_ids: [actor_milkman]
+    truth:
+      actor_id: actor_milkman
+      intent: routine_delivery
+      should_fire_alert: false
+      expected_tier: tier_0
+    vlm_response:
+      id: dec_d1_milkman
+      citations: [actor_milkman]
+      findings_summary: |
+        Milkman delivery, weekday morning. Routine; expected pattern.
+        Authoring 30-day dismissal for future morning person+vehicle
+        events on front_porch.
+      citation_weight: 0.7
+      authored_policies:
+        - id: pol_milkman_dismissal
+          kind: dismissal
+          scope_camera: front_porch
+          match_tag_subset: [person, vehicle]
+          ttl_seconds: 2_592_000 # 30 days
+          rationale: |
+            Routine milkman pattern: weekday-morning person+vehicle
+            on front_porch is expected. Dismiss future matching
+            events for 30 days.
+
+# Days 2-30 mon/wed/fri: event fires, dismissal policy matches,
+# no VLM invocation.
+recurring_events:
+  - from_day: 2
+    to_day: 30
+    time: '06:32'
+    weekdays: [mon, wed, fri]
+    camera: front_porch
+    preprocessor_output:
+      tag_set: [person, vehicle]
+      matched_actor_ids: [actor_milkman]
+    truth:
+      actor_id: actor_milkman
+      intent: routine_delivery
+      should_fire_alert: false
+      expected_tier: tier_0
+    # NOTE: no vlm_response_template — these events should be
+    # short-circuited by the active dismissal policy.
+
+assertions:
+  - kind: policy_count
+    policy_kind: dismissal
+    expected: 1
+    description: 'VLM authored exactly one dismissal policy on day 1.'
+
+  - kind: vlm_invocations_below
+    max_invocations: 2
+    description: |
+      The whole point of the dismissal pattern: ~12 subsequent
+      milkman events should be silenced. VLM is invoked once on
+      day 1 only (≤2 allows for any rounding I haven't thought of).
+
+  - kind: edge_weight_at_least
+    decision_id: dec_d1_milkman
+    memory_id: actor_milkman
+    min_weight: 0.5
+    description: 'Day-1 citation edge weight matches the template default.'
