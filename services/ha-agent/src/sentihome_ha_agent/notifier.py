@@ -144,12 +144,35 @@ class AlertNotifier:
         await self.client.call_service(domain, svc, data=body)
 
     def _render(self, alert: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
-        """Build (title, message, data) for the HA notify payload."""
-        headline = alert.get("headline") or "Motion alert"
-        camera_name = alert.get("camera_id") or "camera"
+        """Build (title, message, data) for the HA notify payload.
+
+        Title is the alert headline ("Person at Front Door"). Message
+        is a one-line summary including classification, friendly name,
+        area (when known), and time. The data dict carries the
+        HA-Companion-specific fields: ``url`` (tap-action), ``image``
+        (inline attachment), and ``tag`` (per-camera dedup).
+
+        URLs are computed against ``sentihome_ingress_base`` when set
+        so they route through HA Ingress (visible to the user as the
+        SentiHome Web UI, with HA Companion's auth). When the prefix
+        is unknown (no Supervisor), falls back to a stable HA path
+        that redirects to the current ingress URL.
+        """
+        # ─── pull alert fields, with defaults ────────────────────
+        camera_id = alert.get("camera_id") or "camera"
+        # Prefer the human-readable camera name if the alert carries
+        # it (HACameraLoop now stamps friendly_name; older alerts
+        # might not have it).
+        camera_label = (
+            alert.get("camera_name")
+            or alert.get("friendly_name")
+            or camera_id.replace("_", " ").title()
+        )
         recorded_at = alert.get("recorded_at", "")
         sensor_kind = alert.get("sensor_classification") or ""
-        area = alert.get("area") or ""  # populated in a future epic
+        area = alert.get("area") or ""  # populated by a future epic
+        is_test = (alert.get("source") or "").startswith(("notify_test", "camera_test"))
+
         # Pretty timestamp: HH:MM:SS from the ISO recorded_at.
         time_str = ""
         if recorded_at:
@@ -160,34 +183,62 @@ class AlertNotifier:
             except (ValueError, TypeError):
                 time_str = recorded_at[:8]
 
-        bits = [sensor_kind.capitalize() or "Motion"]
-        if camera_name:
-            bits.append(f"at {camera_name}")
-        if area:
-            bits.append(f"({area})")
-        if time_str:
-            bits.append(f"— {time_str}")
-        message = " ".join(b for b in bits if b)
+        # ─── title ───────────────────────────────────────────────
+        # Use the explicit headline when present (HACameraLoop already
+        # formats nicely like "Person at Pool Cam"). Otherwise build:
+        #   "Person at Pool Cam" / "Motion at Pool Cam"
+        # Prefix with [TEST] for diagnostic alerts so the user knows
+        # what they're looking at on the phone.
+        kind_word = sensor_kind.capitalize() if sensor_kind else "Motion"
+        if alert.get("headline"):
+            title = alert["headline"]
+        else:
+            title = f"{kind_word} at {camera_label}"
+        if is_test and not title.startswith("[TEST]"):
+            title = f"[TEST] {title}"
 
-        # Build click-through + image URLs. When SentiHome is reached
-        # via HA Ingress, the URLs must include the ingress prefix.
+        # ─── message ─────────────────────────────────────────────
+        # Two-line message: classification + camera/area on first
+        # implied line, time on second. HA Companion renders this as
+        # the notification body; phones strip newlines but keep
+        # readability.
+        message_bits: list[str] = []
+        if sensor_kind:
+            message_bits.append(f"{kind_word} detected")
+        else:
+            message_bits.append("Motion detected")
+        if camera_label and camera_label.lower() not in title.lower():
+            message_bits.append(f"on {camera_label}")
+        if area:
+            message_bits.append(f"in {area}")
+        if time_str:
+            message_bits.append(f"at {time_str}")
+        message = " ".join(message_bits)
+
+        # ─── data: url, image, tag ───────────────────────────────
         alert_id = alert.get("alert_id") or ""
         if self.sentihome_ingress_base:
             base = self.sentihome_ingress_base.rstrip("/")
             url = base + "/"
-            image = f"{base}/alerts/{alert_id}/snapshot" if alert_id else ""
+            image_url = f"{base}/alerts/{alert_id}/snapshot" if alert_id else ""
         else:
-            # No ingress prefix configured — pass relative paths and
-            # let the HA app's URL resolver handle it. (Direct LAN
-            # access via http://<host>:8765 also works here.)
-            url = "/"
-            image = f"/alerts/{alert_id}/snapshot" if alert_id else ""
+            # Fallback: use the stable HA path that redirects to the
+            # current ingress URL. Tap-action works; image attachment
+            # may not (HA only redirects the root, not deep paths).
+            url = "/hassio/ingress/sentihome"
+            image_url = ""
 
-        data: dict[str, Any] = {"url": url}
-        if image and alert.get("evidence_ref"):
-            # Only include image when a snapshot file actually exists.
-            # The HA Companion app falls back gracefully if image fetch
-            # fails, but spamming broken image URLs is rude.
-            data["image"] = image
+        data: dict[str, Any] = {
+            "url": url,
+            "clickAction": url,  # Android Companion uses this name
+        }
+        if image_url and alert.get("evidence_ref"):
+            data["image"] = image_url
+        # Tag per camera so sequential alerts from the same camera
+        # collapse on the phone instead of stacking. Users who WANT
+        # one notification per event can change this later in the
+        # alert config UI (when that ships).
+        if camera_id:
+            data["tag"] = f"sentihome_{camera_id}"
 
-        return headline, message, data
+        return title, message, data

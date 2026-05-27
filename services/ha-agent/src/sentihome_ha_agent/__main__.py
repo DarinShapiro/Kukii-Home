@@ -50,6 +50,7 @@ from sentihome_ha_agent.overrides import (
     set_device_override,
 )
 from sentihome_ha_agent.reconciler import Reconciler
+from sentihome_ha_agent.supervisor import get_ingress_url_prefix
 
 logger = structlog.get_logger(__name__)
 
@@ -136,6 +137,11 @@ class BootState:
     """v0.3.14: most recent "Send test alert" result for a specific
     device. Same lifecycle as last_notify_test but rendered on the
     HA cameras card."""
+    ingress_url_base: str = ""
+    """v0.3.15: this add-on's HA Ingress URL prefix, e.g.
+    `/api/hassio_ingress/<token>/`. Empty when not under Supervisor.
+    Used by AlertNotifier so tap-actions open SentiHome (not HA
+    root) and image attachments resolve via HA's auth session."""
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -1246,6 +1252,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
             "headline": f"[TEST] Motion at {spec.friendly_name}",
             "camera_id": device_id,
             "camera_entity": spec.camera_entity,
+            "camera_name": spec.friendly_name,
             "sensor_classification": "test",
             "triggering_sensor": "(test trigger)",
             "evidence_ref": snapshot_path,
@@ -1443,13 +1450,23 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
         # doesn't exist. After that, the UI is the source of truth.
         yaml_services = getattr(getattr(boot.topology, "notify", None), "alert_services", [])
         initial_services = resolve_initial_services(yaml_services or [])
-        notifier = AlertNotifier(client=client, notify_services=initial_services)
+        # v0.3.15: fetch our HA Ingress URL prefix from Supervisor so
+        # notifications open SentiHome on tap (not HA root) and
+        # snapshot images load via HA Companion's auth session.
+        ingress_base = await get_ingress_url_prefix()
+        boot.ingress_url_base = ingress_base
+        notifier = AlertNotifier(
+            client=client,
+            notify_services=initial_services,
+            sentihome_ingress_base=ingress_base,
+        )
         alert_log.add_on_record(notifier.on_alert)
         boot.notifier = notifier
         logger.info(
             "ha_agent.alert_notifier_wired",
             services=initial_services,
             from_yaml_fallback=(initial_services == list(yaml_services or [])),
+            ingress_base=ingress_base or "(none — using relative URLs)",
         )
 
         # v0.3.11 zero-config path: run discovery + reconciler when

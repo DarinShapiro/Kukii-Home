@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.15 — 2026-05-27
+
+**Notifications now open SentiHome on tap + render the snapshot + read
+sensibly at a glance.**
+
+User report: "test notification works but tap opens HA random
+startup page; no info gleanable from the notification itself." Root
+cause: the notify payload was using `/` for tap-action (= HA root)
+and a relative path for the image (= HA can't serve it). Fixed by
+fetching the add-on's HA Ingress URL from Supervisor at boot and
+using it for both URLs.
+
+Changes:
+
+- New `sentihome_ha_agent.supervisor` thin client that calls
+  `GET /addons/self/info` against the Supervisor REST API to
+  read this add-on's `ingress_url` (e.g.
+  `/api/hassio_ingress/<token>/`). Boot fetches it and stashes
+  on BootState.
+- AlertNotifier accepts the ingress base in its constructor and
+  uses it for `data.url` (tap → SentiHome status page) and
+  `data.image` (snapshot URL HA Companion can fetch via its
+  auth session).
+- When no ingress base is available (rare — only outside
+  Supervisor), falls back to the stable `/hassio/ingress/sentihome`
+  path so tap at least lands SentiHome; image is omitted (HA only
+  redirects the root, not deep paths).
+- Notification message body rewritten — uses the camera's
+  friendly name ("DahuaPoolCam Main") instead of the slug
+  ("dahuapoolcam"), classification is capitalized and clear
+  ("Person detected on DahuaPoolCam Main at 14:23:01"), area
+  included when known.
+- New `data.tag = "sentihome_<camera_id>"` — sequential alerts
+  from the same camera collapse on the phone instead of stacking.
+- `data.clickAction` set as well (Android Companion expects that
+  field name; iOS uses `url`).
+- Synthetic test alerts get a `[TEST]` title prefix so the user
+  knows what they're looking at on the phone.
+- HACameraLoop now stamps `camera_name` on every alert it
+  records so the notifier doesn't have to re-derive a friendly
+  name from the slug.
+
 ## 0.3.14 — 2026-05-27
 
 **In-UI diagnostic tools — verify the pipeline without waiting for

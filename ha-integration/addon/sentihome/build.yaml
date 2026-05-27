@@ -14,7 +14,7 @@
 # directory relies on. Python is installed in the Dockerfile via apt.
 
 args:
-  ADDON_VERSION: '0.3.14'
+  ADDON_VERSION: '0.3.15'
 
 build_from:
   amd64: ghcr.io/home-assistant/amd64-base-debian:bookworm

@@ -13,19 +13,23 @@ def _alert(
     alert_id: str = "abc123",
     headline: str = "Person at Pool Cam",
     camera_id: str = "dahuapoolcam",
+    camera_name: str = "DahuaPoolCam Main",
     sensor_classification: str = "person",
     recorded_at: str = "2026-05-27T14:23:01+00:00",
     evidence_ref: str | None = "/data/sentihome/snapshots/x.jpg",
     area: str = "",
+    source: str = "ha_camera_event",
 ) -> dict:
     return {
         "alert_id": alert_id,
         "headline": headline,
         "camera_id": camera_id,
+        "camera_name": camera_name,
         "sensor_classification": sensor_classification,
         "recorded_at": recorded_at,
         "evidence_ref": evidence_ref,
         "area": area,
+        "source": source,
     }
 
 
@@ -52,11 +56,16 @@ def test_render_basic_alert():
     n, _ = _make_notifier([])
     title, message, data = n._render(_alert())
     assert title == "Person at Pool Cam"
-    assert "Person" in message
-    assert "dahuapoolcam" in message
+    # Message uses friendly camera name, not the slug.
+    assert "DahuaPoolCam Main" in message or "Person detected" in message
     assert "14:23:01" in message
-    assert data["url"] == "/"
-    assert data["image"] == "/alerts/abc123/snapshot"
+    # No ingress base → fallback stable URL.
+    assert data["url"] == "/hassio/ingress/sentihome"
+    # Without ingress base, image attachment is omitted (HA won't
+    # redirect deep paths) to avoid broken-image rendering on the app.
+    assert "image" not in data
+    # Per-camera dedup tag is always present.
+    assert data["tag"] == "sentihome_dahuapoolcam"
 
 
 def test_render_uses_ingress_base_when_set():
@@ -66,13 +75,17 @@ def test_render_uses_ingress_base_when_set():
     )
     _, _, data = n._render(_alert())
     assert data["url"] == "/api/hassio_ingress/TOKEN123/"
+    assert data["clickAction"] == "/api/hassio_ingress/TOKEN123/"
     assert data["image"] == "/api/hassio_ingress/TOKEN123/alerts/abc123/snapshot"
 
 
 def test_render_omits_image_when_no_snapshot():
     """No evidence_ref means we never captured a snapshot — don't
     pass a broken URL to the HA app."""
-    n, _ = _make_notifier([])
+    n, _ = _make_notifier(
+        [],
+        sentihome_ingress_base="/api/hassio_ingress/X/",
+    )
     _, _, data = n._render(_alert(evidence_ref=None))
     assert "image" not in data
     assert "url" in data
@@ -84,13 +97,27 @@ def test_render_handles_missing_timestamp():
     assert title == "Person at Pool Cam"
     # Message still has classification + camera even without a time.
     assert "Person" in message
-    assert "dahuapoolcam" in message
+    assert "DahuaPoolCam Main" in message
 
 
 def test_render_falls_back_to_motion_when_no_classification():
     n, _ = _make_notifier([])
     _title, message, _data = n._render(_alert(headline="Motion at Pool", sensor_classification=""))
     assert "Motion" in message  # capital-M default
+
+
+def test_render_test_alerts_get_test_prefix():
+    """Synthetic alerts from /notify/test or /discovery/test_alert
+    should be visually distinct in the notification."""
+    n, _ = _make_notifier([])
+    title, _msg, _data = n._render(_alert(headline="Person at Pool Cam", source="notify_test"))
+    assert title.startswith("[TEST]")
+
+
+def test_render_message_includes_area_when_known():
+    n, _ = _make_notifier([])
+    _t, message, _d = n._render(_alert(area="Backyard"))
+    assert "Backyard" in message
 
 
 # ─── on_alert: fire-and-forget dispatch ──────────────────────────────
@@ -140,13 +167,20 @@ async def test_on_alert_rejects_malformed_service_string():
 
 
 async def test_on_alert_payload_includes_image_when_snapshot_exists():
-    n, mock = _make_notifier(["notify.mobile_app_x"])
+    """With an ingress base set, the image URL is built absolutely
+    against the ingress prefix so HA Companion can fetch it through
+    its auth session."""
+    n, mock = _make_notifier(
+        ["notify.mobile_app_x"],
+        sentihome_ingress_base="/api/hassio_ingress/TOK/",
+    )
     n.on_alert(_alert())
     await _drain(n)
     call = mock.call_service.call_args
     body = call.kwargs["data"]
     assert "data" in body
     assert "image" in body["data"]
+    assert body["data"]["image"].startswith("/api/hassio_ingress/TOK/")
 
 
 # ─── AlertLog integration ────────────────────────────────────────────

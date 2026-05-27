@@ -384,6 +384,11 @@ class HACameraLoop:
                 "evidence_ref": snapshot_path,
                 "camera_id": self._camera_id,
                 "camera_entity": self._camera_entity,
+                # v0.3.15: stamp the friendly name on the alert so the
+                # notifier renders readable messages ("Person at Front
+                # South Camera") without having to re-derive the name
+                # from the camera_id slug.
+                "camera_name": self._camera_name,
                 "triggering_sensor": triggering_sensor,
                 "sensor_classification": sensor_kind,
                 "ha_sensor_attributes": sensor_state.attributes,
