@@ -84,22 +84,50 @@ class AlertNotifier:
         task.add_done_callback(self._pending_tasks.discard)
 
     async def _dispatch(self, alert: dict[str, Any]) -> None:
+        results = await self._dispatch_capture(alert)
+        for r in results:
+            if not r["ok"]:
+                logger.warning(
+                    "notifier.send_failed",
+                    service=r["service"],
+                    error=r["error"],
+                    alert_id=alert.get("alert_id"),
+                )
+
+    async def _dispatch_capture(self, alert: dict[str, Any]) -> list[dict[str, Any]]:
+        """Dispatch + return per-service results.
+
+        Used by both the fire-and-forget on_alert path (which logs
+        failures) and the test_send diagnostic path (which surfaces
+        them in the UI). Shared so the two paths can't diverge.
+        """
         title, message, data = self._render(alert)
-        # Send to each service concurrently — if one fails, others
-        # still go through. asyncio.gather with return_exceptions so
-        # one bad service doesn't break the rest.
+        # Concurrent fan-out — one slow/failing service can't block
+        # another. return_exceptions so we collect rather than raise.
         results = await asyncio.gather(
             *(self._send_one(svc, title, message, data) for svc in self.notify_services),
             return_exceptions=True,
         )
-        for svc, result in zip(self.notify_services, results, strict=True):
-            if isinstance(result, Exception):
-                logger.warning(
-                    "notifier.send_failed",
-                    service=svc,
-                    error=str(result),
-                    alert_id=alert.get("alert_id"),
-                )
+        return [
+            {
+                "service": svc,
+                "ok": not isinstance(r, Exception),
+                "error": str(r) if isinstance(r, Exception) else None,
+            }
+            for svc, r in zip(self.notify_services, results, strict=True)
+        ]
+
+    async def test_send(self, alert: dict[str, Any]) -> list[dict[str, Any]]:
+        """Send a notification synchronously and return per-service results.
+
+        Powers the "Send test notification" button on the Web UI's
+        Notifications card. Returns a list of
+        ``{service, ok, error}`` dicts so the UI can render
+        success/failure per service inline — invaluable when the user
+        is setting up notifications and a service silently fails (e.g.
+        HA Companion app not logged in on the target device).
+        """
+        return await self._dispatch_capture(alert)
 
     async def _send_one(self, service: str, title: str, message: str, data: dict[str, Any]) -> None:
         # service is "notify.mobile_app_X"; HA service call API takes

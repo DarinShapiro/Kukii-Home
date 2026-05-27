@@ -182,3 +182,32 @@ async def test_set_services_empty_disables_notifications():
     n.on_alert(_alert())
     await _drain(n)
     mock.call_service.assert_not_called()
+
+
+# ─── test_send (v0.3.14 diagnostic) ──────────────────────────────────
+
+
+async def test_test_send_returns_ok_for_each_success():
+    n, _ = _make_notifier(["notify.a", "notify.b"])
+    results = await n.test_send(_alert())
+    assert len(results) == 2
+    assert all(r["ok"] for r in results)
+    assert all(r["error"] is None for r in results)
+    assert {r["service"] for r in results} == {"notify.a", "notify.b"}
+
+
+async def test_test_send_captures_per_service_failure():
+    n, mock = _make_notifier(["notify.broken", "notify.ok"])
+    mock.call_service.side_effect = [RuntimeError("Service not found"), None]
+    results = await n.test_send(_alert())
+    by_svc = {r["service"]: r for r in results}
+    assert by_svc["notify.broken"]["ok"] is False
+    assert "Service not found" in by_svc["notify.broken"]["error"]
+    assert by_svc["notify.ok"]["ok"] is True
+    assert by_svc["notify.ok"]["error"] is None
+
+
+async def test_test_send_with_no_services_returns_empty():
+    n, _ = _make_notifier([])
+    results = await n.test_send(_alert())
+    assert results == []

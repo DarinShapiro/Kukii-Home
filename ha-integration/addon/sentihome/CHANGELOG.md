@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.3.14 — 2026-05-27
+
+**In-UI diagnostic tools — verify the pipeline without waiting for
+real motion.**
+
+User report: "I didn't get any notifications and I don't even see an
+alert in the UI." Diagnosis showed both cameras were correctly
+subscribed but no motion sensor had fired since boot — there was
+literally nothing for the system to act on. Hard to debug a quiet
+system. v0.3.14 adds two click-to-test buttons:
+
+- **Send test notification** on the Notifications card. POSTs
+  `/notify/test`, which calls a new
+  `AlertNotifier.test_send()` that awaits each dispatch and
+  returns per-service results. The Notifications card renders the
+  outcome inline ("✓ sent to notify.mobile_app_iphone" or "✗ {error
+  reason}"), so notification setup is verifiable in one click.
+- **Send test alert** on each enabled device in the HA cameras
+  card. POSTs `/discovery/test_alert` which:
+  1. Captures a real snapshot from the device's chosen stream.
+  2. Records a synthetic `[TEST]` alert (so it's visible in the
+     Recent alerts table + persisted on disk).
+  3. Fires the notifier (awaits per-service results).
+  4. Renders the outcome inline under the device card —
+     snapshot bytes captured, alert id recorded, per-service
+     send outcome.
+
+This verifies the full pipeline: camera reachability → snapshot
+fetch → alert persistence → notification dispatch — independently
+of any HA motion sensor configuration. So even with a Dahua whose
+Smart Plan isn't yet enabled (smart_motion sensors silent), you
+can click Send test alert and see the alert flow end-to-end with
+a real snapshot.
+
+Test notifications include a real snapshot attachment if any prior
+alert has one on disk (so you see the image rendered in the HA
+Companion app), otherwise text-only.
+
+Both test results clear next time you click Refresh in the page
+header, so the cards don't accumulate stale state.
+
 ## 0.3.13 — 2026-05-27
 
 **No more YAML for notifications. New Notifications card on the Web UI.**

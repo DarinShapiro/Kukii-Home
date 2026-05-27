@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import traceback
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -126,6 +127,15 @@ class BootState:
     is non-empty. Subscribes to AlertLog and fans each alert out to
     HA notify.* services. Held here so we can surface its config on
     the status page + report send errors."""
+    last_notify_test: dict[str, Any] | None = None
+    """v0.3.14: most recent "Send test notification" result. Cleared
+    after 60 s of display (or on next test). Rendered inline on the
+    Notifications card so the user sees per-service success/failure
+    immediately after clicking Send."""
+    last_camera_test: dict[str, Any] | None = None
+    """v0.3.14: most recent "Send test alert" result for a specific
+    device. Same lifecycle as last_notify_test but rendered on the
+    HA cameras card."""
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -308,7 +318,59 @@ async def _render_notifications_card(boot: BootState) -> str:
             f"<code>{svc_esc}</code></label>"
         )
     parts.append('<button type="submit" style="margin-top:0.5rem">Save selection</button>')
-    parts.append("</form></div>")
+    parts.append("</form>")
+
+    # v0.3.14: Send test notification button + last result inline.
+    parts.append(
+        '<form method="post" action="notify/test" '
+        'style="margin-top:0.75rem;display:inline-block">'
+        '<button type="submit">Send test notification</button></form>'
+        '<span class="muted" style="margin-left:0.5rem;font-size:0.85rem">'
+        "Pushes a [TEST] alert to every checked service — verifies "
+        "service is reachable + your phone is enrolled.</span>"
+    )
+    if boot.last_notify_test:
+        parts.append(_render_notify_test_result(boot.last_notify_test))
+
+    parts.append("</div>")
+    return "".join(parts)
+
+
+def _render_notify_test_result(result: dict[str, Any]) -> str:
+    """Render the last 'Send test notification' result inline."""
+    ts = result.get("ts", "")
+    when = ts[11:19] if ts else "—"
+    parts = [
+        f'<div style="margin-top:0.75rem;padding:0.5rem 0.75rem;'
+        'background:#f6f8fa;border-radius:6px;border-left:3px solid #0366d6">'
+        f'<strong>Test result</strong> <span class="muted">at {_escape(when)} UTC</span><br/>'
+    ]
+    if result.get("error"):
+        parts.append(f'<span class="bad">✗ {_escape(result["error"])}</span>')
+    else:
+        services = result.get("services", [])
+        had_image = result.get("alert", {}).get("had_image", False)
+        if had_image:
+            parts.append(
+                '<span class="muted">Included a real snapshot from the most '
+                "recent alert as the image attachment.</span><br/>"
+            )
+        else:
+            parts.append(
+                '<span class="muted">No image attached '
+                "(no real alerts yet to borrow a snapshot from).</span><br/>"
+            )
+        for svc in services:
+            if svc["ok"]:
+                parts.append(
+                    f'<span class="ok">✓</span> <code>{_escape(svc["service"])}</code><br/>'
+                )
+            else:
+                parts.append(
+                    f'<span class="bad">✗</span> <code>{_escape(svc["service"])}</code>'
+                    f': <span class="muted">{_escape(svc.get("error") or "")}</span><br/>'
+                )
+    parts.append("</div>")
     return "".join(parts)
 
 
@@ -360,9 +422,58 @@ def _render_ha_cameras_card(boot: BootState) -> str:
 
     for decision in boot.discovery_decisions:
         parts.append(_render_device_block(decision))
+        # If the user just clicked "Send test alert" on THIS device,
+        # render the result inline beneath the device block.
+        if boot.last_camera_test and boot.last_camera_test.get("device_id") == decision.device_id:
+            parts.append(_render_camera_test_result(boot.last_camera_test))
 
     parts.append(_refresh_form_html())
     return "".join(parts) + "</div>"
+
+
+def _render_camera_test_result(result: dict[str, Any]) -> str:
+    """Render the last 'Send test alert' result for a device."""
+    ts = result.get("ts", "")
+    when = ts[11:19] if ts else "—"
+    parts = [
+        '<div style="margin-top:0.25rem;margin-bottom:0.5rem;'
+        "padding:0.5rem 0.75rem;background:#f6f8fa;border-radius:6px;"
+        'border-left:3px solid #0366d6">'
+        f"<strong>Test alert result</strong> "
+        f'<span class="muted">at {_escape(when)} UTC</span><br/>'
+    ]
+    if result.get("error"):
+        parts.append(f'<span class="bad">✗ {_escape(result["error"])}</span><br/>')
+    snap_bytes = result.get("snapshot_bytes", 0)
+    if snap_bytes:
+        parts.append(f'<span class="ok">✓</span> snapshot captured: {snap_bytes:,} bytes<br/>')
+    elif not result.get("error"):
+        parts.append('<span class="warn">no snapshot captured</span><br/>')
+    alert_id = result.get("alert_id")
+    if alert_id:
+        parts.append(
+            f'<span class="ok">✓</span> alert recorded: <code>{_escape(alert_id)}</code>'
+            f' &middot; <a href="alerts/{_escape(alert_id)}/snapshot" target="_blank">view snapshot</a><br/>'
+        )
+    notify_services = result.get("notify_services", [])
+    if notify_services:
+        for svc in notify_services:
+            if svc["ok"]:
+                parts.append(
+                    f'<span class="ok">✓</span> sent to <code>{_escape(svc["service"])}</code><br/>'
+                )
+            else:
+                parts.append(
+                    f'<span class="bad">✗</span> <code>{_escape(svc["service"])}</code>'
+                    f': <span class="muted">{_escape(svc.get("error") or "")}</span><br/>'
+                )
+    elif alert_id and not result.get("error"):
+        parts.append(
+            '<span class="muted">No notify services selected — '
+            "alert was recorded but nothing was pushed to HA.</span>"
+        )
+    parts.append("</div>")
+    return "".join(parts)
 
 
 def _refresh_form_html() -> str:
@@ -434,6 +545,15 @@ def _render_device_block(d: DiscoveryDecision) -> str:
         f'<input type="hidden" name="device_id" value="{dev_id}"/>'
         f'<button type="submit">Reset to AI defaults</button></form>'
     )
+    # v0.3.14: per-device "Send test alert" — captures a real snapshot,
+    # records a [TEST] alert, fires the notifier. Verifies the full
+    # camera → alert → notify pipeline without waiting for motion.
+    if d.enabled:
+        out.append(
+            f' <form method="post" action="discovery/test_alert" style="display:inline">'
+            f'<input type="hidden" name="device_id" value="{dev_id}"/>'
+            f'<button type="submit">Send test alert</button></form>'
+        )
     out.append("</div>")
 
     # ─── Override section (collapsed by default) ──────────────────
@@ -1004,6 +1124,158 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
             )
         return await _redirect_home()
 
+    async def notify_test(_request: web.Request) -> web.Response:
+        """Send a synthetic notification to verify the wiring (v0.3.14).
+
+        Builds a fake alert (with [TEST] in the headline so it's
+        distinguishable on the phone), calls
+        :meth:`AlertNotifier.test_send` (which awaits each dispatch
+        and returns per-service results), stashes the results on
+        boot.last_notify_test for the Notifications card to render.
+        """
+        ts = datetime.now(UTC)
+        result: dict[str, Any] = {
+            "ts": ts.isoformat(),
+            "services": [],
+            "error": None,
+        }
+        if boot.notifier is None:
+            result["error"] = "Notifier not wired yet (HA not connected). Try again in a moment."
+        elif not boot.notifier.notify_services:
+            result["error"] = "No notify services selected. Check at least one box below first."
+        else:
+            # Use the most recent real alert's snapshot if available,
+            # so the user sees a real image attachment in the test
+            # notification. Otherwise no image attached.
+            recent = alert_log.recent(1)
+            evidence_ref = recent[0].get("evidence_ref") if recent else None
+            test_alert = {
+                "alert_id": f"test_{uuid.uuid4().hex[:8]}",
+                "headline": "[TEST] SentiHome notification",
+                "camera_id": "test",
+                "sensor_classification": "test",
+                "recorded_at": ts.isoformat(),
+                "evidence_ref": evidence_ref,
+                "area": "",
+                "source": "notify_test",
+            }
+            try:
+                services_result = await boot.notifier.test_send(test_alert)
+                result["services"] = services_result
+                result["alert"] = {
+                    "headline": test_alert["headline"],
+                    "had_image": bool(evidence_ref),
+                }
+            except Exception as e:
+                result["error"] = f"Dispatch raised: {e}"
+        boot.last_notify_test = result
+        logger.info(
+            "notify_test.completed",
+            had_error=bool(result["error"]),
+            services_tried=len(result.get("services", [])),
+        )
+        return await _redirect_home()
+
+    async def camera_test_alert(request: web.Request) -> web.Response:
+        """Fire a synthetic alert for a specific device (v0.3.14).
+
+        Captures a real snapshot from the device's chosen stream,
+        records an alert in the AlertLog (which triggers persistence
+        + the notifier), and stashes the outcome on
+        boot.last_camera_test so the HA cameras card can render the
+        result inline. Verifies the full pipeline without waiting for
+        real motion.
+        """
+        form = await request.post()
+        device_id = str(form.get("device_id", "")).strip()
+        ts = datetime.now(UTC)
+        result: dict[str, Any] = {
+            "ts": ts.isoformat(),
+            "device_id": device_id,
+            "alert_id": None,
+            "snapshot_bytes": 0,
+            "notify_services": [],
+            "error": None,
+        }
+        if not device_id:
+            result["error"] = "missing device_id"
+            boot.last_camera_test = result
+            return await _redirect_home()
+
+        # Find the spec for this device from the current discovery.
+        decision = next(
+            (d for d in boot.discovery_decisions if d.device_id == device_id),
+            None,
+        )
+        if decision is None or decision.spec is None:
+            result["error"] = (
+                f"device {device_id!r} not enabled or not discovered — enable it first, then retry"
+            )
+            boot.last_camera_test = result
+            return await _redirect_home()
+
+        spec = decision.spec
+        if boot.client is None:
+            result["error"] = "HA client not connected"
+            boot.last_camera_test = result
+            return await _redirect_home()
+
+        # Capture a real snapshot so the test alert looks like the
+        # real thing (including image attachment in the notification).
+        snapshot_path: str | None = None
+        try:
+            blob = await boot.client.fetch_camera_snapshot(spec.camera_entity)
+            result["snapshot_bytes"] = len(blob)
+            from pathlib import Path
+
+            snap_dir = Path("/data/sentihome/snapshots")
+            # tiny sync mkdir + write; not worth pulling in anyio for
+            # a one-off test path. Other camera paths already do this.
+            snap_dir.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
+            fname = f"test_{device_id}_{ts.strftime('%Y%m%dT%H%M%S')}_{uuid.uuid4().hex[:6]}.jpg"
+            snapshot_path = str(snap_dir / fname)
+            (snap_dir / fname).write_bytes(blob)
+        except Exception as e:
+            result["error"] = f"snapshot failed: {e}"
+            # Continue anyway so the user gets a notification without
+            # image — useful for debugging notify-only issues.
+
+        alert_id = f"test_{device_id}_{uuid.uuid4().hex[:8]}"
+        alert = {
+            "alert_id": alert_id,
+            "headline": f"[TEST] Motion at {spec.friendly_name}",
+            "camera_id": device_id,
+            "camera_entity": spec.camera_entity,
+            "sensor_classification": "test",
+            "triggering_sensor": "(test trigger)",
+            "evidence_ref": snapshot_path,
+            "source": "camera_test_alert",
+        }
+        # AlertLog.record fires the notifier (fire-and-forget). For
+        # the diagnostic we ALSO call test_send synchronously so the
+        # user sees per-service results. The fire-and-forget path
+        # exists too because some downstreams (future MQTT bridge,
+        # NATS bus) hook AlertLog directly.
+        alert_log.record(alert)
+        result["alert_id"] = alert_id
+        if boot.notifier is not None and boot.notifier.notify_services:
+            try:
+                result["notify_services"] = await boot.notifier.test_send(alert)
+            except Exception as e:
+                result["error"] = (
+                    f"alert recorded but notify dispatch raised: {e}"
+                    if result["error"] is None
+                    else f"{result['error']}; also notify dispatch raised: {e}"
+                )
+        boot.last_camera_test = result
+        logger.info(
+            "camera_test_alert.completed",
+            device_id=device_id,
+            had_error=bool(result["error"]),
+            had_snapshot=bool(snapshot_path),
+        )
+        return await _redirect_home()
+
     async def api_get(request: web.Request) -> web.Response:
         body: dict = dict(request.rel_url.query)
         # Always re-bind tools off the current boot state so the API
@@ -1041,6 +1313,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     app.router.add_post("/discovery/refresh", discovery_refresh)
     # v0.3.13 UI-driven notify service selection.
     app.router.add_post("/notify/services", notify_services_save)
+    # v0.3.14 diagnostic surface.
+    app.router.add_post("/notify/test", notify_test)
+    app.router.add_post("/discovery/test_alert", camera_test_alert)
     return app
 
 
