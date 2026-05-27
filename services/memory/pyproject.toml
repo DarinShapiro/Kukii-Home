@@ -12,6 +12,7 @@ dependencies = [
     "alembic>=1.13.0",
     "qdrant-client>=1.12.0",
     "pydantic>=2.9.0",
+    "neo4j>=6.2.0",
 ]
 
 [project.scripts]
@@ -27,4 +28,5 @@ packages = ["src/sentihome_memory"]
 [dependency-groups]
 dev = [
     "pyyaml>=6.0.3",
+    "testcontainers[neo4j]>=4.14.2",
 ]
