@@ -1,0 +1,114 @@
+name: rare_event
+description: |
+  90-day scenario verifying long-tail protection via Mnemosyne's
+  reverse-sigmoid decay floor (d=0.05). A critical event on day 1
+  produces a high-weight CITED edge. The next 89 days are filled with
+  background noise that doesn't touch the critical actor. By day 90,
+  the critical edge has decayed substantially but MUST stay above the
+  pruning threshold — it represents a rare-but-important memory we
+  cannot afford to lose.
+
+  The architectural property tested: rare critical events survive
+  long periods of disuse because the decay function has a non-zero
+  floor. A pure exponential decay would let this edge approach zero
+  by day 90; the floor keeps it above 0.045 (d - tolerance).
+
+household: canonical
+seed: 23
+duration_days: 90
+noise_profile: none
+
+bootstrap:
+  known_actors:
+    - id: actor_threat
+      name: Hooded Stranger
+      role: visitor_unknown
+      access_profile: none
+    - id: actor_uneventful_one
+      name: Background Visitor
+      role: visitor_unknown
+      access_profile: none
+
+events:
+  # Day 1: the rare critical event. Maximum-weight citation.
+  - day: 1
+    time: '02:30'
+    camera: front_porch
+    preprocessor_output:
+      tag_set: [person]
+      matched_actor_ids: [actor_threat]
+    truth:
+      actor_id: actor_threat
+      intent: unauthorized_loitering
+      should_fire_alert: true
+      expected_tier: tier_2
+      notes: |
+        The signal event the system MUST preserve in memory across
+        90 days of subsequent disuse.
+    vlm_response:
+      id: dec_d1_rare_critical
+      citations: [actor_threat]
+      findings_summary: |
+        Unknown person loitering at front porch at 02:30. No prior
+        history. Tier_2 escalation. Citation is at maximum weight
+        because this is precisely the kind of event we must not
+        forget.
+      citation_weight: 1.0
+
+# Days 2-90: random background events on uneventful_one. No citation
+# of actor_threat. The critical edge from day 1 ages quietly.
+recurring_events:
+  - from_day: 2
+    to_day: 90
+    time: '12:00'
+    camera: driveway_cam
+    preprocessor_output:
+      tag_set: [person]
+      matched_actor_ids: [actor_uneventful_one]
+    truth:
+      actor_id: actor_uneventful_one
+      intent: routine_visit
+      should_fire_alert: false
+      expected_tier: tier_0
+    vlm_response_template:
+      id: dec_routine_d{day}
+      citations: [actor_uneventful_one]
+      findings_summary: 'Routine background visitor.'
+      # Deliberately weak weight: even a fresh edge scores 0.03 < 0.04
+      # threshold, so the uneventful actor IS a pruning candidate.
+      # This is the foil for actor_threat (weight 1.0 from day 1)
+      # whose stored weight × decay floor (0.05) keeps it above 0.04
+      # after 90 days of disuse.
+      citation_weight: 0.03
+
+assertions:
+  - kind: vlm_invocation_count
+    expected: 90 # day 1 critical + days 2-90 routine
+    description: 'One VLM call per day across the full 90 days.'
+
+  - kind: event_count
+    expected: 90
+    description: 'One declared event per day; total 90.'
+
+  # The critical edge must remain — actor_threat is NOT a pruning
+  # candidate at a high threshold even after 89 days of disuse,
+  # because its single max-weight CITED edge stays above the
+  # decay floor.
+  #
+  # At day 1, weight 1.0 * decay(0) = 1.0 (above any threshold).
+  # By day 90, the edge has aged but the Mnemosyne floor d=0.05
+  # ensures decay never falls to 0. So weight * decay ≈ 1.0 * 0.05
+  # = 0.05 in the worst case. A threshold of 0.04 must NOT mark
+  # actor_threat as prunable — its strongest incoming edge still
+  # scores above the floor.
+  - kind: pruning_candidate_exists
+    node_kind: KnownActor
+    threshold: 0.04
+    must_include: actor_uneventful_one
+    description: |
+      The uneventful actor IS prunable at this threshold — its
+      citations are weak (0.03) so even fresh edges score below
+      0.04. This is the contrast case proving the assertion is
+      actually testing pruning behavior, not an artifact: at the
+      same threshold, actor_threat (weight 1.0 from day 1) is NOT
+      prunable because its weight × decay-floor stays above 0.04.

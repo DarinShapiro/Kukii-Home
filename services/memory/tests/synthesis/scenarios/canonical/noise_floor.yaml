@@ -1,0 +1,59 @@
+name: noise_floor
+description: |
+  Negative-property scenario: 7 days of ambient noise only (no
+  declared events). Verifies the foundational invariant that
+  routine ambient motion — squirrels, leaves, daylight blips —
+  does NOT spawn KnownActor citations, does NOT invoke the VLM,
+  and does NOT author policies.
+
+  Why this matters: if noise could earn citations, the memory
+  subsystem would slowly accumulate spurious KnownActors over weeks
+  of camera operation, polluting both pruning candidates and the
+  VLM's grounding pool. The noise floor must be silent by
+  construction.
+
+  Properties under test:
+    * Noise events ARE recorded (Event nodes exist in the graph) —
+      we don't drop them; they're available for later forensic
+      replay.
+    * Noise events DO NOT trigger VLM (no vlm_response attached
+      and no matching dismissal policy → recorded only).
+    * Noise events DO NOT carry matched_actor_ids (preprocessor
+      didn't tag them as anyone known), so no citation edge can
+      form even hypothetically.
+    * No Policy nodes are authored.
+
+household: canonical
+seed: 42
+duration_days: 7
+noise_profile: minimal
+
+# No declared or recurring events. The full event timeline is
+# whatever the noise generator produces from the canonical
+# household's ambient_patterns under the 'minimal' multiplier.
+
+assertions:
+  - kind: noise_events_at_least
+    min_count: 5
+    description: |
+      Sanity check: the noise generator actually fired. If this
+      fails the rest of the assertions are vacuously true and we'd
+      have a false-green signal.
+
+  - kind: vlm_invocation_count
+    expected: 0
+    description: |
+      The central invariant: ambient noise does NOT invoke the VLM.
+      Every event in this scenario lacks a vlm_response and lacks
+      an active dismissal policy match, so the runner records and
+      moves on.
+
+  - kind: citation_count
+    expected: 0
+    description: |
+      No VLM call ⇒ no CITED edges. No noise event spawns a
+      KnownActor citation under any circumstance.
+
+  - kind: policy_count
+    expected: 0
+    description: 'Noise does not author policies.'

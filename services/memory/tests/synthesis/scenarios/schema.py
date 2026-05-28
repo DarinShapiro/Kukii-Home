@@ -201,6 +201,29 @@ class AssertVLMInvocationsBelow(_Strict):
     description: str = ""
 
 
+class AssertCitationCount(_Strict):
+    """Total number of CITED edges written across the scenario.
+
+    Mostly useful for noise-floor scenarios: assert citations == 0 to
+    prove ambient noise produces no memory citations.
+    """
+
+    kind: Literal["citation_count"]
+    expected: int
+    description: str = ""
+
+
+class AssertNoiseEventsAtLeast(_Strict):
+    """Lower bound on how many ambient noise events the generator
+    produced for this scenario. Use to prove noise actually fired —
+    cheap insurance against the noise generator silently no-op'ing
+    (e.g. household patterns misconfigured, profile multiplier 0)."""
+
+    kind: Literal["noise_events_at_least"]
+    min_count: int
+    description: str = ""
+
+
 Assertion = (
     AssertEventCount
     | AssertVLMInvocationCount
@@ -208,6 +231,8 @@ Assertion = (
     | AssertPruningCandidate
     | AssertPolicyCount
     | AssertVLMInvocationsBelow
+    | AssertCitationCount
+    | AssertNoiseEventsAtLeast
 )
 
 

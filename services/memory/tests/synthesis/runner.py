@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sentihome_memory.graph import (
     CitedEdge,
@@ -31,8 +32,10 @@ from sentihome_memory.graph import (
 )
 
 from synthesis.scenarios.schema import (
+    AssertCitationCount,
     AssertEdgeWeightAtLeast,
     AssertEventCount,
+    AssertNoiseEventsAtLeast,
     AssertPolicyCount,
     AssertPruningCandidate,
     AssertVLMInvocationCount,
@@ -46,12 +49,19 @@ from synthesis.scenarios.schema import (
 )
 from synthesis.time_provider import TimeProvider
 
+_HOUSEHOLDS_DIR = Path(__file__).parent / "households"
+
 _WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 
 @dataclass
-class _ResolvedEvent:
-    """A declared or recurring event flattened to an absolute timestamp."""
+class ResolvedEvent:
+    """A declared, recurring, or noise event flattened to an absolute
+    timestamp.
+
+    Exposed (rather than private) because the noise generator builds
+    these directly and the runner mixes them into the timeline.
+    """
 
     ts: float
     day: int
@@ -71,11 +81,17 @@ class ScenarioResult:
 
     scenario_name: str
     elapsed_simulated_seconds: float
+    final_simulated_ts: float
+    """Absolute Unix-seconds timestamp at end-of-scenario
+    (``start_ts + duration_days * 86_400``). Distinct from the last
+    event's timestamp — useful for pruning queries that need to
+    reflect how much time has passed since the latest write."""
     events_written: int
     vlm_decisions_written: int
     citations_written: int
     policies_written: int
     events_dismissed_by_policy: int
+    noise_events_generated: int
     assertion_failures: list[str]
 
     @property
@@ -103,8 +119,12 @@ def run_scenario(scenario: Scenario, client: GraphClient) -> ScenarioResult:
             )
         )
 
-    # 2. Resolve all events to a flat, time-sorted list.
+    # 2. Resolve declared + recurring + noise events to one
+    #    time-sorted list. Noise generator returns [] for
+    #    ``noise_profile: none``.
     resolved = _resolve_events(scenario)
+    noise_events, noise_stats = _generate_noise_for_scenario(scenario)
+    resolved.extend(noise_events)
     resolved.sort(key=lambda e: e.ts)
 
     # 3. Walk the timeline, writing graph state.
@@ -186,18 +206,61 @@ def run_scenario(scenario: Scenario, client: GraphClient) -> ScenarioResult:
             )
             policies_written += 1
 
-    # 4. Evaluate assertions.
-    failures = _evaluate_assertions(scenario, client, vlm_decisions_written)
+    # 4. Advance the clock to end-of-scenario before assertion evaluation.
+    #    Otherwise assertions that depend on "now" (pruning queries,
+    #    policy.is_active checks) freeze at the time of the last event,
+    #    not the simulated end of the scenario window.
+    final_simulated_ts = scenario.start_ts + scenario.duration_days * 86_400
+    if final_simulated_ts > tp.elapsed_seconds + scenario.start_ts:
+        tp.advance_to(final_simulated_ts)
+
+    # 5. Evaluate assertions.
+    failures = _evaluate_assertions(
+        scenario,
+        client,
+        vlm_invocations=vlm_decisions_written,
+        citations_written=citations_written,
+        noise_events_generated=noise_stats.events_generated,
+        now_ts=final_simulated_ts,
+    )
 
     return ScenarioResult(
         scenario_name=scenario.name,
         elapsed_simulated_seconds=tp.elapsed_seconds,
+        final_simulated_ts=final_simulated_ts,
         events_written=events_written,
         vlm_decisions_written=vlm_decisions_written,
         citations_written=citations_written,
         policies_written=policies_written,
         events_dismissed_by_policy=events_dismissed_by_policy,
+        noise_events_generated=noise_stats.events_generated,
         assertion_failures=failures,
+    )
+
+
+def _generate_noise_for_scenario(scenario: Scenario):
+    """Lazy-loads the household + delegates to the noise generator.
+
+    Returns ``([], NoiseStats(0, 0))`` for ``noise_profile: none``
+    without touching the filesystem.
+    """
+    # Local import keeps the runner importable without the noise
+    # generator module on the path during unit tests of pure-runner
+    # behavior. Also avoids a circular import on the schema layer.
+    from synthesis.households.schema import load_household
+    from synthesis.noise_generator import NoiseStats, generate_noise_events
+
+    if scenario.noise_profile == "none":
+        return [], NoiseStats(events_generated=0, patterns_used=0)
+
+    household_path = _HOUSEHOLDS_DIR / f"{scenario.household}.yaml"
+    household = load_household(household_path)
+    return generate_noise_events(
+        household=household,
+        noise_profile=scenario.noise_profile,
+        duration_days=scenario.duration_days,
+        start_ts=scenario.start_ts,
+        seed=scenario.seed,
     )
 
 
@@ -220,9 +283,9 @@ def _find_dismissal_match(
 # ─── Internal: event resolution ──────────────────────────────────────
 
 
-def _resolve_events(scenario: Scenario) -> list[_ResolvedEvent]:
+def _resolve_events(scenario: Scenario) -> list[ResolvedEvent]:
     """Flatten declared + recurring events to absolute timestamps."""
-    out: list[_ResolvedEvent] = []
+    out: list[ResolvedEvent] = []
 
     for de in scenario.events:
         out.append(_resolve_declared(scenario, de))
@@ -233,9 +296,9 @@ def _resolve_events(scenario: Scenario) -> list[_ResolvedEvent]:
     return out
 
 
-def _resolve_declared(scenario: Scenario, e: DeclaredEvent) -> _ResolvedEvent:
+def _resolve_declared(scenario: Scenario, e: DeclaredEvent) -> ResolvedEvent:
     ts = _compute_ts(scenario.start_ts, e.day, e.time)
-    return _ResolvedEvent(
+    return ResolvedEvent(
         ts=ts,
         day=e.day,
         camera=e.camera,
@@ -245,8 +308,8 @@ def _resolve_declared(scenario: Scenario, e: DeclaredEvent) -> _ResolvedEvent:
     )
 
 
-def _expand_recurring(scenario: Scenario, r: RecurringEvent) -> list[_ResolvedEvent]:
-    out: list[_ResolvedEvent] = []
+def _expand_recurring(scenario: Scenario, r: RecurringEvent) -> list[ResolvedEvent]:
+    out: list[ResolvedEvent] = []
     for day in range(r.from_day, r.to_day + 1):
         if r.weekdays is not None:
             weekday_idx = _weekday_for_day(scenario.start_ts, day)
@@ -264,7 +327,7 @@ def _expand_recurring(scenario: Scenario, r: RecurringEvent) -> list[_ResolvedEv
                 citation_weight=tmpl.citation_weight,
             )
         out.append(
-            _ResolvedEvent(
+            ResolvedEvent(
                 ts=ts,
                 day=day,
                 camera=r.camera,
@@ -293,12 +356,25 @@ def _weekday_for_day(start_ts: float, day: int) -> int:
 
 
 def _evaluate_assertions(
-    scenario: Scenario, client: GraphClient, vlm_invocations: int
+    scenario: Scenario,
+    client: GraphClient,
+    *,
+    vlm_invocations: int,
+    citations_written: int,
+    noise_events_generated: int,
+    now_ts: float,
 ) -> list[str]:
     failures: list[str] = []
     for assertion in scenario.assertions:
         try:
-            err = _eval_one(assertion, client, vlm_invocations)
+            err = _eval_one(
+                assertion,
+                client,
+                vlm_invocations=vlm_invocations,
+                citations_written=citations_written,
+                noise_events_generated=noise_events_generated,
+                now_ts=now_ts,
+            )
         except Exception as e:
             err = f"{assertion.kind}: evaluator raised: {e}"
         if err is not None:
@@ -306,7 +382,15 @@ def _evaluate_assertions(
     return failures
 
 
-def _eval_one(assertion, client: GraphClient, vlm_invocations: int) -> str | None:
+def _eval_one(
+    assertion,
+    client: GraphClient,
+    *,
+    vlm_invocations: int,
+    citations_written: int,
+    noise_events_generated: int,
+    now_ts: float,
+) -> str | None:
     """Return None if the assertion holds, an error message if it fails."""
     if isinstance(assertion, AssertEventCount):
         actual = client.count_events(camera_id=assertion.camera)
@@ -346,7 +430,9 @@ def _eval_one(assertion, client: GraphClient, vlm_invocations: int) -> str | Non
 
     if isinstance(assertion, AssertPruningCandidate):
         kind = NodeKind.EVENT if assertion.node_kind == "Event" else NodeKind.KNOWN_ACTOR
-        candidates = client.candidates_for_pruning(threshold=assertion.threshold, kind=kind)
+        candidates = client.candidates_for_pruning(
+            threshold=assertion.threshold, kind=kind, now_ts=now_ts
+        )
         ids = {c.node_id for c in candidates}
         if assertion.must_include not in ids:
             return (
@@ -373,6 +459,24 @@ def _eval_one(assertion, client: GraphClient, vlm_invocations: int) -> str | Non
             return (
                 f"vlm_invocations_below: expected at most "
                 f"{assertion.max_invocations}, got {vlm_invocations}"
+                + (f" — {assertion.description}" if assertion.description else "")
+            )
+        return None
+
+    if isinstance(assertion, AssertCitationCount):
+        if citations_written != assertion.expected:
+            return (
+                f"citation_count: expected {assertion.expected}, "
+                f"got {citations_written}"
+                + (f" — {assertion.description}" if assertion.description else "")
+            )
+        return None
+
+    if isinstance(assertion, AssertNoiseEventsAtLeast):
+        if noise_events_generated < assertion.min_count:
+            return (
+                f"noise_events_at_least: expected ≥ {assertion.min_count}, "
+                f"got {noise_events_generated}"
                 + (f" — {assertion.description}" if assertion.description else "")
             )
         return None

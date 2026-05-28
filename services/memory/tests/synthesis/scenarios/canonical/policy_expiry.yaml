@@ -1,0 +1,118 @@
+name: policy_expiry
+description: |
+  Tests dismissal-policy TTL expiry. Day 1 authors a 1-day (86_400s)
+  dismissal for {dog} on backyard_cam. Day 2 fires the same event
+  pattern WITHIN the policy's lifetime → dismissed by policy. Day 4
+  fires the same event AFTER the policy has expired → VLM IS
+  re-invoked.
+
+  This is the freshness property: dismissals don't last forever.
+  The system periodically re-evaluates patterns it once chose to
+  silence. A milkman pattern from 2 months ago shouldn't silence
+  today's events automatically — it should re-engage so the VLM
+  can confirm the pattern is still routine.
+
+  Verifies:
+    * A dismissal policy's match window is exactly its TTL — not
+      shorter (no premature re-engagement) and not longer (no
+      runaway silence).
+    * Policy.is_active(now_ts) gates list_active_policies()
+      correctly across the TTL boundary.
+
+household: canonical
+seed: 31
+duration_days: 5
+noise_profile: none
+
+bootstrap:
+  known_actors:
+    - id: actor_rex
+      name: Rex
+      role: pet_known
+      access_profile: full
+
+events:
+  # Day 1: VLM invoked, authors 1-day dismissal.
+  - day: 1
+    time: '08:00'
+    camera: backyard_cam
+    preprocessor_output:
+      tag_set: [dog]
+      matched_actor_ids: [actor_rex]
+    truth:
+      actor_id: actor_rex
+      intent: pet_in_yard
+      should_fire_alert: false
+      expected_tier: tier_0
+    vlm_response:
+      id: dec_d1_rex_initial
+      citations: [actor_rex]
+      findings_summary: 'Rex routine; 1-day dismissal for backyard dog activity.'
+      citation_weight: 0.6
+      authored_policies:
+        - id: pol_short_lived_dog
+          kind: dismissal
+          scope_camera: backyard_cam
+          match_tag_subset: [dog]
+          ttl_seconds: 86_400 # 1 day
+          rationale: 'Routine dog in backyard. Short-lived dismissal — re-check tomorrow.'
+
+  # Day 2 @ 08:00 — exactly 24h after policy creation. Edge case:
+  # policy.is_active(now_ts) treats expiry as exclusive (created_ts
+  # + ttl_seconds is the first instant it's expired), so we fire at
+  # 07:55 to land safely inside the window.
+  - day: 2
+    time: '07:55'
+    camera: backyard_cam
+    preprocessor_output:
+      tag_set: [dog]
+      matched_actor_ids: [actor_rex]
+    truth:
+      actor_id: actor_rex
+      intent: pet_in_yard
+      should_fire_alert: false
+      expected_tier: tier_0
+    # No vlm_response — expected to be silenced by the active
+    # dismissal policy.
+
+  # Day 4 @ 08:00 — 3 days after policy creation, 2 days past TTL.
+  # Policy is expired → VLM must re-engage.
+  - day: 4
+    time: '08:00'
+    camera: backyard_cam
+    preprocessor_output:
+      tag_set: [dog]
+      matched_actor_ids: [actor_rex]
+    truth:
+      actor_id: actor_rex
+      intent: pet_in_yard
+      should_fire_alert: false
+      expected_tier: tier_0
+    vlm_response:
+      id: dec_d4_rex_reengagement
+      citations: [actor_rex]
+      findings_summary: |
+        Dog in backyard again, prior dismissal expired. Re-confirming
+        routine status; could re-author dismissal.
+      citation_weight: 0.6
+      # Intentionally no authored_policies — keeps the scenario
+      # simple and proves the re-engagement path on its own.
+
+assertions:
+  - kind: policy_count
+    policy_kind: dismissal
+    expected: 1
+    description: |
+      Exactly one dismissal policy was authored (day 1). The day-4
+      re-engagement does NOT author a new policy — we want to
+      observe the bare TTL-expiry path.
+
+  - kind: vlm_invocation_count
+    expected: 2
+    description: |
+      Day 1 + day 4: two VLM calls. Day 2's event lands inside the
+      active dismissal window and is silenced.
+
+  - kind: event_count
+    expected: 3
+    description: '3 declared events across the 5-day window.'

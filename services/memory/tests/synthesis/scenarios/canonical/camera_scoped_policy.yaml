@@ -1,0 +1,116 @@
+name: camera_scoped_policy
+description: |
+  Tests dismissal-policy camera scoping. Day 1 authors a dismissal
+  for {dog} on backyard_cam ONLY. Day 2 fires the same event on
+  driveway_cam → policy does NOT match (different camera) → VLM is
+  re-invoked. Day 2 also fires on backyard_cam → policy matches →
+  dismissed.
+
+  Why this matters: cameras observe different geographic contexts.
+  A dog in the backyard is routine; the SAME dog in the driveway
+  could be escape behavior. The dispatcher must not let a backyard
+  dismissal silence driveway events.
+
+  Verifies:
+    * Policy.matches_event() returns False when the event's
+      camera_id does not equal policy.scope_camera (when scoped).
+    * Cross-camera independence holds: policies on cam A do not
+      bleed onto cam B.
+
+household: canonical
+seed: 37
+duration_days: 2
+noise_profile: none
+
+bootstrap:
+  known_actors:
+    - id: actor_rex
+      name: Rex
+      role: pet_known
+      access_profile: full
+
+events:
+  # Day 1: VLM invoked on backyard_cam, authors dismissal scoped
+  # to backyard_cam only.
+  - day: 1
+    time: '09:00'
+    camera: backyard_cam
+    preprocessor_output:
+      tag_set: [dog]
+      matched_actor_ids: [actor_rex]
+    truth:
+      actor_id: actor_rex
+      intent: pet_in_yard
+      should_fire_alert: false
+      expected_tier: tier_0
+    vlm_response:
+      id: dec_d1_backyard_dog
+      citations: [actor_rex]
+      findings_summary: 'Rex in backyard; dismiss future backyard dog activity.'
+      citation_weight: 0.6
+      authored_policies:
+        - id: pol_backyard_only_dog
+          kind: dismissal
+          scope_camera: backyard_cam
+          match_tag_subset: [dog]
+          ttl_seconds: 604_800 # 7 days
+          rationale: |
+            Backyard is fenced — routine dog activity here is
+            unremarkable. Scope to backyard_cam only; the driveway
+            and front yard are different contexts.
+
+  # Day 2 @ 09:00: same event pattern on backyard_cam → dismissed.
+  - day: 2
+    time: '09:00'
+    camera: backyard_cam
+    preprocessor_output:
+      tag_set: [dog]
+      matched_actor_ids: [actor_rex]
+    truth:
+      actor_id: actor_rex
+      intent: pet_in_yard
+      should_fire_alert: false
+      expected_tier: tier_0
+    # No vlm_response — silenced by backyard policy.
+
+  # Day 2 @ 10:00: SAME tag set + actor on driveway_cam → policy
+  # must NOT match. VLM re-invoked.
+  - day: 2
+    time: '10:00'
+    camera: driveway_cam
+    preprocessor_output:
+      tag_set: [dog]
+      matched_actor_ids: [actor_rex]
+    truth:
+      actor_id: actor_rex
+      intent: pet_in_driveway
+      should_fire_alert: true
+      expected_tier: tier_1
+      notes: |
+        Rex in the unfenced driveway is NOT routine. The backyard
+        policy must not silence this event.
+    vlm_response:
+      id: dec_d2_driveway_dog
+      citations: [actor_rex]
+      findings_summary: |
+        Rex in driveway — outside the backyard dismissal scope.
+        Possible escape behavior; tier_1 escalation.
+      citation_weight: 0.8
+
+assertions:
+  - kind: policy_count
+    policy_kind: dismissal
+    expected: 1
+    description: 'Exactly one camera-scoped dismissal authored.'
+
+  - kind: vlm_invocation_count
+    expected: 2
+    description: |
+      Day 1 (initial backyard) + day 2 driveway. The day-2 backyard
+      event is dismissed.
+
+  - kind: edge_weight_at_least
+    decision_id: dec_d2_driveway_dog
+    memory_id: actor_rex
+    min_weight: 0.5
+    description: 'Driveway escalation cites Rex.'

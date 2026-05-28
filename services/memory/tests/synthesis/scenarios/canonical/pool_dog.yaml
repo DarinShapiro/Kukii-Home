@@ -1,0 +1,122 @@
+name: pool_dog
+description: |
+  7-day scenario exercising novelty detection: an active dismissal
+  policy correctly short-circuits matching events, but a NOVEL tag
+  set breaks the subset rule and re-invokes the VLM.
+
+  Setup:
+    Day 1: dog appears in backyard. VLM cites actor_rex + authors a
+           dismissal for {dog} on backyard_cam (7-day TTL).
+
+  Routine days 2, 3, 4, 6, 7: dog event with tag_set = {dog}.
+           {dog} ⊆ {dog} → policy matches → event dismissed silently.
+
+  The intruder probe — day 5:
+           Event with tag_set = {dog, person}. The 'person' tag
+           breaks the subset rule (the policy only authorized {dog},
+           not {dog, person}) → policy does NOT match → VLM is
+           re-invoked. This is the novelty-detection counterpart to
+           Milkman's dismissal-formation.
+
+  Verifies the architectural property: dismissal policies short-
+  circuit ONLY events whose tag set is fully covered by the policy.
+  Any novel tag immediately re-engages the VLM.
+
+household: canonical
+seed: 19
+duration_days: 7
+noise_profile: none
+
+bootstrap:
+  known_actors:
+    - id: actor_rex
+      name: Rex
+      role: pet_known
+      access_profile: full
+
+events:
+  # Day 1: VLM invoked, authors dog dismissal.
+  - day: 1
+    time: '14:00'
+    camera: backyard_cam
+    preprocessor_output:
+      tag_set: [dog]
+      matched_actor_ids: [actor_rex]
+    truth:
+      actor_id: actor_rex
+      intent: pet_in_yard
+      should_fire_alert: false
+      expected_tier: tier_0
+    vlm_response:
+      id: dec_d1_rex
+      citations: [actor_rex]
+      findings_summary: 'Rex in backyard — routine pet activity.'
+      citation_weight: 0.7
+      authored_policies:
+        - id: pol_backyard_dogs
+          kind: dismissal
+          scope_camera: backyard_cam
+          match_tag_subset: [dog]
+          ttl_seconds: 604800 # 7 days
+          rationale: 'Routine dog activity in fenced backyard. Dismiss future dog-only events.'
+
+  # Day 5: NOVEL tag set — person appears alongside dog. Should NOT
+  # match the dog-only dismissal; VLM re-invoked.
+  - day: 5
+    time: '14:00'
+    camera: backyard_cam
+    preprocessor_output:
+      tag_set: [dog, person]
+      matched_actor_ids: [actor_rex]
+      # 'person' has no matched actor — unknown.
+    truth:
+      actor_id: null
+      intent: intruder_probe
+      should_fire_alert: true
+      expected_tier: tier_2
+      notes: |
+        The 'person' tag is novel relative to the dog dismissal.
+        The runner must NOT silence this; VLM must reason about it.
+    vlm_response:
+      id: dec_d5_intruder
+      citations: [actor_rex] # acknowledges dog still present
+      findings_summary: |
+        Unknown person in backyard with dog. Person tag is novel
+        relative to active dismissal {dog} — re-engaging full
+        analysis. Recommend tier_2 escalation.
+      citation_weight: 0.8
+      # No new authored_policies — this is an escalation, not a
+      # dismissal-able pattern.
+
+# Routine dog days 2, 3, 4, 6, 7: dismissal short-circuits.
+recurring_events:
+  - from_day: 2
+    to_day: 7
+    time: '14:30'
+    camera: backyard_cam
+    preprocessor_output:
+      tag_set: [dog]
+      matched_actor_ids: [actor_rex]
+    truth:
+      actor_id: actor_rex
+      intent: pet_in_yard
+      should_fire_alert: false
+      expected_tier: tier_0
+
+assertions:
+  - kind: policy_count
+    policy_kind: dismissal
+    expected: 1
+    description: 'One dog-dismissal policy from day 1.'
+
+  - kind: vlm_invocation_count
+    expected: 2
+    description: |
+      VLM invoked exactly twice: day 1 (authors dismissal) and
+      day 5 (novel person tag breaks subset match).
+
+  - kind: edge_weight_at_least
+    decision_id: dec_d5_intruder
+    memory_id: actor_rex
+    min_weight: 0.5
+    description: 'Day-5 escalation still cites Rex (the dog is present).'

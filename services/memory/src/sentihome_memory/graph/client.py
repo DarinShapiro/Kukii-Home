@@ -118,6 +118,31 @@ class GraphClient(Protocol):
         """All policies whose TTL hasn't yet expired at ``now_ts``."""
         ...
 
+    # ─── full enumeration (differential tests, debugging) ───────────
+
+    def list_all_events(self) -> list[Event]:
+        """Every Event in the graph. Order-undefined; callers that need
+        determinism should sort by id. Used by the differential
+        snapshot harness to compare backends."""
+        ...
+
+    def list_all_known_actors(self) -> list[KnownActor]:
+        """Every KnownActor. See :meth:`list_all_events` notes."""
+        ...
+
+    def list_all_vlm_decisions(self) -> list[VLMDecision]:
+        """Every VLMDecision."""
+        ...
+
+    def list_all_policies(self) -> list[Policy]:
+        """Every Policy regardless of expiry. (For active-only, use
+        :meth:`list_active_policies`.)"""
+        ...
+
+    def list_all_cited_edges(self) -> list[CitedEdge]:
+        """Every CITED edge in the graph."""
+        ...
+
     # ─── queries / counts ───────────────────────────────────────────
 
     def count_events(self, *, camera_id: str | None = None) -> int:
@@ -137,13 +162,25 @@ class GraphClient(Protocol):
     # ─── pruning ────────────────────────────────────────────────────
 
     def candidates_for_pruning(
-        self, *, threshold: float, kind: NodeKind | None = None
+        self,
+        *,
+        threshold: float,
+        kind: NodeKind | None = None,
+        now_ts: float | None = None,
     ) -> list[PruneCandidate]:
         """Return nodes whose pruning score is below ``threshold``.
 
         Pruning score = ``max(edge_weight * decay_factor)`` over all
-        incident edges. Implementation is free to filter by node
-        kind for efficiency; ``kind=None`` means all kinds.
+        incident edges, where ``decay_factor`` is evaluated at
+        ``now_ts``. Implementation is free to filter by node kind for
+        efficiency; ``kind=None`` means all kinds.
+
+        ``now_ts`` defaults to the latest edge ``created_ts`` in the
+        graph — a useful fallback when callers don't carry a clock,
+        but FRAGILE for scenarios where time passes without any new
+        citations (the fallback freezes "now" at the last write).
+        Production callers should always pass an explicit ``now_ts``
+        from the TimeProvider.
         """
         ...
 
@@ -214,6 +251,21 @@ class InMemoryGraphClient:
     def list_active_policies(self, *, now_ts: float) -> list[Policy]:
         return [p for p in self._policies.values() if p.is_active(now_ts)]
 
+    def list_all_events(self) -> list[Event]:
+        return list(self._events.values())
+
+    def list_all_known_actors(self) -> list[KnownActor]:
+        return list(self._actors.values())
+
+    def list_all_vlm_decisions(self) -> list[VLMDecision]:
+        return list(self._decisions.values())
+
+    def list_all_policies(self) -> list[Policy]:
+        return list(self._policies.values())
+
+    def list_all_cited_edges(self) -> list[CitedEdge]:
+        return list(self._cited_edges.values())
+
     def count_events(self, *, camera_id: str | None = None) -> int:
         if camera_id is None:
             return len(self._events)
@@ -228,16 +280,23 @@ class InMemoryGraphClient:
         return sum(1 for p in self._policies.values() if p.kind == kind)
 
     def candidates_for_pruning(
-        self, *, threshold: float, kind: NodeKind | None = None
+        self,
+        *,
+        threshold: float,
+        kind: NodeKind | None = None,
+        now_ts: float | None = None,
     ) -> list[PruneCandidate]:
         from sentihome_memory.dynamics import DecayParams, decay
 
         params = DecayParams()
-        now = max(
-            (e.created_ts for e in self._cited_edges.values()),
-            default=0.0,
-        )
-        if not self._cited_edges:
+        if now_ts is None:
+            now = max(
+                (e.created_ts for e in self._cited_edges.values()),
+                default=0.0,
+            )
+        else:
+            now = now_ts
+        if not self._cited_edges and now_ts is None:
             return []
 
         candidates: list[PruneCandidate] = []
@@ -461,6 +520,67 @@ class Neo4jGraphClient:
             )
             return [_node_to_policy(r["p"]) for r in records]
 
+    def list_all_events(self) -> list[Event]:
+        with self.driver.session() as session:
+            records = session.run("MATCH (e:Event) RETURN e")
+            return [
+                Event(
+                    id=r["e"]["id"],
+                    ts=r["e"]["ts"],
+                    camera_id=r["e"]["camera_id"],
+                    tag_set=tuple(r["e"].get("tag_set") or ()),
+                    matched_actor_ids=tuple(r["e"].get("matched_actor_ids") or ()),
+                    metadata=_decode_dict(r["e"].get("metadata")),
+                )
+                for r in records
+            ]
+
+    def list_all_known_actors(self) -> list[KnownActor]:
+        with self.driver.session() as session:
+            records = session.run("MATCH (a:KnownActor) RETURN a")
+            out: list[KnownActor] = []
+            for r in records:
+                node = r["a"]
+                emb = node.get("face_embedding")
+                out.append(
+                    KnownActor(
+                        id=node["id"],
+                        name=node["name"],
+                        role=node["role"],
+                        face_embedding=tuple(emb) if emb else None,
+                        access_profile=node.get("access_profile", "none"),
+                    )
+                )
+            return out
+
+    def list_all_vlm_decisions(self) -> list[VLMDecision]:
+        with self.driver.session() as session:
+            records = session.run("MATCH (d:VLMDecision) RETURN d")
+            return [
+                VLMDecision(
+                    id=r["d"]["id"],
+                    ts=r["d"]["ts"],
+                    triggered_by_event_id=r["d"].get("triggered_by_event_id"),
+                    findings_summary=r["d"].get("findings_summary", ""),
+                )
+                for r in records
+            ]
+
+    def list_all_policies(self) -> list[Policy]:
+        with self.driver.session() as session:
+            records = session.run("MATCH (p:Policy) RETURN p")
+            return [_node_to_policy(r["p"]) for r in records]
+
+    def list_all_cited_edges(self) -> list[CitedEdge]:
+        with self.driver.session() as session:
+            records = session.run(
+                """
+                MATCH (d)-[r:CITED]->(m)
+                RETURN d.id AS d_id, m.id AS m_id, r AS edge
+                """
+            )
+            return [_record_to_edge(r) for r in records]
+
     def count_events(self, *, camera_id: str | None = None) -> int:
         with self.driver.session() as session:
             if camera_id is None:
@@ -532,7 +652,11 @@ class Neo4jGraphClient:
             return [_record_to_edge(r) for r in records]
 
     def candidates_for_pruning(
-        self, *, threshold: float, kind: NodeKind | None = None
+        self,
+        *,
+        threshold: float,
+        kind: NodeKind | None = None,
+        now_ts: float | None = None,
     ) -> list[PruneCandidate]:
         # Mirror the in-memory implementation's semantics. For Neo4j
         # we still pull the citation edges back and score in Python —
@@ -543,14 +667,15 @@ class Neo4jGraphClient:
         from sentihome_memory.dynamics import DecayParams, decay
 
         params = DecayParams()
-        # Use the most recent edge as "now" — same convention as
-        # InMemoryGraphClient. The harness's TimeProvider supplies
-        # this in production code paths.
+        # Use ``now_ts`` if caller supplied it; otherwise fall back to
+        # the most recent edge — same fragile fallback as
+        # InMemoryGraphClient, useful when callers don't carry a clock.
         with self.driver.session() as session:
-            now_record = session.run(
-                "MATCH ()-[r:CITED]->() RETURN max(r.created_ts) AS now"
-            ).single()
-            now_ts = (now_record["now"] if now_record else None) or 0.0
+            if now_ts is None:
+                now_record = session.run(
+                    "MATCH ()-[r:CITED]->() RETURN max(r.created_ts) AS now"
+                ).single()
+                now_ts = (now_record["now"] if now_record else None) or 0.0
 
             label_filter = ""
             if kind is NodeKind.EVENT:
