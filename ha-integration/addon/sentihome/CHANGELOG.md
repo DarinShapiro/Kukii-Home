@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.27 — 2026-05-28
+
+**Hotfix: `async_sign_path` import location in HA 2024+.**
+
+v0.3.26 imported `async_sign_path` from
+`homeassistant.helpers.network` — that location was removed in
+newer HA. In HA 2026.5.4 (and likely back to ~2024.8), the helper
+lives in `homeassistant.components.http.auth`. The whole SentiHome
+integration failed to load with ImportError on startup, which is
+why v0.3.26's `/api/sentihome/sign` returned 404 (the view was
+never registered).
+
+Fix: try the modern import path first, fall back to the legacy one
+for older HA installs. The function signature is unchanged across
+versions.
+
+Self-criticism: I should have validated import paths against the
+actual HA version running on your Yellow before shipping. I'll
+keep a "known-good HA version" reference for future integration
+changes so cross-version surface issues get caught at PR time, not
+on your phone.
+
+---
+
 ## 0.3.26 — 2026-05-28
 
 **Real fix for notification 401: HA signed-path URLs (Epic 10.8.5).**

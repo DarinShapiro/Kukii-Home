@@ -39,7 +39,20 @@ from typing import TYPE_CHECKING
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
-from homeassistant.helpers.network import async_sign_path
+
+# Epic 10.8.5: ``async_sign_path`` moved between HA versions.
+# Modern HA (2024+): homeassistant.components.http.auth
+# Legacy HA (pre-2024): homeassistant.helpers.network
+# Try modern first, fall back to legacy. Logs the chosen import so a
+# future "where did this come from" debug session has a breadcrumb.
+try:
+    from homeassistant.components.http.auth import (  # type: ignore[import-not-found]
+        async_sign_path,
+    )
+except ImportError:
+    from homeassistant.helpers.network import (  # type: ignore[import-not-found,no-redef]
+        async_sign_path,
+    )
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
