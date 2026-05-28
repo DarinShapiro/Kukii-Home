@@ -64,16 +64,25 @@ class RTSPFrameBuffer:
         self,
         *,
         rolling_buffer: RollingBuffer,
-        configured_cameras: list[str],
         node_id: str,
         external_base_url: str,
         detector: YOLODetector | None = None,
         enrich_motion_only: bool = True,
         annotation_cache: AnnotationCache | None = None,
+        configured_cameras: list[str] | None = None,  # deprecated, ignored
     ) -> None:
         self._buffer = rolling_buffer
-        self._cameras = set(configured_cameras)
         self._node_id = node_id
+        # configured_cameras used to be a static whitelist enforced
+        # here. That broke dynamic camera discovery — a camera added
+        # via CameraConfigEvent would capture frames but then be
+        # rejected at query time. Now: any camera that has entries
+        # in the rolling buffer is queryable. The static cameras
+        # list is kept as a no-op kwarg for backwards-compat in
+        # callers that still pass it (will be cleaned up in #71's
+        # ha-agent publisher work where camera config is fully
+        # dynamic).
+        _ = configured_cameras  # silence unused-arg lint
         # rstrip so /frames doesn't double-slash if caller passes
         # a base ending in /.
         self._base_url = external_base_url.rstrip("/")
@@ -115,9 +124,7 @@ class RTSPFrameBuffer:
         """Read a single JPEG-encoded keyframe out of the rolling
         buffer. Returns the bytes for the
         ``GET /frames/{camera_id}/{ts}.jpg`` route. ``None`` if the
-        camera is unknown or the exact-ts frame has already aged out."""
-        if camera_id not in self._cameras:
-            return None
+        exact-ts frame isn't buffered (camera unknown OR aged out)."""
         frame = await self._buffer.get_at(camera_id, ts)
         return frame.jpeg_bytes if frame is not None else None
 
@@ -147,7 +154,7 @@ class RTSPFrameBuffer:
         """
         t0 = time.perf_counter()
 
-        if camera_id not in self._cameras or ts_end <= ts_start:
+        if ts_end <= ts_start:
             return FrameWindow(
                 camera_id=camera_id,
                 ts_start=ts_start,
@@ -156,6 +163,9 @@ class RTSPFrameBuffer:
                 enrichment_mode="enriched" if enrich else "frames_only",
                 enrichment_latency_ms=int((time.perf_counter() - t0) * 1000),
             )
+        # No camera whitelist check: any camera_id with entries in
+        # the rolling buffer is queryable. Unknown cameras simply
+        # produce empty buffer reads -> empty FrameWindow, no error.
 
         buffered = await self._buffer.get_window(
             camera_id, ts_start=ts_start, ts_end=ts_end
