@@ -2,12 +2,30 @@
 
 **Purpose:** What the system remembers, where, for how long, and how the pieces relate. Memory is the spine of the system — almost every scenario reads from or writes to it in a non-trivial way.
 **Status:** drafting
+**Last updated 2026-05-27 (Epic 10 design propagation)**
+
+---
+
+## Status (2026-05-27): Neo4j hybrid graph + vector substrate (Epic 10)
+
+Epic 10 (`planning/epics/10-identity-recognition.md`) locks in **Neo4j 5.x as the single hybrid graph + vector store** for all memory layers below. This replaces the "SQL + vector DB" split that was sketched in this doc. Postgres demotes to OLTP-only (HA config, alert log, audit log, structured outputs); Qdrant retires.
+
+Key consequences for sections below:
+
+- **Five memory layers are preserved as a conceptual framing**, but they live as node-type taxonomies on a single graph (`Event`, `KnownActor`, `KnownVehicle`, `KnownPet`, `VLMDecision`, `Policy`, `UserFeedback`, `QualityIssue`, …). Embeddings are node properties indexed by Neo4j's native vector index (5.13+).
+- **Edges carry the memory dynamics.** Reinforcement and decay live on edge weights (Mnemosyne reverse-sigmoid decay with floor `d=0.05`, sigmoidal habituation `Δ_max=0.2`, `t_crit=3600s`). The previously-planned "retention scoring" collapses to tuning the edge-weight reinforcement + decay functions. See Epic 10 §"Edge-weight dynamics" and §"Compression" for normative functional forms.
+- **Session memory dissolves.** Epic 10 removes the session object outright ("memory IS the substrate — no session object, no lifecycle to manage"). The `Session memory` section below is **superseded**; cross-camera correlation now expresses itself as `CORRELATES_WITH` edges between `Event` nodes.
+- **Episodic / identity / semantic memory** sections below are largely accurate as concepts; the storage backing changes from "SQL + vector DB" to Neo4j nodes + edges. The five-layer framing is augmented by **three tiers** (Tier 1 Events/Visits, Tier 2 Canonical Incident Paths via FSM, Tier 3 Authored Policies + Emergent Rules) with REINFORCE-on-reward-gap inter-tier edge updates.
+- **Authored dismissal policies** (VLM-emitted, content-based, tag-set-scoped, TTL'd, sanity-check re-invocations) live as `Policy` nodes — see Epic 10 §"Authoring dismissal policies".
+- **RAG composes** persistent Hebbian weights with per-query weights: `w_final = w_persistent · w_query`, traversed via Dynamic Weighted PageRank (MemORAI). Implementable as a single Cypher query against Neo4j 5.x vector indexes.
+
+The schema in Epic 10 (Node taxonomy + Edge taxonomy tables) is canonical for storage; the layer descriptions below remain useful as a reasoning model.
 
 ---
 
 ## Memory layers overview
 
-Five distinct layers, each with a different lifetime, purpose, and storage backing.
+Five distinct conceptual layers, each with a different lifetime, purpose, and reading shape. All five back onto the same Neo4j graph (per Epic 10 status note above); the "Store" lines below describe the **pre-Epic 10** plan and are kept for context — actual storage is Neo4j 5.x with native vector indexes.
 
 ```
 ┌─ Working memory ──────────────────────────────────────────┐
@@ -16,32 +34,36 @@ Five distinct layers, each with a different lifetime, purpose, and storage backi
 │  Lifetime: one agent run. Store: in-prompt only.          │
 └───────────────────────────────────────────────────────────┘
 
-┌─ Session memory ──────────────────────────────────────────┐
-│  The in-flight journey object. Built incrementally as     │
-│  new segments arrive. Held hot.                           │
-│  Lifetime: minutes to hours (open → close).               │
-│  Store: SQL + in-memory cache.                            │
+┌─ Session memory ── (superseded — see Epic 10) ────────────┐
+│  Pre-Epic-10: in-flight journey object built              │
+│  incrementally as new segments arrive.                    │
+│  Epic 10: session object eliminated; cross-camera         │
+│  correlation expressed as CORRELATES_WITH edges between   │
+│  Event nodes; memory itself is the persistent substrate.  │
 └───────────────────────────────────────────────────────────┘
 
 ┌─ Episodic memory ─────────────────────────────────────────┐
 │  Filed records of closed sessions and notable events.     │
 │  The curated, queryable history of what happened.         │
 │  Lifetime: weeks–indefinite (policy-governed).            │
-│  Store: SQL (structured) + vector DB (semantic search).   │
+│  Store: Neo4j nodes (Event, VLMDecision, Alert, …) with   │
+│  embedding properties + vector index for semantic recall. │
 └───────────────────────────────────────────────────────────┘
 
 ┌─ Identity memory ─────────────────────────────────────────┐
 │  Who is known: residents, visitors, service workers,      │
 │  pets, vehicles. Access profiles and learned behavior.    │
 │  Lifetime: indefinite for household; policy for others.   │
-│  Store: vector DB (embeddings) + SQL (metadata/profiles). │
+│  Store: Neo4j nodes (KnownActor, KnownVehicle, KnownPet)  │
+│  with embedding properties + vector index.                │
 └───────────────────────────────────────────────────────────┘
 
 ┌─ Semantic memory ─────────────────────────────────────────┐
 │  Rules, situational contexts, transient intents,          │
 │  home layout knowledge. Forward-looking and normative.    │
 │  Lifetime: indefinite (rules); bounded (contexts/intents).│
-│  Store: vector DB (rules) + SQL (contexts, intents).      │
+│  Store: Neo4j nodes (Policy, SituationalContext,          │
+│  TransientIntent, Area) + relationships.                  │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -70,6 +92,8 @@ Contexts and intents go before rules because they are the frame through which ru
 ---
 
 ## Session memory
+
+> **Status (2026-05-27): Superseded by Epic 10.** The Session object no longer exists as a first-class entity. Cross-camera correlation, which the Session object previously held in memory, now expresses itself as `CORRELATES_WITH` edges between `Event` nodes in the Neo4j graph (`strength`, `reason: same_actor | temporal_adjacency`). "Session-scoped reasoning" (journey scoring, segment correlation) is replaced by template-driven Cypher queries at triage time over recent events on this camera + adjacent cameras within a temporal window. The structure documented below is retained as historical context; the **re-ID + spatial-plausibility + recency correlation rules remain accurate** — they're just applied at query time over `Event` nodes rather than mutating an in-flight session.
 
 Tracks a subject (or group) across cameras and time while the session is open. Defined in `design_notes.md`; repeated here for completeness.
 
@@ -365,13 +389,17 @@ A single user dismiss with context ("not interested, don't alert again") sets `s
 
 ## Stores
 
-| Store                         | What lives here                                                                                                                                       | Why                                                               |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Vector DB                     | Rule embeddings, face/reid/pet galleries, episodic summary embeddings, behavioral pattern embeddings                                                  | Semantic + ANN search                                             |
-| SQL                           | Sessions, episodic records (structured), KnownActors, access profiles, visit ledgers, transient intents, situational contexts, calibration, audit log | Structured queries, joins, time-range filters                     |
-| Object store                  | Raw clips, annotated frames, montages, session stitches                                                                                               | Blob storage, cheap, content-addressed                            |
-| Time-series / append-only log | Raw event stream (every trigger, every detection)                                                                                                     | High-write, queryable by time range, retention-managed separately |
-| In-memory cache               | Hot sessions, active contexts, active intents                                                                                                         | Sub-ms access during triage and reasoning                         |
+> **Status (2026-05-27): Restructured by Epic 10.** Neo4j 5.x absorbs both the prior "Vector DB" and the memory-side of the prior "SQL" rows: embeddings live as properties on graph nodes with native vector indexes, and the structured/relational queries become Cypher traversals. Postgres is retained for OLTP-only (HA config snapshots, alert log, audit log, structured outputs). The "Vector DB" row's Qdrant footprint retires. The other three rows (object store, time-series log, in-memory cache) remain accurate.
+
+| Store                                 | What lives here                                                                                                                                                                                                                                                                       | Why                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Neo4j 5.x (graph + native vector)     | Everything memory-shaped: KnownActor / KnownVehicle / KnownPet (with face / vehicle / DINOv2 embedding properties); Event, VLMDecision, Alert, Policy, UserFeedback, QualityIssue, KnobAdjustment nodes; rule embeddings; all relationship edges including CITED, INFLUENCED, YIELDED. | Hybrid graph + ANN in one Cypher query; edge weights = Hebbian dynamics |
+| Postgres (OLTP only)                  | HA config snapshots, alert log, audit log, structured outputs, system metadata. **No memory data.**                                                                                                                                                                                   | Familiar transactional store for non-graph operational data       |
+| Object store                          | Raw clips, annotated frames, montages, session stitches                                                                                                                                                                                                                               | Blob storage, cheap, content-addressed                            |
+| Preprocessor ring buffer (in-memory)  | Last ~60s per camera of pre-analyzed frames + sidecar JSON                                                                                                                                                                                                                            | Sub-50ms response to `GET /window` from triage                    |
+| Preprocessor disk archive             | Last ~10min per camera (originals + sidecars)                                                                                                                                                                                                                                         | Warm window for triage on motion events                           |
+| Time-series / append-only log         | Raw event stream (every trigger, every detection); HA event mirror                                                                                                                                                                                                                    | High-write, queryable by time range, retention-managed separately |
+| In-memory cache                       | Active SituationalContexts, active TransientIntents, active Policies (hot lookups)                                                                                                                                                                                                    | Sub-ms triage policy match                                        |
 
 ---
 
@@ -394,6 +422,6 @@ Covered in depth in `16-privacy-and-governance.md`. Summary:
 
 ## Backup & disaster recovery
 
-- Vector DB and SQL: nightly snapshot to local NAS; weekly off-site (encrypted)
-- Object store: clips are re-creatable from Agent DVR continuous recording within retention window; annotated frames are derived — lower backup priority
-- On restore: re-index vector DB from SQL records if needed; embeddings are not re-computable without source frames so frame backup matters
+- Neo4j and Postgres: nightly snapshot to local NAS; weekly off-site (encrypted). Neo4j's `neo4j-admin database dump` is the canonical mechanism; embeddings are graph-node properties and travel with the dump.
+- Object store: clips are re-creatable from Agent DVR (the VMS) continuous recording within retention window; annotated frames are derived — lower backup priority
+- On restore: Neo4j dumps restore in a single command. Embeddings are not re-computable without source frames, so frame backup matters for embeddings older than the Agent DVR retention window.

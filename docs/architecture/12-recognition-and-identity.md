@@ -2,6 +2,40 @@
 
 **Purpose:** How people, vehicles, and recurring unknowns are identified across frames, sessions, and days — with uncertainty surfaced honestly.
 **Status:** drafting
+**Last updated 2026-05-27 (Epic 10 design propagation)**
+
+---
+
+## Status (2026-05-27): Recognition is a preprocessor service (Epic 10)
+
+Epic 10 (`planning/epics/10-identity-recognition.md`) reframes everything below: **recognition is no longer a standalone enrichment service called per-VLM-invocation.** It is a **continuous preprocessor service** running 24/7 on the inference box (NVIDIA 4090 host), serving a single time-window endpoint to consumers: `GET /window?camera=<id>&from=<ts>&to=<ts>` returns pre-analyzed frames + structured detection metadata. The HA Yellow stays orchestration-only — no models ever run there.
+
+The preprocessor's internal pipeline is opaque to consumers and runs on every frame:
+
+```
+frame → YOLO11x object detection
+      → per-bbox dispatch:
+           face → SCRFD detect+align → ArcFace ResNet100 embed → KnownActor match
+           vehicle → DINOv2 embed → KnownVehicle match → fastALPR plate detect+OCR
+           animal → DINOv2 embed → KnownPet match
+           other → class + bbox + confidence only
+      → ring buffer (60s hot in-memory, 10min warm on disk) + JSON sidecars
+```
+
+Concrete model locks from Epic 10 (the locked picks for the inference box; supersede the "ArcFace / AdaFace" model-agnostic framing in Tier 2 below and the "RetinaFace / SCRFD" alternation in Tier 1):
+
+| Task                                   | Model                                                       |
+| -------------------------------------- | ----------------------------------------------------------- |
+| Object detection                       | **YOLO11x** (Ultralytics)                                   |
+| Face detect + align                    | **RetinaFace-R50** (InsightFace `buffalo_l` bundle)         |
+| Face recognition (embedding)           | **ArcFace ResNet100** (InsightFace `buffalo_l`), 512-d      |
+| Vehicle ReID                           | **DINOv2 base** + cosine match in Neo4j vector index        |
+| License plate                          | **fastALPR** (YOLOv8 plate detector + lightweight OCR)      |
+| Pet ID (per-pet)                       | **DINOv2 embeddings** + KnownPet centroid match             |
+
+The VMS is **Agent DVR** (not Frigate). The recognition outputs land in **Neo4j 5.x** as embedding properties on `KnownActor` / `KnownVehicle` / `KnownPet` nodes with native vector indexes; the prior "vector DB (HNSW) + SQL gallery metadata" split is gone (see §11 status note).
+
+Sections below remain valid as the conceptual story of "how identity is reasoned about under uncertainty" — quality gates, identity resolution records, multi-frame aggregation, composite identity, drift detection, gallery management — only the storage layer and the model picks change.
 
 ---
 
@@ -30,13 +64,15 @@ Quality outcomes:
 
 Quality is stricter for unknowns (high stakes: false ID is worse than no ID) than for resident confirmations (low stakes).
 
-### Tier 2: Face embedding (model-agnostic)
+### Tier 2: Face embedding
+
+> **Status (2026-05-27):** Epic 10 locks the embedding model to **ArcFace ResNet100** (InsightFace `buffalo_l` bundle), 512-d. The "model-agnostic" framing here was pre-Epic-10; AdaFace and other alternatives are out of scope unless a future epic revisits. The `model_version` property remains essential since embeddings cannot be re-used across model upgrades.
 
 ```
 Frontalized face image (alignment + crop)
     │
     ▼
-Embedding model (ArcFace / AdaFace)
+ArcFace ResNet100 (InsightFace buffalo_l)
     │
     ▼
 Embedding vector (512-d)
@@ -46,7 +82,7 @@ Embedding vector (512-d)
     + source_frame_ref
 ```
 
-Store embeddings in vector DB (HNSW index for ANN search). Keep capture context: the embedding's reliability depends on where it came from — a security camera vs. a blurry side-angle still matter.
+Embeddings live as properties on `KnownActor` nodes in Neo4j 5.x, indexed by Neo4j's native vector index (cosine) for ANN search inside Cypher traversals. The prior "vector DB (HNSW)" plan is superseded by §11's Neo4j hybrid substrate. Keep capture context: the embedding's reliability depends on where it came from — a security camera vs. a blurry side-angle still matter.
 
 ### Tier 3: Gallery matching
 
@@ -424,18 +460,21 @@ If yes, system includes recent best-quality detections in gallery update.
 
 Pets require separate galleries and matching logic. Pets can't be reliably identified by face across different angles and lighting (unlike humans with stable facial geometry). Re-ID + behavioral patterns are primary.
 
-### Pet gallery
+> **Status (2026-05-27):** Epic 10 simplifies the per-pet identification mechanism to **DINOv2 base embeddings of the dog/cat crop, matched by cosine similarity against a per-pet centroid in the Neo4j vector index** (`KnownPet.dinov2_embedding`). The Epic 10 model picks table is explicit: "DINOv2 embeddings + KnownPet centroid match" — this skips needing a fine-tuned per-pet model. Tradeoff: accuracy vs. a custom fine-tune; adequate for v1. If accuracy is inadequate, a future epic could fine-tune a per-pet model. The pet-face-specific embedding model + coat-pattern descriptor framing below is **superseded** by the DINOv2-based approach; the home_areas / alert_if_detected_in / last_known_location semantics remain accurate.
+
+### Pet gallery (Epic 10 schema)
 
 ```
-PetActor:
+KnownPet (Neo4j node):
   id: "max_golden_retriever"
+  name: "Max"
   species: "dog"
-  breed: "Golden Retriever"
+  breed: "Golden Retriever"           ← optional, for VLM context only
+  owner_actor_id: → KnownActor
 
-  gallery:
-    face_embeddings: [{ vector, model_v, source_frame_ref }]
-    coat_pattern: "image descriptor"
-    height_estimate_cm: 65
+  dinov2_embedding: vec               ← centroid over enrollment crops
+                                       (Neo4j vector index, cosine)
+  enrollment_frame_refs: []
 
   home_areas: [backyard, interior]
   alert_if_detected_in: [front_yard, street]
@@ -450,18 +489,18 @@ PetActor:
 ### Pet detection logic
 
 ```
-Detection: Dog in frame
+Detection: Dog in frame (YOLO11x class=dog)
     │
-    ├─ Face recognition
-    │  Similarity to Max gallery: 0.84
-    │  Confidence tier: "tentative" (pet faces have more variation than human)
+    ├─ Per-bbox dispatch in preprocessor:
+    │   crop → DINOv2 base embed
+    │        → cosine vs. each KnownPet.dinov2_embedding centroid
+    │        → similarity to Max centroid: 0.84
+    │          Confidence tier: "tentative" (pet visual identity is noisier than human face)
     │
-    ├─ Body features
-    │  Color: golden (matches breed)
+    ├─ Body features (signals from YOLO11x bbox geometry)
     │  Size: ~65cm (matches estimated height)
-    │  Gait: normal (no limp/distress)
     │
-    └─ Location + time context
+    └─ Location + time context (in triage layer, not preprocessor)
        Frame from: front_yard
        Max should be: backyard
        Gate sensor: no recent open
