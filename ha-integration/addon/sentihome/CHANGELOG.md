@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.3.20 — 2026-05-28
+
+**Notification tap UX (Epic 10.8.1).**
+
+The notification you get on your phone now opens to a real
+per-alert page instead of a blank HA screen. Three iOS Companion
+action buttons appear on long-press for one-tap dismiss / open /
+report-as-false-positive.
+
+### What you'll see
+
+Tap a notification → SentiHome opens to `/alert/<id>` showing:
+
+- **Hero**: the snapshot from the alert
+- **Identities**: who SentiHome thinks is in frame (face / body
+  match + confidence)
+- **Detections**: object summary (`person x 2`, `vehicle x 1`)
+- **VLM analysis**: "Not yet analyzed" placeholder (Phase 11)
+- **Sticky bottom row**: Dismiss / False positive
+
+Long-press the notification on iOS lock screen → three quick
+actions:
+- **Dismiss** (red, no app open) — fires in the background
+- **Open** — same as default tap
+- **False positive** — opens the page scrolled to the FP form
+
+### False-positive feedback
+
+The FP button reveals an inline form with five categorized
+reasons (`empty frame`, `wrong identity`, `known event`, `camera
+glitch`, `other`) plus optional notes + actor-correction picker.
+Each submission gets stored at
+`/data/sentihome/events/<id>/feedback.json` and feeds the
+tuning loop (Phase 10.feedback).
+
+### URL strategy
+
+The notification URL is now
+`/api/hassio_ingress/<token>/alert/<event_id>`. v0.3.15 tried
+this and got 401; this time the ingress base is resolved from
+the live boot context at notification time rather than being
+hard-coded. If 401 reappears in production, the next move is
+registering an HA panel that owns its own URL routing under
+`/lovelace/sentihome`.
+
+### Per-alert persistence
+
+Every alert now writes a durable event directory:
+
+```
+/data/sentihome/events/<event_id>/
+   meta.json       full alert record + reserved vlm_response field
+   frame.jpg       snapshot copy
+   feedback.json   when user submits FP
+```
+
+The schema includes a `triage_decision` discriminator
+(`alert_fired` today) so the future near-miss + VLM-flagged-
+silent records can use the same layout without a migration —
+the data corpus for finding false negatives ("VLM noticed
+something the rule-based triage missed") starts here.
+
+---
+
 ## 0.3.19 — 2026-05-27
 
 **Fix 404 on notification tap + per-alert latency capture.**
