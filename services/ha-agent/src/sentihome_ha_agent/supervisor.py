@@ -61,6 +61,40 @@ async def get_addon_self_info() -> dict[str, Any] | None:
         return None
 
 
+async def get_panel_url_base() -> str:
+    """Return the add-on's HA frontend panel route, e.g.
+    ``/app/a58a7de9_sentihome`` — or empty string when unavailable.
+
+    Epic 10.8.6: this is the route the HA Companion app navigates to
+    *in-app* (authenticated) for a notification tap. Unlike the
+    ingress prefix (``/api/hassio_ingress/<token>/``), which only
+    works for the browser session that created the token, the
+    ``/app/<slug>`` panel route is resolved by the HA frontend and
+    carries the user's existing session — so it never 401s on a
+    notification tap. Confirmed empirically against HA 2026.5.
+
+    The ``slug`` from ``/addons/self/info`` is the repo-prefixed
+    add-on slug (matches the container name ``addon_<slug>``), which
+    is exactly what the frontend uses for ``/app/<slug>``.
+
+    Returns empty string when not under Supervisor or on failure —
+    callers omit the tap URL rather than emit a broken one.
+    """
+    info = await get_addon_self_info()
+    if not info:
+        return ""
+    slug = info.get("slug")
+    if not isinstance(slug, str) or not slug:
+        logger.warning(
+            "supervisor.no_slug_for_panel",
+            hint="addons/self/info had no slug; notification tap URL disabled",
+        )
+        return ""
+    panel = f"/app/{slug}"
+    logger.info("supervisor.panel_url_base", panel=panel, slug=slug)
+    return panel
+
+
 async def get_ingress_url_prefix() -> str:
     """Return the add-on's HA Ingress URL prefix, or empty string.
 

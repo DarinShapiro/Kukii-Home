@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.28 — 2026-05-28
+
+**Notification tap finally works: point at the frontend panel route.**
+
+After v0.3.15–27 chased this through ingress tokens, `/api/` paths,
+and signed URLs — all of which 401'd — the root cause was simple
+and documented: **the HA Companion app only navigates in-app
+(authenticated) for FRONTEND routes.** Any `/api/…` path it hands
+to an external browser, which has no session → 401.
+
+You confirmed it directly: opening `/app/<slug>` loads the
+SentiHome UI fine, while `/api/…` opens a browser and 401s.
+
+So the notification tap now points at **`/app/<slug>`** — the
+SentiHome panel's frontend route. The app opens it in-app with your
+existing session. It cannot 401. The add-on discovers its own
+`/app/<slug>` from the Supervisor API at boot, so nothing's
+hardcoded.
+
+What you'll get: tapping a notification opens the SentiHome panel
+(the recent-alerts view). The alert id rides along as a
+`#alert=<id>` hash — a hook for a follow-up that jumps straight to
+the specific alert; today it opens to the list and you tap the one
+you want.
+
+**This is an add-on-only change** — the custom integration is
+untouched, so this update does NOT trigger a Home Assistant
+restart. Update the add-on and test.
+
+What was removed: the `/api/sentihome/alert` signing dance
+(`_maybe_sign_alert_url`, the sign round-trip). The integration's
+proxy views still exist but are no longer used by the tap; they'll
+be cleaned up in a later release (which will need a restart, so
+it's batched separately).
+
+Known cosmetic issue (not blocking): the add-on config still emits
+a Supervisor warning about `config` vs `addon_config` map options
+(introduced in v0.3.24). Harmless; cleanup batched with the
+integration-view removal.
+
+---
+
 ## 0.3.27 — 2026-05-28
 
 **Hotfix: `async_sign_path` import location in HA 2024+.**

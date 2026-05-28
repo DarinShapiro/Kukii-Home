@@ -59,7 +59,10 @@ from sentihome_ha_agent.overrides import (
     set_device_override,
 )
 from sentihome_ha_agent.reconciler import Reconciler
-from sentihome_ha_agent.supervisor import get_ingress_url_prefix
+from sentihome_ha_agent.supervisor import (
+    get_ingress_url_prefix,
+    get_panel_url_base,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -162,6 +165,12 @@ class BootState:
     `/api/hassio_ingress/<token>/`. Empty when not under Supervisor.
     Used by AlertNotifier so tap-actions open SentiHome (not HA
     root) and image attachments resolve via HA's auth session."""
+    panel_url_base: str = ""
+    """Epic 10.8.6: this add-on's HA frontend panel route, e.g.
+    `/app/<slug>`. This is the notification tap target — it opens
+    the SentiHome panel IN-APP with the user's session (never 401s,
+    unlike the /api/ and ingress-token URLs we tried in v0.3.15-27).
+    Empty when not under Supervisor."""
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -1983,10 +1992,16 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
         # snapshot images load via HA Companion's auth session.
         ingress_base = await get_ingress_url_prefix()
         boot.ingress_url_base = ingress_base
+        # Epic 10.8.6: the /app/<slug> panel route is the notification
+        # tap target. Opens SentiHome in-app, authenticated — the only
+        # form that doesn't 401 (proven against HA 2026.5).
+        panel_base = await get_panel_url_base()
+        boot.panel_url_base = panel_base
         notifier = AlertNotifier(
             client=client,
             notify_services=initial_services,
             sentihome_ingress_base=ingress_base,
+            panel_url_base=panel_base,
         )
         alert_log.add_on_record(notifier.on_alert)
         boot.notifier = notifier
@@ -1995,6 +2010,7 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
             services=initial_services,
             from_yaml_fallback=(initial_services == list(yaml_services or [])),
             ingress_base=ingress_base or "(none — using relative URLs)",
+            panel_base=panel_base or "(none — tap URL disabled)",
         )
 
         # v0.3.11 zero-config path: run discovery + reconciler when

@@ -55,7 +55,9 @@ async def _drain(n: AlertNotifier) -> None:
 
 
 def test_render_basic_alert():
-    n, _ = _make_notifier([])
+    # Epic 10.8.6: tap URL = the /app/<slug> panel route (in-app,
+    # authenticated). Needs panel_url_base set.
+    n, _ = _make_notifier([], panel_url_base="/app/a58a7de9_sentihome")
     title, message, data = n._render(_alert())
     assert title == "Person at Pool Cam"
     # Message uses friendly camera name, not the slug.
@@ -65,60 +67,45 @@ def test_render_basic_alert():
     assert data["image"] == "/api/camera_proxy/camera.dahuapoolcam_sub"
     # Per-camera dedup tag is always present.
     assert data["tag"] == "sentihome_dahuapoolcam"
-    # Epic 10.8.3: notification URL targets the custom integration's
-    # /api/sentihome/* views (bearer-token auth works for Companion);
-    # the prior ingress-URL strategies all 401'd or 404'd.
-    assert data["url"] == "/api/sentihome/alert/abc123"
-    assert data["clickAction"] == "/api/sentihome/alert/abc123"
+    # Epic 10.8.6: tap URL is the frontend panel route + alert hash.
+    # No /api/ path (those open an external browser → 401), no
+    # ingress token (browser-session-bound → 401).
+    assert data["url"] == "/app/a58a7de9_sentihome#alert=abc123"
+    assert data["clickAction"] == "/app/a58a7de9_sentihome#alert=abc123"
+    assert "/api/" not in data["url"]
 
 
-def test_render_url_is_integration_view_path_regardless_of_ingress_base():
-    """Epic 10.8.3: the URL is always /api/sentihome/alert/<id>,
-    independent of sentihome_ingress_base. The ingress URL was the
-    failure mode in v0.3.15/17/20; we no longer use it for the tap
-    target."""
+def test_render_tap_url_is_panel_route_not_ingress():
+    """Epic 10.8.6: tap URL uses panel_url_base, never the ingress
+    token prefix (the v0.3.15-27 failure mode)."""
     n, _ = _make_notifier(
         ["notify.mobile_app_x"],
         sentihome_ingress_base="/api/hassio_ingress/TOKEN123/",
+        panel_url_base="/app/a58a7de9_sentihome",
     )
     _, _, data = n._render(_alert())
-    assert data["url"] == "/api/sentihome/alert/abc123"
+    assert data["url"].startswith("/app/a58a7de9_sentihome")
     assert "hassio_ingress" not in data["url"]
 
 
-def test_render_emits_ios_action_buttons():
-    """Epic 10.8.1: three iOS Companion actions — Dismiss (lock-screen
-    quick action, doesn't open the app), Open (default tap), and FP
-    (deep-links to the alert page's FP form via #fp anchor)."""
-    n, _ = _make_notifier(
-        ["notify.mobile_app_x"],
-        sentihome_ingress_base="/api/hassio_ingress/T/",
-    )
+def test_render_omits_url_when_no_panel_base():
+    """No Supervisor / dev: panel_url_base empty → omit the tap URL
+    rather than emit a broken one. Notification still delivers."""
+    n, _ = _make_notifier([])  # panel_url_base defaults to ""
     _, _, data = n._render(_alert())
-    actions = data["actions"]
-    assert [a["action"] for a in actions] == [
-        "SENTIHOME_DISMISS",
-        "SENTIHOME_OPEN",
-        "SENTIHOME_FP",
-    ]
-    # Dismiss is destructive + background (no app open).
-    dismiss = actions[0]
-    assert dismiss["destructive"] is True
-    assert dismiss["activationMode"] == "background"
-    # FP deep-links to the page with #fp anchor so the form's in view.
-    fp = actions[2]
-    assert fp["uri"].endswith("/alert/abc123#fp")
+    assert "url" not in data
+    assert "clickAction" not in data
 
 
-def test_render_omits_url_and_actions_when_no_alert_id():
-    """Synthetic test pings with no alert_id can't link to a per-alert
-    page — fall through silently rather than emitting a broken URL."""
-    n, _ = _make_notifier([])
+def test_render_tap_url_without_alert_id_is_bare_panel():
+    """A synthetic ping with no alert_id still gets a tappable URL —
+    just the panel root, no #alert hash."""
+    n, _ = _make_notifier([], panel_url_base="/app/x_sentihome")
     alert = _alert()
     alert.pop("alert_id")
     _, _, data = n._render(alert)
-    assert "url" not in data
-    assert "actions" not in data
+    assert data["url"] == "/app/x_sentihome"
+    assert "#alert" not in data["url"]
 
 
 def test_render_omits_image_when_no_camera_entity():
@@ -127,8 +114,7 @@ def test_render_omits_image_when_no_camera_entity():
     n, _ = _make_notifier([])
     _, _, data = n._render(_alert(camera_entity=""))
     assert "image" not in data
-    # url is unconditionally omitted in v0.3.19; just confirm there's
-    # at least the tag (so the notification has SOME data fields).
+    # Tag is always present so the notification has data fields.
     assert "tag" in data
 
 
@@ -298,57 +284,18 @@ async def test_test_send_with_no_services_returns_empty():
     assert results == []
 
 
-# ─── Epic 10.8.5: signed URL flow ────────────────────────────────────
+# ─── Epic 10.8.6: panel-route tap URL reaches HA ─────────────────────
 
 
-async def test_dispatch_signs_alert_url_via_client():
-    """The dispatch path should call client.sign_url with the alert's
-    /api/sentihome/alert/<id> path and use the signed result in
-    data.url + data.clickAction (replacing the unsigned placeholder
-    that _render emits)."""
-    n, client = _make_notifier(["notify.mobile_app_x"])
-    client.sign_url = AsyncMock(
-        return_value="/api/sentihome/alert/abc123?authSig=JWT_FAKE"
+async def test_dispatch_sends_panel_url_to_ha():
+    """End-to-end: with panel_url_base set, the notify payload that
+    reaches HA carries the /app/<slug> tap URL — no signing, no
+    /api/ path, no async round-trip."""
+    n, client = _make_notifier(
+        ["notify.mobile_app_x"], panel_url_base="/app/a58a7de9_sentihome"
     )
     results = await n.test_send(_alert())
-    # Service was called.
     assert results == [{"service": "notify.mobile_app_x", "ok": True, "error": None}]
-    # Sign helper hit once with the right path.
-    client.sign_url.assert_called_once_with("/api/sentihome/alert/abc123")
-    # The notify payload sent to HA had the SIGNED url.
-    call_args = client.call_service.call_args
-    data = call_args.kwargs["data"]["data"]
-    assert data["url"] == "/api/sentihome/alert/abc123?authSig=JWT_FAKE"
-    assert data["clickAction"] == "/api/sentihome/alert/abc123?authSig=JWT_FAKE"
-    # The internal _sentihome_alert_id placeholder is gone — never
-    # leaked to HA.
-    assert "_sentihome_alert_id" not in data
-
-
-async def test_dispatch_falls_back_to_unsigned_when_sign_fails():
-    """If client.sign_url returns None (integration not loaded,
-    HA restarting, etc.), the notification still fires — just with
-    the unsigned URL. Logs warn so we can diagnose."""
-    n, client = _make_notifier(["notify.mobile_app_x"])
-    client.sign_url = AsyncMock(return_value=None)
-    await n.test_send(_alert())
-    call_args = client.call_service.call_args
-    data = call_args.kwargs["data"]["data"]
-    # Unsigned URL stays in place — tap will likely 401, but at
-    # least the notification reaches the phone with a debuggable URL.
-    assert data["url"] == "/api/sentihome/alert/abc123"
-    assert "authSig" not in data["url"]
-
-
-async def test_dispatch_signs_fp_action_button_uri_too():
-    """The FP lock-screen action's uri also needs the signed form
-    (with #fp anchor preserved). Otherwise tapping False Positive
-    from the lock screen would 401."""
-    n, client = _make_notifier(["notify.mobile_app_x"])
-    client.sign_url = AsyncMock(
-        return_value="/api/sentihome/alert/abc123?authSig=JWT"
-    )
-    await n.test_send(_alert())
     data = client.call_service.call_args.kwargs["data"]["data"]
-    fp_action = next(a for a in data["actions"] if a["action"] == "SENTIHOME_FP")
-    assert fp_action["uri"] == "/api/sentihome/alert/abc123?authSig=JWT#fp"
+    assert data["url"] == "/app/a58a7de9_sentihome#alert=abc123"
+    assert "/api/" not in data["url"]

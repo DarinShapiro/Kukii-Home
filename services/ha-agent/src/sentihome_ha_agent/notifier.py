@@ -54,10 +54,18 @@ class AlertNotifier:
 
     sentihome_ingress_base: str = ""
     """Optional base URL for the SentiHome ingress prefix
-    (e.g. ``/api/hassio_ingress/<token>/``). When set, image + url
-    payloads are absolute paths under this prefix so the HA app can
-    fetch them via its existing auth. Empty = pass relative paths
-    and let the app's URL-resolution figure it out."""
+    (e.g. ``/api/hassio_ingress/<token>/``). Historically used for
+    tap URLs; that path 401s on notification taps (the token is
+    browser-session-bound). Retained only for completeness; the tap
+    URL now uses ``panel_url_base``."""
+
+    panel_url_base: str = ""
+    """Epic 10.8.6: the add-on's HA frontend panel route, e.g.
+    ``/app/<slug>``. This is the notification tap target. The HA
+    Companion app navigates to it IN-APP with the user's session, so
+    it never 401s — unlike every /api/ and ingress-token URL tried
+    in v0.3.15-27. Empty = omit the tap URL (notification still
+    delivers, just isn't tappable)."""
 
     _pending_tasks: set[asyncio.Task] = field(default_factory=set)
     """Holds task references so create_task doesn't lose them to GC."""
@@ -102,12 +110,6 @@ class AlertNotifier:
         them in the UI). Shared so the two paths can't diverge.
         """
         title, message, data = self._render(alert)
-        # Epic 10.8.5: sign the tap-URL via the integration's
-        # /api/sentihome/sign helper. The Companion app's webview
-        # uses session cookies — signed URLs let us auth-bypass
-        # via the JWT in the query string (same trick HA's
-        # /api/camera_proxy/ uses for notification images).
-        await self._maybe_sign_alert_url(data)
         # Concurrent fan-out — one slow/failing service can't block
         # another. return_exceptions so we collect rather than raise.
         results = await asyncio.gather(
@@ -148,55 +150,6 @@ class AlertNotifier:
         if data:
             body["data"] = data
         await self.client.call_service(domain, svc, data=body)
-
-    async def _maybe_sign_alert_url(self, data: dict[str, Any]) -> None:
-        """Replace the placeholder /api/sentihome/alert/<id> URL in
-        ``data`` with a signed version (``?authSig=<jwt>``) HA's
-        auth middleware accepts in place of a session cookie.
-
-        The HA Companion app's notification-tap webview uses the
-        user's session cookie, not bearer auth. Cookies don't
-        propagate cleanly to all phone IPs (we saw "Login attempt
-        failed from <phone-IP>" in HA logs). Signed paths work
-        because the JWT travels in the URL itself; same pattern
-        /api/camera_proxy/ uses for the image attachment.
-
-        Failure mode: if the integration's sign-url view doesn't
-        respond (e.g. user hasn't restarted HA yet to load the new
-        views), we leave the URL unsigned. The tap will 401 like
-        v0.3.23, but everything else still works. Logged at warning.
-        """
-        alert_id = data.pop("_sentihome_alert_id", None)
-        if not alert_id:
-            return
-        path = f"/api/sentihome/alert/{alert_id}"
-        try:
-            signed = await self.client.sign_url(path)
-        except Exception as e:
-            logger.warning("notifier.sign_url_failed", error=str(e))
-            signed = None
-        if not signed:
-            # Leave the unsigned URL in place. Tap likely fails
-            # until the integration's sign view is reachable.
-            logger.warning(
-                "notifier.url_unsigned",
-                alert_id=alert_id,
-                hint=(
-                    "Integration may not be loaded yet. Restart HA "
-                    "Core if persistent notification asked you to."
-                ),
-            )
-            return
-        data["url"] = signed
-        data["clickAction"] = signed
-        # The FP action button's uri also needs the signed form +
-        # the #fp anchor preserved.
-        if "actions" in data:
-            for action in data["actions"]:
-                if action.get("action") == "SENTIHOME_FP":
-                    action["uri"] = f"{signed}#fp"
-                else:
-                    action["uri"] = signed
 
     def _render(self, alert: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
         """Build (title, message, data) for the HA notify payload.
@@ -291,85 +244,38 @@ class AlertNotifier:
         if camera_id:
             data["tag"] = f"sentihome_{camera_id}"
 
-        # Tap-action URL: deep-link to the per-alert page served by
-        # the SentiHome custom integration's HomeAssistantView. Epic
-        # 10.8.3.
+        # Tap-action URL: the SentiHome HA frontend panel route
+        # (``/app/<slug>``). Epic 10.8.6.
         #
-        # History (so we don't repeat the same mistakes):
-        # * v0.3.15: /api/hassio_ingress/<token>/ → 401. The ingress
-        #   token is browser-session-bound; Companion app doesn't
-        #   carry it.
-        # * v0.3.17: /hassio/ingress/sentihome → 404. No such route
-        #   in HA 2026.5+.
-        # * v0.3.19: dropped url entirely → blank-page UX.
-        # * v0.3.20-22: ingress URL re-tried → 401 again, as
-        #   predicted by v0.3.15.
+        # The long, painful history (v0.3.15-27): every attempt
+        # pointed the tap at a BACKEND path —
+        # /api/hassio_ingress/<token>/ (401, token is browser-
+        # session-bound), /hassio/ingress/<slug> (404), and finally
+        # /api/sentihome/alert/<id> signed + unsigned (401: the HA
+        # Companion app opens /api/ paths in an EXTERNAL browser with
+        # no session). HA docs are explicit: only FRONTEND routes
+        # (/lovelace/..., /app/<slug>) navigate in-app, authenticated.
         #
-        # Current strategy (Epic 10.8.5): /api/sentihome/alert/<id>
-        # SIGNED via the integration's sign-url helper. HA Companion
-        # app loads notification URLs in an in-app webview using
-        # session cookies, not bearer tokens — so plain /api/* paths
-        # 401 (v0.3.23 lesson). The signed URL has ?authSig=<jwt>
-        # which HA's auth middleware accepts in place of the cookie.
+        # /app/<slug> opens the SentiHome panel in-app with the
+        # user's existing session — confirmed working against HA
+        # 2026.5. The panel (the ingress Web UI, which HA
+        # authenticates for us) shows the recent-alerts list; the
+        # user taps the specific alert there.
         #
-        # Signing is async + requires an HTTP call to HA, so it
-        # happens in _dispatch_capture before the notify service
-        # call. _render just stamps a placeholder url; the actual
-        # signing rewrites data['url'] + data['clickAction'] later.
-        # See _maybe_sign_alert_url.
+        # We append the alert id as a hash (``#alert=<id>``) as a
+        # forward hook: a later release can have the in-panel JS read
+        # it and jump straight to the alert. Today the hash is
+        # harmless if unread — the panel still opens to the list.
+        #
+        # When panel_url_base is empty (not under Supervisor / dev),
+        # omit the tap URL entirely rather than emit a broken one.
         alert_id = alert.get("alert_id") or alert.get("event_id")
-        if alert_id:
-            data["url"] = f"/api/sentihome/alert/{alert_id}"
-            data["clickAction"] = data["url"]  # iOS Companion field
-            # Tag the alert_id on data so _dispatch_capture can find
-            # it cheaply when signing.
-            data["_sentihome_alert_id"] = alert_id
-
-        # iOS Companion app supports up to 4 action buttons on a
-        # notification (lock-screen long-press or notification expand).
-        # We surface three: Dismiss (no app open — fires a webhook
-        # that marks the alert read), Open (deep-link to the alert
-        # page, same target as the default tap), and False positive
-        # (deep-link to the page with #fp anchor so the FP form is
-        # in view).
-        #
-        # Action `uri` is what fires on tap. `activationMode=
-        # background` means the dismiss action doesn't open the app —
-        # iOS fires the webhook and the notification disappears.
-        # destructive=true tints the button red (correct affordance
-        # for "dismiss").
-        if alert_id:
-            actions: list[dict[str, Any]] = []
-            # Dismiss: fire the webhook, don't open the app. The
-            # webhook hits /api/webhook/<id> registered on the HA
-            # side; ha-agent listens for it via the integration.
-            # When the integration isn't wired (dev), the action
-            # falls back to opening the alert page (the dismiss
-            # button on the page does the same thing).
-            actions.append(
-                {
-                    "action": "SENTIHOME_DISMISS",
-                    "title": "Dismiss",
-                    "destructive": True,
-                    "activationMode": "background",
-                    "uri": data.get("url", ""),
-                }
-            )
-            actions.append(
-                {
-                    "action": "SENTIHOME_OPEN",
-                    "title": "Open",
-                    "uri": data.get("url", ""),
-                }
-            )
-            actions.append(
-                {
-                    "action": "SENTIHOME_FP",
-                    "title": "False positive",
-                    "uri": (f"{data['url']}#fp" if data.get("url") else ""),
-                }
-            )
-            data["actions"] = actions
+        if self.panel_url_base:
+            tap_url = self.panel_url_base
+            if alert_id:
+                tap_url = f"{self.panel_url_base}#alert={alert_id}"
+            data["url"] = tap_url
+            data["clickAction"] = tap_url  # iOS Companion field name
 
         # v0.3.18 — high-priority delivery flags. SentiHome's portion
         # of notify latency is ~300ms (LAN → HA → return); the user-
