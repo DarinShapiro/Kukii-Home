@@ -472,7 +472,7 @@ def _render_alert_page(event: dict[str, Any], event_id: str) -> str:
         + "</head><body>"
         # Hero
         f"<div class='hero'>"
-        f"<img src='alert/{safe_id}/annotated.jpg' alt='alert frame' "
+        f"<img src='{safe_id}/annotated.jpg' alt='alert frame' "
         f"onerror=\"this.style.display='none'\"/>"
         f"<div class='hero-caption'>"
         f"<h1>{headline}</h1>"
@@ -496,7 +496,7 @@ def _render_alert_page(event: dict[str, Any], event_id: str) -> str:
             "<button disabled class='btn'>Dismissed</button>"
             if dismissed
             else (
-                f"<form method='post' action='alert/{safe_id}/dismiss' "
+                f"<form method='post' action='{safe_id}/dismiss' "
                 "style='display:inline'>"
                 "<button type='submit' class='btn btn-secondary'>"
                 "Dismiss</button></form>"
@@ -544,7 +544,7 @@ def _render_fp_form(event_id: str) -> str:
     actor picker when reason=wrong_identity."""
     return (
         f"<form id='fp' class='fp-form' method='post' "
-        f"action='alert/{event_id}/feedback'>"
+        f"action='{event_id}/feedback'>"
         "<h2>Report false positive</h2>"
         "<p>What was wrong with this alert?</p>"
         "<label><input type='radio' name='reason' value='empty_frame' required> "
@@ -1316,7 +1316,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         if request.headers.get("Accept", "").startswith("application/json"):
             return web.json_response({"ok": ok}, status=(200 if ok else 404))
         # Browser POST → redirect back to the alert page with a flash.
-        target = f"../alert/{event_id}?dismissed=1" if ok else f"../alert/{event_id}"
+        # Redirect to ../{event_id} (not ../alert/{event_id}) — the
+        # POST is at /alert/{id}/dismiss, so ../{id} resolves to
+        # /alert/{id} correctly.
+        target = f"../{event_id}?dismissed=1" if ok else f"../{event_id}"
         raise web.HTTPSeeOther(location=target)
 
     async def alert_feedback(request: web.Request) -> web.Response:
@@ -1357,7 +1360,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # Also drop a hint into the legacy AlertLog so the recent-
         # alerts table can show "FP reported".
         alert_log.acknowledge(event_id, feedback=f"fp:{reason}")
-        target = f"../alert/{event_id}?fp=1"
+        target = f"../{event_id}?fp=1"
         raise web.HTTPSeeOther(location=target)
 
     async def debug_test_snapshot(request: web.Request) -> web.Response:

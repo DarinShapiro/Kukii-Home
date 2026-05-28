@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.3.23 — 2026-05-28
+
+**Real fix for the notification tap 401 (Epic 10.8.3).**
+
+v0.3.15/17/20 all tried variations of `/api/hassio_ingress/<token>/...`
+as the notification tap URL. All 401'd because that token is bound
+to the browser ingress session — the Companion mobile app uses
+bearer-token auth and doesn't carry the ingress cookie.
+
+The actual fix: register the per-alert page as a
+`HomeAssistantView` in the SentiHome custom integration. HA's
+auth middleware accepts bearer tokens for `/api/*` paths, which
+Companion DOES carry. The view proxies to the add-on's existing
+`/alert/<id>` endpoint — Companion never talks to the add-on
+directly, so the ingress-auth mismatch never arises.
+
+### Notification tap target
+- **Before:** `/api/hassio_ingress/<token>/alert/<id>` → 401
+- **Now:**    `/api/sentihome/alert/<id>` → works
+
+### Custom integration bumped to v0.2.0
+
+The SentiHome integration now registers five views on HA Core:
+
+```
+GET  /api/sentihome/alert/<event_id>              → HTML page
+GET  /api/sentihome/alert/<event_id>/frame.jpg
+GET  /api/sentihome/alert/<event_id>/annotated.jpg
+POST /api/sentihome/alert/<event_id>/dismiss
+POST /api/sentihome/alert/<event_id>/feedback
+```
+
+All five proxy to the add-on's matching endpoints internally. If
+you don't have the SentiHome custom integration installed +
+configured, the notification tap won't work — install it from
+HACS or `custom_components/sentihome/` in the repo.
+
+### Two bugs fixed in the add-on alert page
+
+While in there: fixed two latent bugs in v0.3.20's per-alert page
+that hadn't been triggered yet because nobody had submitted the
+form:
+
+1. **Relative URLs doubled `alert/`** — `<img src='alert/<id>/frame.jpg'>`
+   from page `/alert/<id>` resolved (per RFC 3986) to
+   `/alert/alert/<id>/frame.jpg`. Now uses the unambiguous
+   `<id>/frame.jpg` form.
+2. **303 redirect Locations equally wrong** — `../alert/<id>?...`
+   from POST `/alert/<id>/dismiss` resolved to `/alert/alert/<id>`.
+   Now uses `../<id>?...`.
+
+Tests strengthened to verify the FULL Location header (not just
+substring presence) so this class of bug can't recur silently.
+
+---
+
 ## 0.3.22 — 2026-05-28
 
 **Add-on packaging split: ha-agent only on Yellow (Epic 10.8.2).**

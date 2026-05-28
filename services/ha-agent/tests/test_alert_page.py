@@ -137,6 +137,31 @@ async def test_alert_page_includes_fp_form_when_no_feedback(setup):
     assert "camera_glitch" in text
 
 
+async def test_alert_page_relative_urls_resolve_correctly(setup):
+    """Regression test for the v0.3.20 'alert/' doubling bug.
+
+    From page URL /alert/evt1, the <img src='evt1/annotated.jpg'>
+    must resolve to /alert/evt1/annotated.jpg — NOT
+    /alert/alert/evt1/annotated.jpg (which was the bug).
+
+    Verifies by checking the rendered HTML uses the unambiguous
+    {event_id}/<file> form, not the broken alert/{event_id}/<file>
+    form. The form action + img src all share the same rule.
+    """
+    client, alert_log, _, _ = setup
+    alert_log.record(_alert())
+    resp = await client.get("/alert/evt1")
+    text = await resp.text()
+    # Right form: evt1/<resource> (no alert/ prefix).
+    assert "src='evt1/annotated.jpg'" in text or 'src="evt1/annotated.jpg"' in text
+    assert "action='evt1/dismiss'" in text or 'action="evt1/dismiss"' in text
+    assert "action='evt1/feedback'" in text or 'action="evt1/feedback"' in text
+    # And no doubled-up form anywhere.
+    assert "alert/evt1/annotated.jpg" not in text
+    assert "alert/evt1/dismiss" not in text
+    assert "alert/evt1/feedback" not in text
+
+
 async def test_alert_page_hides_fp_form_after_feedback_submitted(setup):
     """Once the user has submitted feedback, the form's gone — we
     show the recorded reason instead. Prevents resubmissions
@@ -168,9 +193,12 @@ async def test_post_feedback_records_to_store(setup):
         },
         allow_redirects=False,
     )
-    # Redirects back to the alert page.
+    # Redirects back to the alert page. ../{event_id}?fp=1 resolves
+    # from /alert/evt1/feedback to /alert/evt1?fp=1 (the alert page).
+    # Earlier versions used ../alert/evt1 which resolved to
+    # /alert/alert/evt1 (a 404). Check the EXACT Location now.
     assert resp.status == 303
-    assert "fp=1" in resp.headers["Location"]
+    assert resp.headers["Location"] == "../evt1?fp=1"
     # Feedback is durable on disk.
     meta = event_store.get("evt1")
     assert meta is not None
@@ -229,6 +257,9 @@ async def test_post_dismiss_marks_event(setup):
     alert_log.record(_alert())
     resp = await client.post("/alert/evt1/dismiss", allow_redirects=False)
     assert resp.status == 303
+    # ../evt1?dismissed=1 from /alert/evt1/dismiss resolves to
+    # /alert/evt1?dismissed=1 — the alert page with a flash banner.
+    assert resp.headers["Location"] == "../evt1?dismissed=1"
     meta = event_store.get("evt1")
     assert meta is not None
     assert meta["dismissed"] is True

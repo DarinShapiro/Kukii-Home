@@ -236,33 +236,36 @@ class AlertNotifier:
         if camera_id:
             data["tag"] = f"sentihome_{camera_id}"
 
-        # Tap-action URL: deep-link to the per-alert page in our add-on
-        # served through HA Ingress. Epic 10.8.1.
+        # Tap-action URL: deep-link to the per-alert page served by
+        # the SentiHome custom integration's HomeAssistantView. Epic
+        # 10.8.3.
         #
         # History (so we don't repeat the same mistakes):
-        # * v0.3.15: tried /api/hassio_ingress/<token>/ → 401, the
-        #   ingress token is browser-session-bound and the Companion
-        #   app doesn't have it.
-        # * v0.3.17: tried /hassio/ingress/sentihome → 404, HA
-        #   2026.5+ doesn't serve /hassio/* server-side.
-        # * v0.3.19: dropped data.url entirely → blank-page UX.
+        # * v0.3.15: /api/hassio_ingress/<token>/ → 401. The ingress
+        #   token is browser-session-bound; Companion app doesn't
+        #   carry it.
+        # * v0.3.17: /hassio/ingress/sentihome → 404. No such route
+        #   in HA 2026.5+.
+        # * v0.3.19: dropped url entirely → blank-page UX.
+        # * v0.3.20-22: ingress URL re-tried → 401 again, as
+        #   predicted by v0.3.15.
         #
-        # Current strategy: relative `alert/<id>` under the resolved
-        # ingress URL prefix when we have one. The Companion app's
-        # in-app webview inherits the panel's session for ingress
-        # paths, so this should work. If it doesn't, the alert page
-        # is also reachable via the sidebar panel manually; the
-        # notification's url is best-effort.
+        # Current strategy (Epic 10.8.3): /api/sentihome/alert/<id>.
+        # This is registered as a HomeAssistantView in the custom
+        # integration; HA's auth middleware accepts the Companion
+        # app's bearer token for /api/* paths. The view proxies to
+        # the add-on's /alert/<id> endpoint internally — Companion
+        # never talks to the add-on directly, so the ingress-auth
+        # mismatch never arises.
+        #
+        # Requires the SentiHome custom integration to be installed
+        # AND a config entry to exist. Without those views aren't
+        # registered and the URL 404s. (Setup is automatic — the
+        # integration ships with the add-on.)
         alert_id = alert.get("alert_id") or alert.get("event_id")
-        if alert_id and self.sentihome_ingress_base:
-            base = self.sentihome_ingress_base.rstrip("/")
-            data["url"] = f"{base}/alert/{alert_id}"
+        if alert_id:
+            data["url"] = f"/api/sentihome/alert/{alert_id}"
             data["clickAction"] = data["url"]  # iOS Companion field
-        elif alert_id:
-            # No known ingress base: pass a relative path. Companion
-            # may or may not resolve this against an HA host base;
-            # the in-app panel does. This is the fallback.
-            data["url"] = f"/alert/{alert_id}"
 
         # iOS Companion app supports up to 4 action buttons on a
         # notification (lock-screen long-press or notification expand).

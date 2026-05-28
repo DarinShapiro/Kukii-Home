@@ -65,23 +65,25 @@ def test_render_basic_alert():
     assert data["image"] == "/api/camera_proxy/camera.dahuapoolcam_sub"
     # Per-camera dedup tag is always present.
     assert data["tag"] == "sentihome_dahuapoolcam"
-    # Epic 10.8.1: with no ingress base configured, url falls back
-    # to a relative path the Companion may resolve in-app. Always set
-    # when we have an alert_id.
-    assert data["url"] == "/alert/abc123"
+    # Epic 10.8.3: notification URL targets the custom integration's
+    # /api/sentihome/* views (bearer-token auth works for Companion);
+    # the prior ingress-URL strategies all 401'd or 404'd.
+    assert data["url"] == "/api/sentihome/alert/abc123"
+    assert data["clickAction"] == "/api/sentihome/alert/abc123"
 
 
-def test_render_url_uses_ingress_base_when_set():
-    """Epic 10.8.1: with the ingress base wired in, the tap URL is the
-    absolute path through HA Ingress (where the SentiHome panel lives).
-    Both `url` and the iOS-specific `clickAction` get it."""
+def test_render_url_is_integration_view_path_regardless_of_ingress_base():
+    """Epic 10.8.3: the URL is always /api/sentihome/alert/<id>,
+    independent of sentihome_ingress_base. The ingress URL was the
+    failure mode in v0.3.15/17/20; we no longer use it for the tap
+    target."""
     n, _ = _make_notifier(
         ["notify.mobile_app_x"],
         sentihome_ingress_base="/api/hassio_ingress/TOKEN123/",
     )
     _, _, data = n._render(_alert())
-    assert data["url"] == "/api/hassio_ingress/TOKEN123/alert/abc123"
-    assert data["clickAction"] == "/api/hassio_ingress/TOKEN123/alert/abc123"
+    assert data["url"] == "/api/sentihome/alert/abc123"
+    assert "hassio_ingress" not in data["url"]
 
 
 def test_render_emits_ios_action_buttons():

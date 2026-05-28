@@ -25,6 +25,7 @@ from .const import (
     SERVICE_RUN_OPTIMIZATION,
 )
 from .coordinator import SentiHomeCoordinator
+from .views import register_alert_views
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +54,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+
+    # Epic 10.8.3: register the per-alert page views so the
+    # notification tap UX works through Companion app's bearer auth.
+    # Idempotency: re-registering on subsequent entry setups would
+    # raise; we only register on the first entry (a household will
+    # typically have one SentiHome integration entry).
+    if not hass.data[DOMAIN].get("_views_registered"):
+        register_alert_views(hass, client)
+        hass.data[DOMAIN]["_views_registered"] = True
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
