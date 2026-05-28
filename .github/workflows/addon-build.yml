@@ -52,7 +52,12 @@ jobs:
         with:
           dockerfile: ha-integration/addon/sentihome/Dockerfile
           failure-threshold: warning
-          ignore: DL3018
+          # DL3018: apk version pin (n/a — we use apt, kept from template).
+          # DL3006: `FROM ${BUILD_FROM}` can't be tagged — HA add-ons
+          #   require a per-arch base supplied via ARG by build.yaml.
+          # DL3008: apt version pinning against a rolling :bookworm base
+          #   is a maintenance trap; the base image is already pinned.
+          ignore: DL3006,DL3008,DL3018
 
   build:
     name: Build add-on image (amd64)
