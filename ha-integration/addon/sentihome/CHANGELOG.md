@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.25 — 2026-05-28
+
+**Fix: stop auto-restarting HA Core (Epic 10.8.4 follow-up).**
+
+v0.3.24's cont-init script asked Supervisor to restart Home
+Assistant Core immediately after syncing the integration files.
+That was wrong — installing a single add-on should not bring down
+your whole smart home:
+
+* Every other integration drops and reconnects
+* Z-Wave / Zigbee / Matter networks re-handshake (30-60s recovery)
+* Automations pause; in-flight scripts may abort
+* Timers, occupancy state, notification ring all reset
+
+Now: the script posts a **persistent notification** asking you to
+restart at your convenience (Settings → System → Power). The
+notification has a stable id so subsequent installs replace rather
+than stack it. When you do restart, HA clears all persistent
+notifications, so the message naturally goes away at the right
+moment.
+
+What you'll see after this update:
+1. Bell icon shows: "SentiHome: restart needed"
+2. You click Restart Home Assistant when you're ready (after
+   dinner, in the morning, whenever)
+3. Notifications work again post-restart
+
+Caveat: until you restart, tap-to-open-alert and FP feedback
+won't work — the alert page lives in the integration which needs
+HA to scan the new code. Test notifications + alert recording
+itself are unaffected.
+
+---
+
 ## 0.3.24 — 2026-05-28
 
 **Auto-install integration + zeroconf discovery (Epic 10.8.4).**

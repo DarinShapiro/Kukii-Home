@@ -59,22 +59,34 @@ cp -a "$SRC"/. "$DST/"
 echo "$NEW_HASH" > "$STAMP"
 echo "[integration-install] wrote integration files; new hash $NEW_HASH"
 
-# Ask Supervisor to restart HA Core so the new integration code
-# loads. Use --fail so curl exits non-zero on HTTP errors and we can
-# log a useful message.
+# Surface a PERSISTENT NOTIFICATION asking the user to restart HA
+# Core when they're ready. We deliberately do NOT auto-restart —
+# that would interrupt every other integration, drop Z-Wave / Zigbee
+# meshes, pause automations, and surprise the user (an add-on update
+# should not bring down the whole smart home). The user restarts on
+# their schedule via Settings → System → Power.
+#
+# The notification has a stable notification_id so re-running this
+# script on subsequent boots replaces the existing notification
+# rather than stacking duplicates. When the user restarts, HA clears
+# all persistent_notifications, so the message naturally goes away
+# at exactly the right moment.
+
 if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
-    echo "[integration-install] requesting HA Core restart to load new integration..."
+    NOTIFY_MSG="SentiHome companion integration was updated. Restart Home Assistant to load it: Settings → System → Power → Restart Home Assistant. Tap-to-open-alert and FP feedback won't work until you restart."
     if curl --silent --show-error --fail \
             -X POST \
             -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
-            http://supervisor/homeassistant/restart > /dev/null 2>&1; then
-        echo "[integration-install] HA Core restart requested OK"
+            -H "Content-Type: application/json" \
+            -d "{\"message\":\"$NOTIFY_MSG\",\"title\":\"SentiHome: restart needed\",\"notification_id\":\"sentihome_restart_required\"}" \
+            http://supervisor/core/api/services/persistent_notification/create > /dev/null 2>&1; then
+        echo "[integration-install] persistent notification posted — user will restart at their convenience"
     else
-        echo "[integration-install] WARN: could not auto-restart HA Core."
-        echo "[integration-install] Please restart manually:"
+        echo "[integration-install] WARN: could not post persistent notification."
+        echo "[integration-install] Please restart Home Assistant manually:"
         echo "[integration-install]   Settings -> System -> Power -> Restart Home Assistant"
     fi
 else
-    echo "[integration-install] WARN: no SUPERVISOR_TOKEN — skipping HA restart."
+    echo "[integration-install] WARN: no SUPERVISOR_TOKEN — skipping persistent notification."
     echo "[integration-install] Please restart Home Assistant manually."
 fi
