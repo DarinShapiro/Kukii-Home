@@ -15,6 +15,8 @@ dependencies = [
     # (declared in preprocessor's deps), so we only need to depend on the
     # preprocessor package for the motion module.
     "sentihome-preprocessor",
+    # Epic 10.1.6.2 — publish CameraConfigEvents to the preprocessor.
+    "nats-py>=2.9.0",
 ]
 
 [project.scripts]
