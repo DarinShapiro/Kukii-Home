@@ -44,6 +44,7 @@ class RTSPFrameBuffer:
         node_id: str,
         external_base_url: str,
         detector: YOLODetector | None = None,
+        enrich_motion_only: bool = True,
     ) -> None:
         self._buffer = rolling_buffer
         self._cameras = set(configured_cameras)
@@ -57,6 +58,13 @@ class RTSPFrameBuffer:
         it and populates ``FrameWindow.detections``. When None
         (skeleton / unit tests / Phase 10.1.5 era), detections stay
         empty — the wire shape is the same."""
+        self._enrich_motion_only = enrich_motion_only
+        """When True (default for RTSP backend), only frames marked
+        by the upstream MOG2 motion detector (``BufferedFrame.has_motion``)
+        are sent to YOLO. Empty/quiet frames return frame references
+        but no detections — saves ~85% of inference work in steady
+        state. Set False for forensic / replay use where every frame
+        in the window should be analyzed regardless of motion."""
 
     async def serve_frame(self, camera_id: str, ts: float) -> bytes | None:
         """Read a single JPEG-encoded keyframe out of the rolling
@@ -110,12 +118,22 @@ class RTSPFrameBuffer:
 
         detections: tuple = ()
         if enrich and self._detector is not None and buffered:
-            # Batch every frame in the window through YOLO. Heavy
-            # operation — runs in a thread under the hood so we
-            # don't stall the event loop.
-            detections = await self._detector.detect_batch(
-                [(f.jpeg_bytes, f.ts) for f in buffered]
+            # Pick which frames actually go through YOLO. With
+            # enrich_motion_only=True (default), skip frames the MOG2
+            # detector flagged as quiet — typically ~85% of frames in
+            # a residential setup. The frames still appear in the
+            # response's FrameRef list; they just don't carry
+            # detections. Callers needing forensic / replay analysis
+            # override via enrich_motion_only=False at construction.
+            candidates = (
+                [f for f in buffered if f.has_motion]
+                if self._enrich_motion_only
+                else list(buffered)
             )
+            if candidates:
+                detections = await self._detector.detect_batch(
+                    [(f.jpeg_bytes, f.ts) for f in candidates]
+                )
 
         # Actor matches (face / pet / plate) land in Phase 10.4+ —
         # they branch on DetectionTag.kind to dispatch to vendor

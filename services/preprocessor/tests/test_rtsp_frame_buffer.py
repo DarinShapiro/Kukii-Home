@@ -188,13 +188,135 @@ class _StubDetector:
         return tuple(out)
 
 
+def _motion_frame(ts: float, *, size: int = 100) -> BufferedFrame:
+    """Buffered frame flagged as containing motion. Used by detector
+    tests since the default ``enrich_motion_only=True`` skips quiet
+    frames."""
+    return BufferedFrame(
+        ts=ts,
+        jpeg_bytes=b"x" * size,
+        width=1280,
+        height=720,
+        has_motion=True,
+    )
+
+
 @pytest.mark.asyncio
 async def test_get_window_populates_detections_when_detector_provided(
     rolling: RollingBuffer,
 ):
     """With a detector wired in, get_window's detections tuple is
-    populated from the buffered frames."""
+    populated from the buffered frames. All test frames have
+    has_motion=True so they pass the motion-gate filter."""
     detector = _StubDetector(tags_per_frame=2)
+    buf = RTSPFrameBuffer(
+        rolling_buffer=rolling,
+        configured_cameras=["cam_a"],
+        node_id="t",
+        external_base_url="http://example:8090",
+        detector=detector,
+    )
+    for ts in (100.0, 101.0, 102.0):
+        await rolling.write("cam_a", _motion_frame(ts))
+
+    fw = await buf.get_window(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=1000.0,
+        enrich=True,
+        cache=ActorCache(),
+    )
+
+    # 3 frames, 2 tags each → 6 detections.
+    assert len(fw.detections) == 6
+    # Every detection ts must match one of the buffered frames.
+    assert {d.frame_ts for d in fw.detections} == {100.0, 101.0, 102.0}
+    # Detector was called exactly once with the full batch.
+    assert len(detector.batches_received) == 1
+    assert len(detector.batches_received[0]) == 3
+
+
+# ─── Phase 10.3.2: motion gating filter ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_window_motion_gating_skips_quiet_frames(
+    rolling: RollingBuffer,
+):
+    """Default enrich_motion_only=True: frames without has_motion
+    are skipped by the detector — saves YOLO work on steady scenes."""
+    detector = _StubDetector()
+    buf = RTSPFrameBuffer(
+        rolling_buffer=rolling,
+        configured_cameras=["cam_a"],
+        node_id="t",
+        external_base_url="http://example:8090",
+        detector=detector,
+    )
+    # 3 quiet frames + 2 motion frames.
+    await rolling.write("cam_a", _f(100.0))                # quiet
+    await rolling.write("cam_a", _motion_frame(101.0))      # motion
+    await rolling.write("cam_a", _f(102.0))                # quiet
+    await rolling.write("cam_a", _motion_frame(103.0))      # motion
+    await rolling.write("cam_a", _f(104.0))                # quiet
+
+    fw = await buf.get_window(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=1000.0,
+        enrich=True,
+        cache=ActorCache(),
+    )
+
+    # All 5 frames are in the FrameRef list.
+    assert len(fw.frames) == 5
+    # But only the 2 motion frames went to YOLO.
+    assert len(detector.batches_received) == 1
+    sent_ts = {ts for (_jpeg, ts) in detector.batches_received[0]}
+    assert sent_ts == {101.0, 103.0}
+    assert len(fw.detections) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_window_motion_gating_disabled_sends_all_frames(
+    rolling: RollingBuffer,
+):
+    """enrich_motion_only=False overrides the gate — every frame in
+    the window goes to YOLO. For forensic / replay use."""
+    detector = _StubDetector()
+    buf = RTSPFrameBuffer(
+        rolling_buffer=rolling,
+        configured_cameras=["cam_a"],
+        node_id="t",
+        external_base_url="http://example:8090",
+        detector=detector,
+        enrich_motion_only=False,
+    )
+    # All quiet frames.
+    for ts in (100.0, 101.0, 102.0):
+        await rolling.write("cam_a", _f(ts))
+
+    fw = await buf.get_window(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=1000.0,
+        enrich=True,
+        cache=ActorCache(),
+    )
+    assert len(fw.frames) == 3
+    # Motion gate disabled → all frames sent to detector.
+    assert len(detector.batches_received) == 1
+    assert len(detector.batches_received[0]) == 3
+    assert len(fw.detections) == 3
+
+
+@pytest.mark.asyncio
+async def test_get_window_motion_gating_all_quiet_skips_detector_entirely(
+    rolling: RollingBuffer,
+):
+    """When every buffered frame is quiet, detector isn't invoked at
+    all (saves the batch-overhead cost too, not just inference)."""
+    detector = _StubDetector()
     buf = RTSPFrameBuffer(
         rolling_buffer=rolling,
         configured_cameras=["cam_a"],
@@ -212,14 +334,9 @@ async def test_get_window_populates_detections_when_detector_provided(
         enrich=True,
         cache=ActorCache(),
     )
-
-    # 3 frames, 2 tags each → 6 detections.
-    assert len(fw.detections) == 6
-    # Every detection ts must match one of the buffered frames.
-    assert {d.frame_ts for d in fw.detections} == {100.0, 101.0, 102.0}
-    # Detector was called exactly once with the full batch.
-    assert len(detector.batches_received) == 1
-    assert len(detector.batches_received[0]) == 3
+    assert len(fw.frames) == 3
+    assert fw.detections == ()
+    assert detector.batches_received == []  # detector never called
 
 
 @pytest.mark.asyncio

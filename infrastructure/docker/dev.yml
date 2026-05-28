@@ -217,11 +217,17 @@ services:
       # from captured frames. Off by default — opt in once cameras are
       # streaming and ultralytics is installed in the runtime.
       - SENTIHOME_PREPROCESSOR_DETECTION=false
+      - SENTIHOME_PREPROCESSOR_DETECTION_BACKEND=pytorch
       - SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS=yolo11x.pt
       - SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN=0.5
       - SENTIHOME_PREPROCESSOR_DETECTION_IMG_SIZE=640
-      # SENTIHOME_PREPROCESSOR_DETECTION_DEVICE=cuda:0   # set on the
-      # inference box; auto-picks otherwise.
+      # SENTIHOME_PREPROCESSOR_DETECTION_DEVICE=cuda:0   # 4090 box
+      # On Intel hardware: BACKEND=openvino, WEIGHTS=path/to/yolo11x_int8_openvino_model,
+      # DEVICE=GPU (or CPU / AUTO). Requires running scripts/dev/
+      # export_yolo_openvino.py once to produce the IR directory.
+      # NOTE: Docker on Windows can't pass the Intel iGPU into WSL2 —
+      # for iGPU acceleration the preprocessor must run on bare-metal
+      # Linux or native Windows (not in Docker Desktop).
       # Per-camera RTSP URLs (uncomment + fill when flipping to rtsp).
       # H.264 sub-stream URLs work best — cheap to decode, sufficient
       # for motion + general detection. Main-stream pulls are

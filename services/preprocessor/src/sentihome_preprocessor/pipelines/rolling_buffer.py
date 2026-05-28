@@ -44,6 +44,13 @@ class BufferedFrame:
     width: int
     height: int
 
+    has_motion: bool = False
+    """Set by the capture task when the upstream MOG2 motion detector
+    decides this frame contains real motion. ``False`` for frames
+    captured when nothing moved (steady-state quiet scene). The
+    RTSPFrameBuffer can use this to skip YOLO inference on quiet
+    frames — typically ~85% of frames in a residential camera feed."""
+
 
 class RollingBuffer:
     """Per-camera time-windowed ring buffer."""

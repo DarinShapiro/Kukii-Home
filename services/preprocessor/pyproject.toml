@@ -23,6 +23,11 @@ dependencies = [
     # sees a GPU. CPU-only is acceptable for skeleton validation
     # (~1-2s per 720p frame, fine for unit tests).
     "ultralytics>=8.3.0",
+    # Epic 10.3.1 — Intel-native inference. ~3-4x speedup over
+    # PyTorch CPU on Intel CPUs/iGPUs. Used when the YOLODetector
+    # is constructed with backend="openvino"; pytorch backend
+    # never imports openvino so this is effectively optional.
+    "openvino>=2024.4.0",
 ]
 
 [dependency-groups]

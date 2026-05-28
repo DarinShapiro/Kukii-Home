@@ -97,6 +97,7 @@ def _build_backend(
 
             detector = YOLODetector(
                 DetectionConfig(
+                    backend=config.detection_backend,  # type: ignore[arg-type]
                     weights=config.detection_weights,
                     confidence_min=config.detection_confidence_min,
                     image_size=config.detection_image_size,

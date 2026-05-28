@@ -105,6 +105,13 @@ class PreprocessorConfig:
     real frames. Defaults to False so adding ultralytics as a hard
     dep at runtime is opt-in — the service can run without it."""
 
+    detection_backend: str = "pytorch"
+    """One of ``pytorch`` or ``openvino``. OpenVINO requires a
+    pre-exported model directory (see
+    ``scripts/dev/export_yolo_openvino.py``) and the ``openvino``
+    package installed at runtime. Auto-uses the configured
+    ``detection_device`` to pick CPU vs GPU (Intel iGPU)."""
+
     detection_weights: str = "yolo11x.pt"
     """Ultralytics model name or path to .pt file. ``yolo11x`` is
     the production target: ~109 MB, much higher mAP than the nano
@@ -163,11 +170,14 @@ def load_from_env() -> PreprocessorConfig:
             "SENTIHOME_PREPROCESSOR_DETECTION", "false"
         ).lower()
         in ("1", "true", "yes", "on"),
+        detection_backend=os.environ.get(
+            "SENTIHOME_PREPROCESSOR_DETECTION_BACKEND", "pytorch"
+        ),
         detection_weights=os.environ.get(
-            "SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS", "yolo11n.pt"
+            "SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS", "yolo11x.pt"
         ),
         detection_confidence_min=_env_float(
-            "SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN", 0.35
+            "SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN", 0.5
         ),
         detection_image_size=_env_int(
             "SENTIHOME_PREPROCESSOR_DETECTION_IMG_SIZE", 640

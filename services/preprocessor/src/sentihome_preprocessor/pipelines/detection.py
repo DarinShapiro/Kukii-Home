@@ -38,7 +38,7 @@ import asyncio
 import io
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import cv2
 import numpy as np
@@ -48,6 +48,20 @@ if TYPE_CHECKING:
     from ultralytics import YOLO
 
 logger = logging.getLogger(__name__)
+
+
+# Backends the detector can dispatch through. Ranked by typical
+# speed on the matching hardware:
+#
+#   pytorch  - default; works everywhere ultralytics works.
+#              Slow on Intel CPUs (~1-2s/frame for yolo11x).
+#   openvino - Intel-native runtime. 2-3x faster than pytorch on
+#              Intel CPUs; 5-10x faster on Intel iGPUs (Iris Plus,
+#              Arc, etc.). Requires a pre-exported model directory
+#              (see scripts/dev/export_yolo_openvino.py).
+#   tensorrt - NVIDIA-only, reserved for the inference box. Not
+#              wired here yet; ultralytics supports the export.
+InferenceBackend = Literal["pytorch", "openvino"]
 
 
 # Default model. yolo11x is the production target (~109 MB weights,
@@ -94,7 +108,9 @@ class DetectionConfig:
 
     weights: str = _DEFAULT_WEIGHTS
     """Either a model name (e.g. ``yolo11n.pt``, downloaded on first
-    use to the ultralytics cache) or a path to a .pt file on disk."""
+    use to the ultralytics cache), a path to a .pt file on disk, OR a
+    path to an OpenVINO IR directory (e.g. ``yolo11x_openvino_model/``)
+    when ``backend == "openvino"``."""
 
     confidence_min: float = _DEFAULT_CONFIDENCE_MIN
     iou_min: float = 0.45
@@ -104,8 +120,15 @@ class DetectionConfig:
     """Square input size YOLO resizes to. 640 is COCO standard."""
 
     device: str | None = None
-    """``"cuda:0"``, ``"cpu"``, etc. ``None`` lets ultralytics
-    auto-pick — preferring CUDA when available."""
+    """For pytorch backend: ``"cuda:0"`` / ``"cpu"`` / ``None`` (auto).
+    For openvino backend: ``"CPU"`` / ``"GPU"`` / ``"GPU.0"`` /
+    ``"AUTO"`` (OpenVINO device names). ``None`` means auto-pick."""
+
+    backend: InferenceBackend = "pytorch"
+    """Which inference runtime to use. See :data:`InferenceBackend`
+    for the trade-offs. Default is pytorch because it works
+    everywhere; switch to openvino on Intel hardware after exporting
+    weights (see ``scripts/dev/export_yolo_openvino.py``)."""
 
 
 class YOLODetector:
@@ -174,7 +197,30 @@ class YOLODetector:
         # actually invoke detection (synthetic-mode tests).
         from ultralytics import YOLO  # type: ignore[import-not-found]
 
-        logger.info("yolo.loading weights=%s", self._config.weights)
+        # Validate the backend's runtime is importable before loading;
+        # produces a clearer error than the failure that'd otherwise
+        # surface from ultralytics' internal path.
+        if self._config.backend == "openvino":
+            try:
+                import openvino  # noqa: F401  # type: ignore[import-not-found]
+            except ImportError as e:
+                raise RuntimeError(
+                    "Detection backend='openvino' but the 'openvino' "
+                    "package is not installed. Install with "
+                    "`pip install openvino` and export weights via "
+                    "scripts/dev/export_yolo_openvino.py."
+                ) from e
+
+        logger.info(
+            "yolo.loading weights=%s backend=%s",
+            self._config.weights,
+            self._config.backend,
+        )
+        # Ultralytics' YOLO() constructor auto-detects the format from
+        # the path suffix: ``.pt`` -> PyTorch, ``*_openvino_model/``
+        # -> OpenVINO. We pass the same path either way; the backend
+        # config field controls how WE describe what we're doing in
+        # logs + how we route the device string at predict time.
         self._model = YOLO(self._config.weights)
         logger.info("yolo.loaded")
         return self._model

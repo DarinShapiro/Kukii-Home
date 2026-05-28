@@ -28,6 +28,7 @@ import cv2
 import numpy as np
 import structlog
 
+from sentihome_preprocessor.motion import MOG2MotionDetector, MotionConfig
 from sentihome_preprocessor.pipelines.rolling_buffer import (
     BufferedFrame,
     RollingBuffer,
@@ -80,6 +81,7 @@ class CameraCaptureTask:
         rtsp_url: str,
         buffer: RollingBuffer,
         target_interval_seconds: float = 1.0,
+        motion_gating_enabled: bool = True,
     ) -> None:
         if not rtsp_url:
             raise ValueError(f"empty RTSP url for camera {camera_id!r}")
@@ -87,6 +89,12 @@ class CameraCaptureTask:
         self._rtsp_url = rtsp_url
         self._buffer = buffer
         self._target_interval = target_interval_seconds
+        # Per-camera MOG2 detector (NOT thread-safe across cameras,
+        # but each capture task owns its own). Constructed lazily on
+        # first frame so synthetic-mode tests + cameras that never
+        # connect don't pay the OpenCV init cost.
+        self._motion_gating_enabled = motion_gating_enabled
+        self._motion: MOG2MotionDetector | None = None
         self.state = CameraCaptureState(
             camera_id=camera_id,
             rtsp_url_sanitized=_sanitize_url(rtsp_url),
@@ -179,6 +187,20 @@ class CameraCaptureTask:
                     last_capture_ts = now
 
                     img = frame.to_ndarray(format="bgr24")
+
+                    # Motion gating BEFORE JPEG-encode + buffer write.
+                    # MOG2 needs a few frames to build its background
+                    # model — early frames return has_motion=False
+                    # regardless. That's fine: the buffer still gets
+                    # populated, just marked motion=False so YOLO
+                    # skips them (the cold-start window is brief).
+                    has_motion = False
+                    if self._motion_gating_enabled:
+                        if self._motion is None:
+                            self._motion = MOG2MotionDetector(MotionConfig())
+                        decision = self._motion.process(img, timestamp=now)
+                        has_motion = decision.has_motion
+
                     ok, jpeg = cv2.imencode(
                         ".jpg",
                         img,
@@ -193,6 +215,7 @@ class CameraCaptureTask:
                         jpeg_bytes=jpeg.tobytes(),
                         width=int(width),
                         height=int(height),
+                        has_motion=has_motion,
                     )
                     # Hand off to the event loop's RollingBuffer.
                     asyncio.run_coroutine_threadsafe(
