@@ -314,6 +314,56 @@ def test_frames_route_serves_bytes_from_rtsp_backend():
     assert r.content == payload
 
 
+def test_annotated_frames_route_synthetic_backend_returns_404(client: TestClient):
+    """Synthetic backend doesn't render annotations."""
+    r = client.get("/frames/front_porch/123.456/annotated.jpg")
+    assert r.status_code == 404
+
+
+def test_annotated_frames_route_serves_bytes_from_rtsp_backend():
+    """RTSP backend with annotation cache: the route returns the
+    cached annotated JPEG."""
+    import asyncio as _asyncio
+
+    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+    from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
+
+    ann_cache = AnnotationCache(horizon_seconds=60.0)
+    payload = b"\xff\xd8\xff\xe0annotated-jpeg"
+
+    async def _seed() -> None:
+        await ann_cache.put("front_porch", 88.001, payload)
+
+    _asyncio.run(_seed())
+
+    from sentihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
+
+    config = PreprocessorConfig(
+        node_id="rtsp-test",
+        cameras=["front_porch"],
+        backend="rtsp",
+    )
+    rtsp_buffer = RTSPFrameBuffer(
+        rolling_buffer=RollingBuffer(horizon_seconds=60.0),
+        configured_cameras=config.cameras,
+        node_id=config.node_id,
+        external_base_url="http://example:8090",
+        annotation_cache=ann_cache,
+    )
+    state = AppState(
+        config=config,
+        cache=ActorCache(),
+        frame_buffer=rtsp_buffer,
+        started_ts=time.time(),
+    )
+    app_client = TestClient(create_app(state))
+
+    r = app_client.get("/frames/front_porch/88.001/annotated.jpg")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/jpeg"
+    assert r.content == payload
+
+
 def test_frames_route_unknown_camera_returns_404():
     """RTSP backend: known route shape, unknown camera → 404."""
     from sentihome_preprocessor.pipelines.rolling_buffer import RollingBuffer

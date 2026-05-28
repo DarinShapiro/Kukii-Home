@@ -40,7 +40,10 @@ from sentihome_preprocessor.camera_config_subscriber import (
 from sentihome_preprocessor.config import PreprocessorConfig, load_from_env
 from sentihome_preprocessor.nats_subscriber import ActorEnrollmentSubscriber
 from sentihome_preprocessor.pipelines import FrameBufferBackend
-from sentihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
+from sentihome_preprocessor.pipelines.rolling_buffer import (
+    AnnotationCache,
+    RollingBuffer,
+)
 from sentihome_preprocessor.pipelines.rtsp_capture import RTSPCaptureSupervisor
 from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
 from sentihome_preprocessor.pipelines.synthetic_frames import SyntheticFrameBuffer
@@ -83,6 +86,9 @@ def _build_backend(
             horizon_seconds=config.rtsp_buffer_horizon_seconds,
             max_entries_per_camera=config.rtsp_buffer_max_entries_per_camera,
         )
+        annotation_cache = AnnotationCache(
+            horizon_seconds=config.rtsp_buffer_horizon_seconds,
+        )
         supervisor = RTSPCaptureSupervisor(buffer=rolling)
 
         detector = None
@@ -111,6 +117,7 @@ def _build_backend(
             node_id=config.node_id,
             external_base_url=config.external_base_url,
             detector=detector,
+            annotation_cache=annotation_cache,
         )
         return frame_buffer, supervisor, SupervisorApplier(supervisor)
 

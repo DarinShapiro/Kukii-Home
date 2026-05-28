@@ -99,12 +99,68 @@ class FrameRef(_Strict):
 
     ts: float
     uri: str
+    annotated_uri: str | None = None
+    """Optional URI to a marked-up version of this frame with bounding
+    boxes drawn around RECOGNIZED entities only (no boxes for unknown
+    persons, unknown vehicles, etc.). Set when there's at least one
+    :class:`IdentifiedEntity` for this frame; ``None`` when the frame
+    is wholly anonymous. Consumer fetches this URI to get the
+    VLM-ready annotated JPEG."""
+
     width: int | None = None
     height: int | None = None
     quality_score: float | None = Field(default=None, ge=0.0, le=1.0)
     """Optional sharpness / lighting / occlusion composite from the
     preprocessor's quality assessment. None when the preprocessor
     didn't run the assessment (enrich=False)."""
+
+
+class IdentifiedEntity(_Strict):
+    """Pre-correlated identity claim for one entity in one frame.
+
+    The structure the VLM consumes for grounding: a bounding box, a
+    confirmed identity (with friendly name), and the confidence of
+    both the detection and the identification. Only emitted for
+    entities the preprocessor can name — unknown person / unknown
+    dog / unknown vehicle do NOT produce IdentifiedEntities, because
+    a labeled "unknown" box adds noise without adding signal (the
+    VLM already sees the raw pixels).
+
+    Produced by :class:`RTSPFrameBuffer.get_window` by joining
+    :class:`DetectionTag` and :class:`ActorMatch` on shared
+    ``track_id``, then resolving ``actor_id`` to a friendly name
+    via the preprocessor's :class:`ActorCache`.
+    """
+
+    frame_ts: float
+
+    kind: Literal["person", "dog", "cat", "vehicle"]
+    """The detection class. Constrained because the markup pipeline
+    only cares about classes that have a corresponding identity
+    pipeline."""
+
+    actor_id: str
+    actor_name: str
+    """Friendly display name, e.g. ``"Alice"`` / ``"Rex"`` /
+    ``"Bob's truck"``. Resolved from the ActorCache at correlation
+    time."""
+
+    bbox: tuple[float, float, float, float]
+    """``(x1, y1, x2, y2)`` in normalized [0, 1] image coords —
+    matches :attr:`DetectionTag.bbox`."""
+
+    detection_confidence: float = Field(ge=0.0, le=1.0)
+    """How confident YOLO was that something is here at all."""
+
+    identity_confidence: float = Field(ge=0.0, le=1.0)
+    """How confident the identity pipeline was that this is the
+    specific actor. The markup pipeline's visual style branches
+    on this: solid green box at >= 0.85, dashed yellow 0.6-0.85,
+    not annotated < 0.6."""
+
+    identity_method: Literal["face_arcface", "pet_dinov2", "plate_lpr"]
+
+    track_id: str | None = None
 
 
 # ─── Primary RPC payload: FrameWindow ────────────────────────────────
@@ -146,6 +202,20 @@ class FrameWindow(_Strict):
     actor_matches: tuple[ActorMatch, ...] = ()
     """Aggregated identity matches. Empty when ``enrich=False`` or
     when no KnownActor was confidently matched."""
+
+    identified_entities: tuple[IdentifiedEntity, ...] = ()
+    """Pre-correlated identity claims suitable for VLM grounding +
+    visual markup. The preprocessor builds these by joining
+    ``detections`` and ``actor_matches`` on ``track_id`` and
+    resolving the actor's friendly name. Consumers (VLM-router,
+    UI) read this in preference to walking ``detections`` +
+    ``actor_matches`` separately.
+
+    Empty when no entity in the window was recognized — including
+    the common case where YOLO sees a person/vehicle/pet but the
+    identity pipeline didn't match it to any known actor. That's
+    the correct quiet behavior; the VLM still sees the raw frame
+    and can reason about the unknown entity from pixels alone."""
 
     enrichment_mode: Literal["frames_only", "enriched"] = "enriched"
 

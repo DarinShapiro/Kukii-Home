@@ -28,6 +28,7 @@ from sentihome_shared.preprocessor.contracts import (
     DetectionTag,
     FrameRef,
     FrameWindow,
+    IdentifiedEntity,
     KnobAdjustment,
     PreprocessorStatus,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "DetectionTag",
     "FrameRef",
     "FrameWindow",
+    "IdentifiedEntity",
     "KnobAdjustment",
     "PreprocessorStatus",
 ]

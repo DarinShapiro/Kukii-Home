@@ -144,3 +144,57 @@ class RollingBuffer:
                 if f.ts == ts:
                     return f
         return None
+
+
+# ─── Annotation cache (per-frame marked-up JPEGs) ───────────────────
+
+
+class AnnotationCache:
+    """Per-frame cache of annotated JPEG bytes, keyed by
+    ``(camera_id, ts)``.
+
+    The annotation pass during get_window enrichment writes into
+    here; the ``/frames/{cam}/{ts}/annotated.jpg`` endpoint reads.
+    Eviction tracks the same horizon as the rolling buffer so stale
+    annotations don't leak — a frame that's aged out of the rolling
+    buffer is gone here too.
+
+    NOT a subclass of RollingBuffer because the storage shape is
+    different (one entry per ``(camera, ts)`` vs. per-camera deques)
+    and the typical hit rate is much lower (most frames have no
+    identified entities and so no annotation is written).
+    """
+
+    def __init__(self, *, horizon_seconds: float = 300.0) -> None:
+        if horizon_seconds <= 0:
+            raise ValueError("horizon_seconds must be positive")
+        self._horizon = horizon_seconds
+        self._entries: dict[tuple[str, float], tuple[float, bytes]] = {}
+        # value: (insert_wallclock_ts, jpeg_bytes). We evict on
+        # insert_wallclock_ts age, not frame ts, so annotations
+        # produced from old replayed frames still age out reasonably.
+        self._lock = asyncio.Lock()
+
+    async def put(self, camera_id: str, ts: float, jpeg_bytes: bytes) -> None:
+        import time
+
+        now = time.time()
+        async with self._lock:
+            self._entries[(camera_id, ts)] = (now, jpeg_bytes)
+            cutoff = now - self._horizon
+            stale = [k for k, (insert_ts, _) in self._entries.items() if insert_ts < cutoff]
+            for k in stale:
+                del self._entries[k]
+
+    async def get(self, camera_id: str, ts: float) -> bytes | None:
+        async with self._lock:
+            entry = self._entries.get((camera_id, ts))
+            return entry[1] if entry is not None else None
+
+    async def size(self) -> int:
+        async with self._lock:
+            return len(self._entries)
+
+    async def total_bytes(self) -> int:
+        async with self._lock:
+            return sum(len(payload) for _, payload in self._entries.values())

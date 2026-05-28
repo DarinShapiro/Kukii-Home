@@ -156,3 +156,52 @@ def test_rejects_invalid_horizon():
 def test_rejects_invalid_max_entries():
     with pytest.raises(ValueError, match="max_entries"):
         RollingBuffer(horizon_seconds=60.0, max_entries_per_camera=0)
+
+
+# ─── AnnotationCache ────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_annotation_cache_put_and_get():
+    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+
+    c = AnnotationCache(horizon_seconds=60.0)
+    await c.put("cam_a", 100.0, b"jpeg-bytes-here")
+    got = await c.get("cam_a", 100.0)
+    assert got == b"jpeg-bytes-here"
+
+
+@pytest.mark.asyncio
+async def test_annotation_cache_get_missing_returns_none():
+    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+
+    c = AnnotationCache(horizon_seconds=60.0)
+    assert await c.get("ghost", 999.0) is None
+
+
+@pytest.mark.asyncio
+async def test_annotation_cache_overwrite_replaces_value():
+    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+
+    c = AnnotationCache(horizon_seconds=60.0)
+    await c.put("cam_a", 100.0, b"v1")
+    await c.put("cam_a", 100.0, b"v2")
+    assert await c.get("cam_a", 100.0) == b"v2"
+
+
+@pytest.mark.asyncio
+async def test_annotation_cache_size_and_total_bytes():
+    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+
+    c = AnnotationCache(horizon_seconds=60.0)
+    await c.put("cam_a", 100.0, b"x" * 100)
+    await c.put("cam_b", 200.0, b"y" * 250)
+    assert await c.size() == 2
+    assert await c.total_bytes() == 350
+
+
+def test_annotation_cache_rejects_invalid_horizon():
+    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+
+    with pytest.raises(ValueError, match="horizon_seconds"):
+        AnnotationCache(horizon_seconds=0)

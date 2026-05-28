@@ -121,6 +121,34 @@ def create_app(state: AppState) -> FastAPI:
             raise HTTPException(status_code=404, detail="frame not available")
         return Response(content=data, media_type="image/jpeg")
 
+    @app.get("/frames/{camera_id}/{ts}/annotated.jpg")
+    async def get_annotated_frame(camera_id: str, ts: float) -> Response:
+        """Serve the markup-annotated version of a frame.
+
+        Produced during /frame_window enrichment when the frame
+        contained at least one identified entity above the markup
+        threshold. The annotation only draws boxes around RECOGNIZED
+        entities (face / pet / plate match >= 0.6) — anonymous
+        detections never get annotated, since labeled "unknown"
+        boxes pollute VLM grounding without adding signal.
+
+        Returns 404 when no annotation exists for this frame —
+        either because the frame was wholly anonymous, was older
+        than the annotation cache horizon, or the backend doesn't
+        run annotation at all (synthetic mode).
+
+        The URI for a frame that DOES have an annotation is emitted
+        as :attr:`FrameRef.annotated_uri` in the ``FrameWindow``
+        response. Callers should check that field first rather than
+        blindly probing this endpoint.
+        """
+        data = await state.frame_buffer.serve_annotated_frame(camera_id, ts)
+        if data is None:
+            raise HTTPException(
+                status_code=404, detail="annotated frame not available"
+            )
+        return Response(content=data, media_type="image/jpeg")
+
     @app.get("/frame_window", response_model=FrameWindow)
     async def frame_window(
         camera_id: Annotated[str, Query(min_length=1)],

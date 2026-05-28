@@ -77,6 +77,15 @@ class SyntheticFrameBuffer:
         :class:`RTSPFrameBuffer`."""
         return None
 
+    async def serve_annotated_frame(
+        self,
+        camera_id: str,  # noqa: ARG002 — Protocol arg unused in synthetic mode
+        ts: float,  # noqa: ARG002 — Protocol arg unused in synthetic mode
+    ) -> bytes | None:
+        """Synthetic backend doesn't run the annotation pipeline.
+        Always returns ``None``; the /annotated.jpg route responds 404."""
+        return None
+
     async def get_window(
         self,
         *,

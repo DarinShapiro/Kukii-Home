@@ -289,6 +289,105 @@ def test_camera_config_event_rejects_unknown_protocol():
         )
 
 
+# ─── IdentifiedEntity ───────────────────────────────────────────────
+
+
+def test_identified_entity_roundtrips():
+    from sentihome_shared.preprocessor import IdentifiedEntity
+
+    ent = IdentifiedEntity(
+        frame_ts=1234.5,
+        kind="person",
+        actor_id="actor_alice",
+        actor_name="Alice",
+        bbox=(0.1, 0.2, 0.4, 0.8),
+        detection_confidence=0.95,
+        identity_confidence=0.92,
+        identity_method="face_arcface",
+        track_id="t-7",
+    )
+    rebuilt = IdentifiedEntity.model_validate_json(ent.model_dump_json())
+    assert rebuilt == ent
+
+
+def test_identified_entity_kind_constrained_to_4_classes():
+    """package / animal / etc. don't have identity pipelines yet —
+    contract refuses them so callers can't accidentally claim
+    identities for classes we don't recognize."""
+    from pydantic import ValidationError
+    from sentihome_shared.preprocessor import IdentifiedEntity
+
+    with pytest.raises(ValidationError):
+        IdentifiedEntity(
+            frame_ts=0.0,
+            kind="package",  # type: ignore[arg-type]
+            actor_id="x",
+            actor_name="x",
+            bbox=(0, 0, 1, 1),
+            detection_confidence=0.5,
+            identity_confidence=0.7,
+            identity_method="face_arcface",
+        )
+
+
+def test_identified_entity_clamps_confidences():
+    from pydantic import ValidationError
+    from sentihome_shared.preprocessor import IdentifiedEntity
+
+    with pytest.raises(ValidationError):
+        IdentifiedEntity(
+            frame_ts=0.0,
+            kind="person",
+            actor_id="x",
+            actor_name="x",
+            bbox=(0, 0, 1, 1),
+            detection_confidence=1.5,  # out of range
+            identity_confidence=0.7,
+            identity_method="face_arcface",
+        )
+
+
+def test_frame_ref_annotated_uri_defaults_none():
+    """Most frames have no annotation — the field should be optional
+    and default to None so old callers keep working unchanged."""
+    fw = FrameWindow(camera_id="c", ts_start=0.0, ts_end=1.0)
+    assert fw.identified_entities == ()
+    fr = FrameRef(ts=0.0, uri="x://")
+    assert fr.annotated_uri is None
+
+
+def test_frame_window_with_identified_entities_roundtrips():
+    from sentihome_shared.preprocessor import IdentifiedEntity
+
+    fw = FrameWindow(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=10.0,
+        frames=(
+            FrameRef(
+                ts=1.0,
+                uri="x://raw.jpg",
+                annotated_uri="x://annotated.jpg",
+            ),
+        ),
+        identified_entities=(
+            IdentifiedEntity(
+                frame_ts=1.0,
+                kind="dog",
+                actor_id="actor_rex",
+                actor_name="Rex",
+                bbox=(0.4, 0.4, 0.6, 0.7),
+                detection_confidence=0.88,
+                identity_confidence=0.79,
+                identity_method="pet_dinov2",
+                track_id="t-3",
+            ),
+        ),
+    )
+    rebuilt = FrameWindow.model_validate_json(fw.model_dump_json())
+    assert rebuilt == fw
+
+
 def test_camera_subjects_are_stable():
     from sentihome_shared.preprocessor import (
         ALL_CAMERA_SUBJECTS,
