@@ -38,7 +38,11 @@ jobs:
           for f in config.yaml Dockerfile README.md DOCS.md CHANGELOG.md icon.png logo.png; do
             test -f "ha-integration/addon/sentihome/$f" || { echo "MISSING: $f"; exit 1; }
           done
-          for svc in core memory ha-agent notify vlm-router preprocessor; do
+          # Epic 10.8.2: the Yellow add-on ships ONLY the ha-agent
+          # service. The preprocessor (torch/onnxruntime/openvino) +
+          # core/memory/notify/vlm-router run on a separate inference
+          # box, not in this image. Check just what's actually here.
+          for svc in ha-agent; do
             test -f "ha-integration/addon/sentihome/rootfs/etc/services.d/$svc/run" || {
               echo "MISSING s6 service: $svc"; exit 1; }
           done
@@ -76,20 +80,19 @@ jobs:
             ha-integration/addon/sentihome
       - name: Sanity-run the image
         run: |
-          # Verify the s6 run scripts can actually start each SentiHome
-          # service. Use the same venv-python path the s6 scripts use —
-          # if this changes and the run scripts don't follow, we'd ship
-          # broken images again (which we did in v0.1.3-v0.1.6).
+          # Verify the s6 run scripts can actually start the ha-agent.
+          # Use the same venv-python path the s6 scripts use — if this
+          # changes and the run scripts don't follow, we'd ship broken
+          # images again (which we did in v0.1.3-v0.1.6).
+          # Epic 10.8.2: the image installs only sentihome-ha-agent +
+          # the shared lib (the inference stack lives on a separate
+          # box), so import exactly what the Dockerfile installs.
           docker run --rm sentihome-addon:ci /bin/bash -c '
             /app/.venv/bin/python -c "
             import sentihome_shared.topology
-            import sentihome_core
-            import sentihome_memory
+            import sentihome_shared.motion
             import sentihome_ha_agent
-            import sentihome_notify
-            import sentihome_vlm_router
-            import sentihome_preprocessor
-            print(\"All SentiHome packages importable from /app/.venv/bin/python\")
+            print(\"ha-agent + shared lib importable from /app/.venv/bin/python\")
             "
           '
       - name: Verify s6 run scripts point at the venv
