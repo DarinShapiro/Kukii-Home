@@ -116,9 +116,7 @@ async def test_get_window_no_enrichment_in_phase_10_1_5(
 
 
 @pytest.mark.asyncio
-async def test_get_window_records_latency(
-    rolling: RollingBuffer, buf: RTSPFrameBuffer
-):
+async def test_get_window_records_latency(rolling: RollingBuffer, buf: RTSPFrameBuffer):
     await rolling.write("cam_a", _f(100.0))
     fw = await buf.get_window(
         camera_id="cam_a",
@@ -149,9 +147,7 @@ async def test_serve_frame_unknown_camera_returns_none(buf: RTSPFrameBuffer):
 
 
 @pytest.mark.asyncio
-async def test_serve_frame_missing_ts_returns_none(
-    rolling: RollingBuffer, buf: RTSPFrameBuffer
-):
+async def test_serve_frame_missing_ts_returns_none(rolling: RollingBuffer, buf: RTSPFrameBuffer):
     await rolling.write("cam_a", _f(100.0))
     assert await buf.serve_frame("cam_a", 999.0) is None
 
@@ -168,9 +164,7 @@ class _StubDetector:
         self.batches_received: list[list[tuple[bytes, float]]] = []
         self._tags_per_frame = tags_per_frame
 
-    async def detect_batch(
-        self, frames: list[tuple[bytes, float]]
-    ) -> tuple:
+    async def detect_batch(self, frames: list[tuple[bytes, float]]) -> tuple:
         from sentihome_shared.preprocessor import DetectionTag
 
         self.batches_received.append(list(frames))
@@ -254,11 +248,11 @@ async def test_get_window_motion_gating_skips_quiet_frames(
         detector=detector,
     )
     # 3 quiet frames + 2 motion frames.
-    await rolling.write("cam_a", _f(100.0))                # quiet
-    await rolling.write("cam_a", _motion_frame(101.0))      # motion
-    await rolling.write("cam_a", _f(102.0))                # quiet
-    await rolling.write("cam_a", _motion_frame(103.0))      # motion
-    await rolling.write("cam_a", _f(104.0))                # quiet
+    await rolling.write("cam_a", _f(100.0))  # quiet
+    await rolling.write("cam_a", _motion_frame(101.0))  # motion
+    await rolling.write("cam_a", _f(102.0))  # quiet
+    await rolling.write("cam_a", _motion_frame(103.0))  # motion
+    await rolling.write("cam_a", _f(104.0))  # quiet
 
     fw = await buf.get_window(
         camera_id="cam_a",
@@ -389,3 +383,217 @@ async def test_get_window_without_detector_leaves_detections_empty(
         cache=ActorCache(),
     )
     assert fw.detections == ()
+
+
+# ─── Phase 10.4: face recognizer wiring ─────────────────────────────
+
+
+class _StubFaceRecognizer:
+    """Stand-in for FaceRecognizer — returns canned DetectedFace
+    records so the wiring path can be exercised without insightface."""
+
+    def __init__(self, faces_per_call: tuple = ()) -> None:
+        self._faces = faces_per_call
+        self.calls: list[tuple] = []  # (bgr_shape, enrolled_keys)
+
+    async def detect_and_match(self, bgr, enrolled):
+        self.calls.append((bgr.shape, tuple(sorted(enrolled.keys()))))
+        return self._faces
+
+
+def _real_jpeg(ts: float, w: int = 200, h: int = 200) -> BufferedFrame:
+    """Buffered frame with real JPEG bytes the face pipeline can decode."""
+    import cv2
+    import numpy as np
+
+    img = np.full((h, w, 3), 128, dtype=np.uint8)
+    ok, jpeg = cv2.imencode(".jpg", img)
+    assert ok
+    return BufferedFrame(ts=ts, jpeg_bytes=jpeg.tobytes(), width=w, height=h, has_motion=True)
+
+
+@pytest.mark.asyncio
+async def test_get_window_runs_face_recognizer_for_person_frames(
+    rolling: RollingBuffer,
+):
+    """When a person detection lands on a frame AND a face_recognizer
+    is wired, get_window invokes the recognizer with the frame and
+    the actor cache's face embeddings, then surfaces matched faces
+    as ActorMatches with track_ids inherited from the person bbox."""
+    import numpy as np
+    from sentihome_preprocessor.pipelines.face import DetectedFace
+    from sentihome_shared.preprocessor import (
+        ActorEnrollmentEvent,
+        DetectionTag,
+    )
+
+    class _PersonDetector:
+        async def detect_batch(self, frames):
+            return tuple(
+                DetectionTag(
+                    kind="person",
+                    confidence=0.9,
+                    bbox=(0.0, 0.0, 1.0, 1.0),
+                    track_id="t1",
+                    frame_ts=ts,
+                )
+                for _, ts in frames
+            )
+
+    embedding = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    face_recognizer = _StubFaceRecognizer(
+        faces_per_call=(
+            DetectedFace(
+                bbox=(0.4, 0.4, 0.6, 0.6),  # inside person bbox
+                det_confidence=0.95,
+                embedding=embedding,
+                matched_actor_id="alice",
+                match_confidence=0.82,
+            ),
+        )
+    )
+
+    cache = ActorCache()
+    await cache.upsert(
+        ActorEnrollmentEvent(
+            actor_id="alice",
+            action="enrolled",
+            name="Alice",
+            face_embedding=tuple(embedding.tolist()),
+        )
+    )
+
+    buf = RTSPFrameBuffer(
+        rolling_buffer=rolling,
+        node_id="t",
+        external_base_url="http://example:8090",
+        detector=_PersonDetector(),
+        face_recognizer=face_recognizer,
+    )
+    await rolling.write("cam_a", _real_jpeg(100.0))
+
+    fw = await buf.get_window(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=1000.0,
+        enrich=True,
+        cache=cache,
+    )
+
+    assert len(face_recognizer.calls) == 1
+    _shape, enrolled_keys = face_recognizer.calls[0]
+    assert enrolled_keys == ("alice",)
+
+    assert len(fw.actor_matches) == 1
+    am = fw.actor_matches[0]
+    assert am.actor_id == "alice"
+    assert am.match_method == "face_arcface"
+    assert am.track_id == "t1"
+    assert am.confidence == pytest.approx(0.82)
+
+    # Correlates into an IdentifiedEntity (conf > 0.6).
+    assert len(fw.identified_entities) == 1
+    ent = fw.identified_entities[0]
+    assert ent.kind == "person"
+    assert ent.actor_id == "alice"
+    assert ent.actor_name == "Alice"
+
+
+@pytest.mark.asyncio
+async def test_get_window_skips_face_recognition_without_person_detections(
+    rolling: RollingBuffer,
+):
+    """Frames carrying only non-person detections (e.g. just a car)
+    skip face recognition entirely — no ArcFace inference cost."""
+    import numpy as np
+    from sentihome_shared.preprocessor import (
+        ActorEnrollmentEvent,
+        DetectionTag,
+    )
+
+    class _CarDetector:
+        async def detect_batch(self, frames):
+            return tuple(
+                DetectionTag(
+                    kind="vehicle",
+                    confidence=0.9,
+                    bbox=(0.0, 0.0, 1.0, 1.0),
+                    track_id="t1",
+                    frame_ts=ts,
+                )
+                for _, ts in frames
+            )
+
+    face_recognizer = _StubFaceRecognizer()
+    cache = ActorCache()
+    await cache.upsert(
+        ActorEnrollmentEvent(
+            actor_id="alice",
+            action="enrolled",
+            name="Alice",
+            face_embedding=tuple(np.array([1.0, 0.0], dtype=np.float32).tolist()),
+        )
+    )
+
+    buf = RTSPFrameBuffer(
+        rolling_buffer=rolling,
+        node_id="t",
+        external_base_url="http://example:8090",
+        detector=_CarDetector(),
+        face_recognizer=face_recognizer,
+    )
+    await rolling.write("cam_a", _real_jpeg(100.0))
+
+    fw = await buf.get_window(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=1000.0,
+        enrich=True,
+        cache=cache,
+    )
+
+    assert face_recognizer.calls == []
+    assert fw.actor_matches == ()
+
+
+@pytest.mark.asyncio
+async def test_get_window_no_face_recognition_when_actor_cache_empty(
+    rolling: RollingBuffer,
+):
+    """No enrolled faces -> short-circuit before invoking the
+    recognizer."""
+    from sentihome_shared.preprocessor import DetectionTag
+
+    class _PersonDetector:
+        async def detect_batch(self, frames):
+            return tuple(
+                DetectionTag(
+                    kind="person",
+                    confidence=0.9,
+                    bbox=(0.0, 0.0, 1.0, 1.0),
+                    track_id="t1",
+                    frame_ts=ts,
+                )
+                for _, ts in frames
+            )
+
+    face_recognizer = _StubFaceRecognizer()
+    buf = RTSPFrameBuffer(
+        rolling_buffer=rolling,
+        node_id="t",
+        external_base_url="http://example:8090",
+        detector=_PersonDetector(),
+        face_recognizer=face_recognizer,
+    )
+    await rolling.write("cam_a", _real_jpeg(100.0))
+
+    fw = await buf.get_window(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=1000.0,
+        enrich=True,
+        cache=ActorCache(),  # empty
+    )
+
+    assert face_recognizer.calls == []
+    assert fw.actor_matches == ()

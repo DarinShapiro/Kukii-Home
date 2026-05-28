@@ -28,6 +28,12 @@ dependencies = [
     # is constructed with backend="openvino"; pytorch backend
     # never imports openvino so this is effectively optional.
     "openvino>=2024.4.0",
+    # Epic 10.4 — face recognition. InsightFace bundles detection +
+    # ArcFace embedding; onnxruntime is the inference engine. CPU
+    # provider is default; CUDA/OpenVINO providers are optional
+    # extras pulled at deploy time.
+    "insightface>=0.7.3",
+    "onnxruntime>=1.19.0",
 ]
 
 [dependency-groups]

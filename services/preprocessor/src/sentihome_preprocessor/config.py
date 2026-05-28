@@ -126,6 +126,32 @@ class PreprocessorConfig:
     detection_device: str | None = None
     """``"cuda:0"`` / ``"cpu"`` / None (auto-pick)."""
 
+    # ─── Face recognition (Phase 10.4) ─────────────────────────────
+    face_recognition_enabled: bool = False
+    """When True (and backend=rtsp), the FrameBufferBackend gets a
+    FaceRecognizer wired in, populating FrameWindow.actor_matches
+    (and through correlation, identified_entities) from ArcFace
+    embeddings matched against the ActorCache. Opt-in like detection
+    so insightface + onnxruntime are only pulled at runtime when
+    actually needed."""
+
+    face_model_pack: str = "buffalo_s"
+    """InsightFace model bundle name. ``buffalo_s`` (~10MB, fast,
+    default) / ``buffalo_l`` (~280MB, slightly higher accuracy) /
+    ``antelopev2``."""
+
+    face_match_threshold: float = 0.5
+    """Cosine-similarity threshold for a match. ArcFace embeddings
+    are L2-normalized; ~0.5 is the InsightFace default working
+    point."""
+
+    face_det_confidence_min: float = 0.6
+    face_det_size: int = 640
+    face_providers: list[str] = field(default_factory=lambda: ["CPUExecutionProvider"])
+    """ONNX execution providers in priority order. CPU-only by
+    default — set via env to ``CUDAExecutionProvider`` on the 4090
+    box or ``OpenVINOExecutionProvider`` on Intel iGPU."""
+
 
 def load_from_env() -> PreprocessorConfig:
     """Build a :class:`PreprocessorConfig` from environment variables.
@@ -151,41 +177,32 @@ def load_from_env() -> PreprocessorConfig:
         cameras=cameras,
         camera_rtsp_urls=_collect_camera_urls(cameras),
         backend=os.environ.get("SENTIHOME_PREPROCESSOR_BACKEND", "synthetic"),
-        synthetic_frames_per_second=_env_float(
-            "SENTIHOME_PREPROCESSOR_SYNTHETIC_FPS", 2.0
-        ),
+        synthetic_frames_per_second=_env_float("SENTIHOME_PREPROCESSOR_SYNTHETIC_FPS", 2.0),
         synthetic_buffer_horizon_seconds=_env_float(
             "SENTIHOME_PREPROCESSOR_BUFFER_HORIZON_S", 300.0
         ),
-        rtsp_buffer_horizon_seconds=_env_float(
-            "SENTIHOME_PREPROCESSOR_BUFFER_HORIZON_S", 300.0
-        ),
+        rtsp_buffer_horizon_seconds=_env_float("SENTIHOME_PREPROCESSOR_BUFFER_HORIZON_S", 300.0),
         rtsp_buffer_max_entries_per_camera=_env_int(
             "SENTIHOME_PREPROCESSOR_BUFFER_MAX_ENTRIES", 1024
         ),
-        rtsp_capture_interval_seconds=_env_float(
-            "SENTIHOME_PREPROCESSOR_CAPTURE_INTERVAL_S", 1.0
-        ),
-        detection_enabled=os.environ.get(
-            "SENTIHOME_PREPROCESSOR_DETECTION", "false"
-        ).lower()
+        rtsp_capture_interval_seconds=_env_float("SENTIHOME_PREPROCESSOR_CAPTURE_INTERVAL_S", 1.0),
+        detection_enabled=os.environ.get("SENTIHOME_PREPROCESSOR_DETECTION", "false").lower()
         in ("1", "true", "yes", "on"),
-        detection_backend=os.environ.get(
-            "SENTIHOME_PREPROCESSOR_DETECTION_BACKEND", "pytorch"
+        detection_backend=os.environ.get("SENTIHOME_PREPROCESSOR_DETECTION_BACKEND", "pytorch"),
+        detection_weights=os.environ.get("SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS", "yolo11x.pt"),
+        detection_confidence_min=_env_float("SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN", 0.5),
+        detection_image_size=_env_int("SENTIHOME_PREPROCESSOR_DETECTION_IMG_SIZE", 640),
+        detection_device=os.environ.get("SENTIHOME_PREPROCESSOR_DETECTION_DEVICE") or None,
+        face_recognition_enabled=os.environ.get("SENTIHOME_PREPROCESSOR_FACE", "false").lower()
+        in ("1", "true", "yes", "on"),
+        face_model_pack=os.environ.get("SENTIHOME_PREPROCESSOR_FACE_MODEL_PACK", "buffalo_s"),
+        face_match_threshold=_env_float("SENTIHOME_PREPROCESSOR_FACE_MATCH_THRESHOLD", 0.5),
+        face_det_confidence_min=_env_float("SENTIHOME_PREPROCESSOR_FACE_DET_CONF_MIN", 0.6),
+        face_det_size=_env_int("SENTIHOME_PREPROCESSOR_FACE_DET_SIZE", 640),
+        face_providers=_env_list(
+            "SENTIHOME_PREPROCESSOR_FACE_PROVIDERS",
+            ["CPUExecutionProvider"],
         ),
-        detection_weights=os.environ.get(
-            "SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS", "yolo11x.pt"
-        ),
-        detection_confidence_min=_env_float(
-            "SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN", 0.5
-        ),
-        detection_image_size=_env_int(
-            "SENTIHOME_PREPROCESSOR_DETECTION_IMG_SIZE", 640
-        ),
-        detection_device=os.environ.get(
-            "SENTIHOME_PREPROCESSOR_DETECTION_DEVICE"
-        )
-        or None,
     )
 
 

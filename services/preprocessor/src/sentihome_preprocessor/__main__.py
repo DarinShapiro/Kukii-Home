@@ -91,6 +91,25 @@ def _build_backend(
         )
         supervisor = RTSPCaptureSupervisor(buffer=rolling)
 
+        face_recognizer = None
+        if config.face_recognition_enabled:
+            # Lazy import: insightface + onnxruntime are heavyweight.
+            # Pay the cost only when face recognition is on.
+            from sentihome_preprocessor.pipelines.face import (
+                FaceConfig,
+                FaceRecognizer,
+            )
+
+            face_recognizer = FaceRecognizer(
+                FaceConfig(
+                    model_pack=config.face_model_pack,
+                    match_threshold=config.face_match_threshold,
+                    det_confidence_min=config.face_det_confidence_min,
+                    det_size=config.face_det_size,
+                    providers=tuple(config.face_providers),
+                )
+            )
+
         detector = None
         if config.detection_enabled:
             # Lazy import: only pay the ultralytics + torch cost when
@@ -117,13 +136,13 @@ def _build_backend(
             node_id=config.node_id,
             external_base_url=config.external_base_url,
             detector=detector,
+            face_recognizer=face_recognizer,
             annotation_cache=annotation_cache,
         )
         return frame_buffer, supervisor, SupervisorApplier(supervisor)
 
     raise ValueError(
-        f"Unknown SENTIHOME_PREPROCESSOR_BACKEND={config.backend!r}; "
-        f"expected 'synthetic' or 'rtsp'"
+        f"Unknown SENTIHOME_PREPROCESSOR_BACKEND={config.backend!r}; expected 'synthetic' or 'rtsp'"
     )
 
 
