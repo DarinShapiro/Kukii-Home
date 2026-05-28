@@ -98,6 +98,23 @@ class PreprocessorConfig:
     intervals; lower numbers buy higher temporal resolution at the
     cost of buffer footprint."""
 
+    # ─── Detection (Phase 10.3) ────────────────────────────────────
+    detection_enabled: bool = False
+    """When True (and backend=rtsp), the FrameBufferBackend gets a
+    YOLODetector wired in, populating FrameWindow.detections from
+    real frames. Defaults to False so adding ultralytics as a hard
+    dep at runtime is opt-in — the service can run without it."""
+
+    detection_weights: str = "yolo11n.pt"
+    """Ultralytics model name or path to .pt file. ``yolo11n`` is
+    the smallest (good for CPU + dev); ``yolo11x`` is production
+    quality on GPU."""
+
+    detection_confidence_min: float = 0.35
+    detection_image_size: int = 640
+    detection_device: str | None = None
+    """``"cuda:0"`` / ``"cpu"`` / None (auto-pick)."""
+
 
 def load_from_env() -> PreprocessorConfig:
     """Build a :class:`PreprocessorConfig` from environment variables.
@@ -138,6 +155,23 @@ def load_from_env() -> PreprocessorConfig:
         rtsp_capture_interval_seconds=_env_float(
             "SENTIHOME_PREPROCESSOR_CAPTURE_INTERVAL_S", 1.0
         ),
+        detection_enabled=os.environ.get(
+            "SENTIHOME_PREPROCESSOR_DETECTION", "false"
+        ).lower()
+        in ("1", "true", "yes", "on"),
+        detection_weights=os.environ.get(
+            "SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS", "yolo11n.pt"
+        ),
+        detection_confidence_min=_env_float(
+            "SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN", 0.35
+        ),
+        detection_image_size=_env_int(
+            "SENTIHOME_PREPROCESSOR_DETECTION_IMG_SIZE", 640
+        ),
+        detection_device=os.environ.get(
+            "SENTIHOME_PREPROCESSOR_DETECTION_DEVICE"
+        )
+        or None,
     )
 
 

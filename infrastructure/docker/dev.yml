@@ -212,6 +212,16 @@ services:
       # RTSP-backend knobs (no-ops when backend=synthetic):
       - SENTIHOME_PREPROCESSOR_CAPTURE_INTERVAL_S=1.0
       - SENTIHOME_PREPROCESSOR_BUFFER_MAX_ENTRIES=1024
+      # Detection (Phase 10.3). When DETECTION=true and backend=rtsp,
+      # a YOLODetector is wired in and populates FrameWindow.detections
+      # from captured frames. Off by default — opt in once cameras are
+      # streaming and ultralytics is installed in the runtime.
+      - SENTIHOME_PREPROCESSOR_DETECTION=false
+      - SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS=yolo11n.pt
+      - SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN=0.35
+      - SENTIHOME_PREPROCESSOR_DETECTION_IMG_SIZE=640
+      # SENTIHOME_PREPROCESSOR_DETECTION_DEVICE=cuda:0   # set on the
+      # inference box; auto-picks otherwise.
       # Per-camera RTSP URLs (uncomment + fill when flipping to rtsp).
       # H.264 sub-stream URLs work best — cheap to decode, sufficient
       # for motion + general detection. Main-stream pulls are

@@ -18,6 +18,11 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "nats-py>=2.9.0",
     "httpx>=0.27.0",
+    # Epic 10.3 — first real detection pipeline. Ultralytics ships
+    # YOLO11x; CUDA acceleration kicks in automatically when torch
+    # sees a GPU. CPU-only is acceptable for skeleton validation
+    # (~1-2s per 720p frame, fine for unit tests).
+    "ultralytics>=8.3.0",
 ]
 
 [dependency-groups]

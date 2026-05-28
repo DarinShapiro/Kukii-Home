@@ -17,11 +17,15 @@ JPEG bytes on demand instead of inlining them into the
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 from sentihome_shared.preprocessor import FrameRef, FrameWindow
 
 from sentihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
 from sentihome_preprocessor.state import ActorCache
+
+if TYPE_CHECKING:
+    from sentihome_preprocessor.pipelines.detection import YOLODetector
 
 
 class RTSPFrameBuffer:
@@ -39,6 +43,7 @@ class RTSPFrameBuffer:
         configured_cameras: list[str],
         node_id: str,
         external_base_url: str,
+        detector: YOLODetector | None = None,
     ) -> None:
         self._buffer = rolling_buffer
         self._cameras = set(configured_cameras)
@@ -46,6 +51,12 @@ class RTSPFrameBuffer:
         # rstrip so /frames doesn't double-slash if caller passes
         # a base ending in /.
         self._base_url = external_base_url.rstrip("/")
+        self._detector = detector
+        """Optional YOLO detector. When provided AND ``enrich=True``,
+        get_window batches every buffered frame in the window through
+        it and populates ``FrameWindow.detections``. When None
+        (skeleton / unit tests / Phase 10.1.5 era), detections stay
+        empty — the wire shape is the same."""
 
     async def serve_frame(self, camera_id: str, ts: float) -> bytes | None:
         """Read a single JPEG-encoded keyframe out of the rolling
@@ -97,10 +108,19 @@ class RTSPFrameBuffer:
             for f in buffered
         )
 
-        # Enrichment is not yet implemented against real frames.
-        # The buffered frames carry no detection metadata; the
-        # downstream pipelines land in 10.3+. Mark the response so
-        # callers can see the difference.
+        detections: tuple = ()
+        if enrich and self._detector is not None and buffered:
+            # Batch every frame in the window through YOLO. Heavy
+            # operation — runs in a thread under the hood so we
+            # don't stall the event loop.
+            detections = await self._detector.detect_batch(
+                [(f.jpeg_bytes, f.ts) for f in buffered]
+            )
+
+        # Actor matches (face / pet / plate) land in Phase 10.4+ —
+        # they branch on DetectionTag.kind to dispatch to vendor
+        # pipelines. Until then this stays empty even when
+        # detections is populated.
         latency_ms = int((time.perf_counter() - t0) * 1000)
         return FrameWindow(
             camera_id=camera_id,
@@ -108,7 +128,7 @@ class RTSPFrameBuffer:
             ts_end=ts_end,
             preprocessor_node_id=self._node_id,
             frames=frames,
-            detections=(),
+            detections=detections,
             actor_matches=(),
             enrichment_mode="enriched" if enrich else "frames_only",
             enrichment_latency_ms=latency_ms,

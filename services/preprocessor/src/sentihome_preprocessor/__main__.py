@@ -84,11 +84,32 @@ def _build_backend(
             max_entries_per_camera=config.rtsp_buffer_max_entries_per_camera,
         )
         supervisor = RTSPCaptureSupervisor(buffer=rolling)
+
+        detector = None
+        if config.detection_enabled:
+            # Lazy import: only pay the ultralytics + torch cost when
+            # actually running detection. Synthetic-mode runs and
+            # detection-off RTSP runs skip this entirely.
+            from sentihome_preprocessor.pipelines.detection import (
+                DetectionConfig,
+                YOLODetector,
+            )
+
+            detector = YOLODetector(
+                DetectionConfig(
+                    weights=config.detection_weights,
+                    confidence_min=config.detection_confidence_min,
+                    image_size=config.detection_image_size,
+                    device=config.detection_device,
+                )
+            )
+
         frame_buffer = RTSPFrameBuffer(
             rolling_buffer=rolling,
             configured_cameras=config.cameras,
             node_id=config.node_id,
             external_base_url=config.external_base_url,
+            detector=detector,
         )
         return frame_buffer, supervisor, SupervisorApplier(supervisor)
 

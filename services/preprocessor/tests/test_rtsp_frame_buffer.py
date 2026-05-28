@@ -154,3 +154,121 @@ async def test_serve_frame_missing_ts_returns_none(
 ):
     await rolling.write("cam_a", _f(100.0))
     assert await buf.serve_frame("cam_a", 999.0) is None
+
+
+# ─── Phase 10.3: detector wiring ────────────────────────────────────
+
+
+class _StubDetector:
+    """Stand-in for YOLODetector — records the batch it's handed +
+    returns canned DetectionTags so the test can assert wiring
+    without paying for ultralytics import."""
+
+    def __init__(self, tags_per_frame: int = 1) -> None:
+        self.batches_received: list[list[tuple[bytes, float]]] = []
+        self._tags_per_frame = tags_per_frame
+
+    async def detect_batch(
+        self, frames: list[tuple[bytes, float]]
+    ) -> tuple:
+        from sentihome_shared.preprocessor import DetectionTag
+
+        self.batches_received.append(list(frames))
+        out: list[DetectionTag] = []
+        for _, ts in frames:
+            for _ in range(self._tags_per_frame):
+                out.append(
+                    DetectionTag(
+                        kind="person",
+                        confidence=0.9,
+                        bbox=(0.0, 0.0, 1.0, 1.0),
+                        frame_ts=ts,
+                    )
+                )
+        return tuple(out)
+
+
+@pytest.mark.asyncio
+async def test_get_window_populates_detections_when_detector_provided(
+    rolling: RollingBuffer,
+):
+    """With a detector wired in, get_window's detections tuple is
+    populated from the buffered frames."""
+    detector = _StubDetector(tags_per_frame=2)
+    buf = RTSPFrameBuffer(
+        rolling_buffer=rolling,
+        configured_cameras=["cam_a"],
+        node_id="t",
+        external_base_url="http://example:8090",
+        detector=detector,
+    )
+    for ts in (100.0, 101.0, 102.0):
+        await rolling.write("cam_a", _f(ts))
+
+    fw = await buf.get_window(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=1000.0,
+        enrich=True,
+        cache=ActorCache(),
+    )
+
+    # 3 frames, 2 tags each → 6 detections.
+    assert len(fw.detections) == 6
+    # Every detection ts must match one of the buffered frames.
+    assert {d.frame_ts for d in fw.detections} == {100.0, 101.0, 102.0}
+    # Detector was called exactly once with the full batch.
+    assert len(detector.batches_received) == 1
+    assert len(detector.batches_received[0]) == 3
+
+
+@pytest.mark.asyncio
+async def test_get_window_skips_detector_when_enrich_false(
+    rolling: RollingBuffer,
+):
+    """enrich=False short-circuits the detector entirely."""
+    detector = _StubDetector()
+    buf = RTSPFrameBuffer(
+        rolling_buffer=rolling,
+        configured_cameras=["cam_a"],
+        node_id="t",
+        external_base_url="http://example:8090",
+        detector=detector,
+    )
+    await rolling.write("cam_a", _f(100.0))
+
+    fw = await buf.get_window(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=1000.0,
+        enrich=False,
+        cache=ActorCache(),
+    )
+
+    assert fw.detections == ()
+    assert detector.batches_received == []
+
+
+@pytest.mark.asyncio
+async def test_get_window_without_detector_leaves_detections_empty(
+    rolling: RollingBuffer,
+):
+    """No detector configured (skeleton / Phase 10.1.5 mode) →
+    detections stay empty even with enrich=True."""
+    buf = RTSPFrameBuffer(
+        rolling_buffer=rolling,
+        configured_cameras=["cam_a"],
+        node_id="t",
+        external_base_url="http://example:8090",
+        # detector kwarg omitted on purpose
+    )
+    await rolling.write("cam_a", _f(100.0))
+
+    fw = await buf.get_window(
+        camera_id="cam_a",
+        ts_start=0.0,
+        ts_end=1000.0,
+        enrich=True,
+        cache=ActorCache(),
+    )
+    assert fw.detections == ()

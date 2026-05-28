@@ -1,0 +1,311 @@
+"""YOLO11x object detection — first real model in the pipeline.
+
+Wraps an Ultralytics YOLO model behind a clean async interface that
+returns a tuple of :class:`DetectionTag` per input frame. Plugs into
+:class:`RTSPFrameBuffer.get_window`'s enrichment path so the
+``detections`` field of a returned :class:`FrameWindow` is populated
+from real frames.
+
+Phase 10.3 scope:
+
+* YOLO11x (or YOLO11n in dev for speed) as the detector
+* Batched inference across the frames in one ``get_window`` call
+* COCO class names mapped to our DetectionTag.kind strings
+* CUDA used automatically when torch sees a GPU (~30ms/frame on
+  4090); CPU works as a fallback (~1-2s/frame)
+* JPEG-encoded keyframes decoded on-the-fly for inference; the
+  results go back into the FrameWindow without modifying the
+  rolling buffer
+
+Out of scope (later phases):
+
+* Face / pet / plate enrichment — these layer on top once a person
+  / dog / vehicle detection lands. Phase 10.4+ branches on
+  DetectionTag.kind to dispatch to those pipelines.
+* Multi-camera batching — currently we batch within one camera's
+  window; cross-camera batching is a Phase 10.6 optimization.
+* Track association — YOLO's built-in track mode could populate
+  DetectionTag.track_id; we leave that for Phase 10.3.1.
+
+The ultralytics import is lazy — modules that don't run inference
+(synthetic-mode tests, contract-only callers) shouldn't pay the
+~500MB torch + ultralytics import cost.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import io
+import logging
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+import cv2
+import numpy as np
+from sentihome_shared.preprocessor import DetectionTag
+
+if TYPE_CHECKING:
+    from ultralytics import YOLO
+
+logger = logging.getLogger(__name__)
+
+
+# Default model. yolo11n is small + fast (~5 MB weights, ~50ms CPU
+# inference at 640px); yolo11x is the full production target (~100 MB
+# weights, much higher mAP). Operators flip via env / config.
+_DEFAULT_WEIGHTS = "yolo11n.pt"
+
+# COCO class names that the dispatcher actually cares about. Anything
+# YOLO detects with a class outside this set gets a generic
+# ``unknown`` kind — keeps the tag_set surface small + predictable
+# downstream while the long-tail of COCO classes (toaster, kite, …)
+# doesn't pollute the alert pipeline.
+_INTERESTING_COCO_CLASSES: dict[str, str] = {
+    "person": "person",
+    "car": "vehicle",
+    "motorcycle": "vehicle",
+    "bus": "vehicle",
+    "truck": "vehicle",
+    "bicycle": "vehicle",
+    "dog": "dog",
+    "cat": "cat",
+    "bird": "animal",
+    "horse": "animal",
+    "sheep": "animal",
+    "cow": "animal",
+    "bear": "animal",
+    "deer": "animal",
+}
+
+# Default confidence floor. Below this, YOLO's call is shaky enough
+# we'd rather drop it than waste downstream pipeline cycles. The
+# preprocessor's KnobAdjustment surface (POST /tune yolo.confidence_min)
+# can override this at runtime once the feedback-loop subsystem
+# lands.
+_DEFAULT_CONFIDENCE_MIN = 0.35
+
+
+@dataclass
+class DetectionConfig:
+    """Runtime tunables for the detector."""
+
+    weights: str = _DEFAULT_WEIGHTS
+    """Either a model name (e.g. ``yolo11n.pt``, downloaded on first
+    use to the ultralytics cache) or a path to a .pt file on disk."""
+
+    confidence_min: float = _DEFAULT_CONFIDENCE_MIN
+    iou_min: float = 0.45
+    """NMS IoU threshold. 0.45 is YOLO's default."""
+
+    image_size: int = 640
+    """Square input size YOLO resizes to. 640 is COCO standard."""
+
+    device: str | None = None
+    """``"cuda:0"``, ``"cpu"``, etc. ``None`` lets ultralytics
+    auto-pick — preferring CUDA when available."""
+
+
+class YOLODetector:
+    """Async wrapper around an Ultralytics YOLO model.
+
+    Model load is deferred to first inference call (cold-start
+    isolation — the service comes up healthy before any model
+    downloads / weights load). Subsequent calls reuse the same
+    loaded model.
+    """
+
+    def __init__(self, config: DetectionConfig | None = None) -> None:
+        self._config = config or DetectionConfig()
+        self._model: YOLO | None = None
+        self._load_lock = asyncio.Lock()
+
+    async def detect(self, jpeg_bytes: bytes, frame_ts: float) -> tuple[DetectionTag, ...]:
+        """Run detection on one JPEG-encoded frame.
+
+        Returns DetectionTags whose ``frame_ts`` matches the frame
+        the detection came from. Decoding is done with OpenCV
+        (already a hard dep for the JPEG-encode side of the pipeline)
+        so we don't add another image library.
+
+        Heavy: model load (first call only) + torch inference. Both
+        run in a thread via ``run_in_executor`` so the asyncio loop
+        stays responsive.
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, self._detect_sync, jpeg_bytes, frame_ts
+        )
+
+    async def detect_batch(
+        self, frames: list[tuple[bytes, float]]
+    ) -> tuple[DetectionTag, ...]:
+        """Run detection on a batch of frames in one inference call.
+
+        Ultralytics batches automatically when handed a list of
+        images; this is meaningfully faster than serial per-frame
+        calls (less torch overhead per frame).
+
+        Returns the union of all detections across the batch, each
+        tagged with its frame_ts.
+        """
+        if not frames:
+            return ()
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._detect_batch_sync, frames)
+
+    async def warmup(self) -> None:
+        """Ensure the model is loaded. Optional — first ``detect()``
+        will load lazily. Calling at startup makes the first real
+        request fast."""
+        async with self._load_lock:
+            await asyncio.get_running_loop().run_in_executor(
+                None, self._ensure_model
+            )
+
+    # ─── internals (run in executor) ───────────────────────────────
+
+    def _ensure_model(self) -> YOLO:
+        if self._model is not None:
+            return self._model
+        # Lazy import — keep startup snappy for callers that never
+        # actually invoke detection (synthetic-mode tests).
+        from ultralytics import YOLO  # type: ignore[import-not-found]
+
+        logger.info("yolo.loading weights=%s", self._config.weights)
+        self._model = YOLO(self._config.weights)
+        logger.info("yolo.loaded")
+        return self._model
+
+    def _detect_sync(self, jpeg_bytes: bytes, frame_ts: float) -> tuple[DetectionTag, ...]:
+        img = _jpeg_to_bgr(jpeg_bytes)
+        if img is None:
+            return ()
+        model = self._ensure_model()
+        results = model.predict(
+            img,
+            conf=self._config.confidence_min,
+            iou=self._config.iou_min,
+            imgsz=self._config.image_size,
+            device=self._config.device,
+            verbose=False,
+        )
+        return _results_to_tags(results, img.shape, frame_ts)
+
+    def _detect_batch_sync(
+        self, frames: list[tuple[bytes, float]]
+    ) -> tuple[DetectionTag, ...]:
+        images: list[np.ndarray] = []
+        timestamps: list[float] = []
+        for jpeg_bytes, ts in frames:
+            img = _jpeg_to_bgr(jpeg_bytes)
+            if img is not None:
+                images.append(img)
+                timestamps.append(ts)
+        if not images:
+            return ()
+        model = self._ensure_model()
+        results = model.predict(
+            images,
+            conf=self._config.confidence_min,
+            iou=self._config.iou_min,
+            imgsz=self._config.image_size,
+            device=self._config.device,
+            verbose=False,
+        )
+        out: list[DetectionTag] = []
+        for result, ts in zip(results, timestamps, strict=False):
+            out.extend(
+                _results_to_tags([result], images[0].shape, ts)
+            )
+        return tuple(out)
+
+
+# ─── helpers ─────────────────────────────────────────────────────────
+
+
+def _jpeg_to_bgr(jpeg_bytes: bytes) -> np.ndarray | None:
+    """Decode a JPEG into a BGR uint8 numpy array.
+
+    Returns ``None`` on decode failure rather than raising — a single
+    corrupt frame shouldn't kill the inference loop. Empty bytes,
+    truncated headers, etc. all funnel to None.
+    """
+    if not jpeg_bytes:
+        return None
+    try:
+        arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    except cv2.error:
+        return None
+    if img is None or img.size == 0:
+        return None
+    return img
+
+
+def _results_to_tags(
+    results: list, frame_shape: tuple[int, ...], frame_ts: float
+) -> tuple[DetectionTag, ...]:
+    """Map Ultralytics ``Results`` → :class:`DetectionTag` tuple.
+
+    Bounding boxes come back in pixel coordinates; we normalize to
+    [0, 1] using the frame's height + width so the DetectionTag's
+    bbox field matches the rest of the contract (which is
+    consistently normalized — see contracts.py).
+
+    Class names outside :data:`_INTERESTING_COCO_CLASSES` are filtered
+    out entirely. We could pass them through under an "unknown" kind
+    but that pollutes downstream tag_sets without adding signal at
+    this phase.
+    """
+    if not results:
+        return ()
+    h, w = frame_shape[:2]
+    out: list[DetectionTag] = []
+    for res in results:
+        boxes = getattr(res, "boxes", None)
+        names = getattr(res, "names", None)
+        if boxes is None or names is None:
+            continue
+        # boxes.xyxy: (N, 4) tensor; boxes.cls: (N,); boxes.conf: (N,).
+        # Convert via .cpu().numpy() because tensors might be on GPU.
+        xyxy = _to_numpy(boxes.xyxy)
+        confs = _to_numpy(boxes.conf)
+        clses = _to_numpy(boxes.cls).astype(int)
+        for i in range(len(clses)):
+            class_idx = int(clses[i])
+            class_name = names.get(class_idx) if isinstance(names, dict) else names[class_idx]
+            mapped = _INTERESTING_COCO_CLASSES.get(class_name)
+            if mapped is None:
+                continue
+            x1, y1, x2, y2 = xyxy[i].tolist()
+            out.append(
+                DetectionTag(
+                    kind=mapped,
+                    confidence=round(float(confs[i]), 3),
+                    bbox=(
+                        round(x1 / w, 4),
+                        round(y1 / h, 4),
+                        round(x2 / w, 4),
+                        round(y2 / h, 4),
+                    ),
+                    frame_ts=frame_ts,
+                    # Track-id requires YOLO track mode (not predict).
+                    # Add in Phase 10.3.1 when we wire .track() in
+                    # the capture loop.
+                    track_id=None,
+                )
+            )
+    return tuple(out)
+
+
+def _to_numpy(t: object) -> np.ndarray:
+    """Best-effort tensor → numpy. Handles torch.Tensor (typical)
+    and already-numpy inputs (test mocks)."""
+    if hasattr(t, "cpu"):
+        t = t.cpu()  # type: ignore[attr-defined]
+    if hasattr(t, "numpy"):
+        return t.numpy()  # type: ignore[attr-defined]
+    return np.asarray(t)
+
+
+_ = io  # silence unused-import warning (io kept for potential PIL fallback)
