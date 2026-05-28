@@ -1,7 +1,7 @@
 [project]
 name = "sentihome-preprocessor"
 version = "0.1.0"
-description = "Motion-gated 24/7 preprocessing for service-mode NVR adapters"
+description = "Recognition preprocessor for SentiHome — continuous-time inference (Epic 10). Deploys standalone on the inference box; communicates with HA-side services only via NATS + REST."
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
@@ -11,6 +11,19 @@ dependencies = [
     "av>=13.0.0",
     "redis>=5.0.0",
     "pydantic>=2.9.0",
+    # Epic 10 service surface. FastAPI exposes the RPC layer; nats-py
+    # carries the continuous detection event stream; httpx for any
+    # outbound RPCs (e.g. fetching a frame crop from object storage).
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "nats-py>=2.9.0",
+    "httpx>=0.27.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
 ]
 
 [project.scripts]

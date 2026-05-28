@@ -1,0 +1,231 @@
+"""Wire contracts crossing the preprocessor process boundary.
+
+The preprocessor is a pull-based service. Triage / dispatcher
+on the HA side calls ``GET /frame_window`` upon a camera event and
+gets back a :class:`FrameWindow`. The preprocessor never broadcasts
+detection events — clients only ever ask.
+
+Two flows still use NATS (broadcast / fire-and-forget), and they're
+both INBOUND to the preprocessor:
+
+* :class:`ActorEnrollmentEvent` — memory broadcasts when a KnownActor
+  changes; preprocessor subscribes to refresh its identity cache.
+
+Plus REST RPCs the HA side calls on the preprocessor:
+
+* ``GET /frame_window``  → :class:`FrameWindow` (the primary RPC)
+* ``GET /status``        → :class:`PreprocessorStatus`
+* ``GET /healthz``       → liveness
+* ``POST /tune``         → :class:`KnobAdjustment` (feedback loop)
+* ``POST /actors/enroll`` → :class:`ActorEnrollmentEvent`
+                            (fall-back; canonical path is NATS)
+
+Versioning: every top-level model carries a ``schema_version`` field
+(currently always ``"v1"``). Bump on breaking changes; run both for
+the migration window.
+
+Strict ``extra="forbid"``: a producer adding an unknown field surfaces
+during testing rather than silently being dropped on the consumer.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+# ─── Substructures: detections, actor matches, frame refs ───────────
+
+
+class DetectionTag(_Strict):
+    """One object the detector found in a frame.
+
+    Production: YOLO11x. The preprocessor returns multiple
+    DetectionTags per frame_window — one per (object, frame) pair —
+    unless tracking collapsed them by track_id.
+    """
+
+    kind: str
+    """Object class (``person``, ``vehicle``, ``dog``, ``cat``,
+    ``package``, etc.)."""
+
+    confidence: float = Field(ge=0.0, le=1.0)
+
+    bbox: tuple[float, float, float, float]
+    """``(x1, y1, x2, y2)`` in normalized image coordinates (0..1)."""
+
+    frame_ts: float
+    """Unix-seconds timestamp of the frame this detection came from.
+    Lets the caller correlate a detection back to a specific frame
+    in the window."""
+
+    track_id: str | None = None
+    """Cross-frame tracking handle. None for unstable tracks."""
+
+
+class ActorMatch(_Strict):
+    """One identity attribution against a KnownActor.
+
+    Produced by the face pipeline (ArcFace), the pet pipeline (DINOv2
+    centroid match), or the vehicle pipeline (plate match via
+    fastALPR).
+    """
+
+    actor_id: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    match_method: Literal["face_arcface", "pet_dinov2", "plate_lpr"]
+
+    frame_ts: float
+    """Frame the match was observed on."""
+
+    track_id: str | None = None
+    """If from a tracked detection, the same ``track_id`` as the
+    corresponding DetectionTag."""
+
+
+class FrameRef(_Strict):
+    """A handle to one buffered frame.
+
+    ``uri`` points to the actual pixels (object-store path on the
+    inference box). For dev/skeleton the URI may be a synthetic
+    placeholder like ``synthetic://cam_id/ts``; the test consumer
+    doesn't need to dereference it.
+    """
+
+    ts: float
+    uri: str
+    width: int | None = None
+    height: int | None = None
+    quality_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    """Optional sharpness / lighting / occlusion composite from the
+    preprocessor's quality assessment. None when the preprocessor
+    didn't run the assessment (enrich=False)."""
+
+
+# ─── Primary RPC payload: FrameWindow ────────────────────────────────
+
+
+class FrameWindow(_Strict):
+    """Returned by ``GET /frame_window``.
+
+    Carries the buffered frames in ``[ts_start, ts_end]`` for one
+    camera, plus optional enrichment (detections + actor matches)
+    when the caller asked for it.
+
+    Intentionally event-agnostic: the preprocessor doesn't know what
+    TriggerEvent or alert this corresponds to. The caller maps this
+    to an EnrichedEvent on the HA side by attaching event_id /
+    trace_id / privacy_tier.
+    """
+
+    schema_version: Literal["v1"] = "v1"
+
+    camera_id: str
+    ts_start: float
+    ts_end: float
+    """The window the caller asked for. Returned verbatim so the
+    caller can sanity-check what they got vs. what they requested."""
+
+    preprocessor_node_id: str = "default"
+    """Identifies which preprocessor instance produced this — useful
+    in multi-inference-box deployments."""
+
+    frames: tuple[FrameRef, ...] = ()
+    """Frames inside the window. May be empty if the camera was
+    silent / disconnected during that interval."""
+
+    detections: tuple[DetectionTag, ...] = ()
+    """Aggregated detections across all returned frames. Empty when
+    the caller passed ``enrich=False``."""
+
+    actor_matches: tuple[ActorMatch, ...] = ()
+    """Aggregated identity matches. Empty when ``enrich=False`` or
+    when no KnownActor was confidently matched."""
+
+    enrichment_mode: Literal["frames_only", "enriched"] = "enriched"
+
+    enrichment_latency_ms: int = 0
+    """How long the preprocessor spent on the request, end-to-end.
+    Useful for the latency-capture / observability layer."""
+
+
+# ─── Status + tuning RPCs ────────────────────────────────────────────
+
+
+class PreprocessorStatus(_Strict):
+    """Health + queue-depth snapshot returned by ``GET /status``."""
+
+    schema_version: Literal["v1"] = "v1"
+
+    healthy: bool
+    uptime_seconds: float
+    model_versions: dict[str, str] = Field(default_factory=dict)
+    """e.g. ``{"yolo": "11x-2.1", "face": "arcface-r100-v3", ...}``"""
+
+    cameras_active: int
+    cameras_total: int
+    frame_windows_served_total: int
+    """Cumulative count of /frame_window calls answered since
+    process start. Useful for spotting traffic patterns + sizing
+    the buffer."""
+
+    actors_cached: int
+
+
+class KnobAdjustment(_Strict):
+    """A request to retune one preprocessor knob.
+
+    Posted to ``POST /tune`` by the feedback-loop subsystem when
+    VLM-reported quality issues indicate a pipeline knob is mis-set.
+    """
+
+    schema_version: Literal["v1"] = "v1"
+
+    knob_id: str
+    """Dotted path, e.g. ``face.match_threshold`` or
+    ``yolo.confidence_min``."""
+
+    new_value: float | str | bool
+    rationale: str = ""
+
+    scope_camera_id: str | None = None
+    """If set, applies only to this camera; None = global."""
+
+
+# ─── ActorEnrollment — INBOUND broadcast (memory → preprocessor) ─────
+
+
+class ActorEnrollmentEvent(_Strict):
+    """Published by the memory service when a KnownActor is enrolled,
+    updated, or deactivated.
+
+    Preprocessor subscribes to the three ``sentihome.memory.actor.*``
+    subjects to keep its in-process cache fresh. Carries the
+    embedding the preprocessor needs to do recognition.
+    """
+
+    schema_version: Literal["v1"] = "v1"
+
+    actor_id: str
+    action: Literal["enrolled", "updated", "deactivated"]
+
+    name: str | None = None
+    role: str | None = None
+    access_profile: str | None = None
+
+    face_embedding: tuple[float, ...] | None = None
+    """Length matches the face model output (512 for ArcFace R100;
+    placeholder 128 for in-memory testing). None for non-face actors
+    (pets, vehicles)."""
+
+    pet_dinov2_centroid: tuple[float, ...] | None = None
+    """DINOv2 patch-feature centroid for pet recognition."""
+
+    plate_text: str | None = None
+    """For KnownVehicle actors; the canonical plate fastALPR matches
+    against."""

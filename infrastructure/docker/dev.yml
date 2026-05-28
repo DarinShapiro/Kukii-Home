@@ -105,6 +105,56 @@ services:
       timeout: 3s
       retries: 5
 
+  # Neo4j 5.x — hybrid graph + native vector store. Replaces the
+  # postgres+qdrant split for memory per Epic 10. Pinned to the same
+  # image tag the testcontainers test fixture uses so dev and CI
+  # observe identical schema behavior.
+  #
+  # Endpoints:
+  #   http://localhost:7474  — Neo4j Browser (UI for hand-running Cypher)
+  #   bolt://localhost:7687  — driver protocol (what the services use)
+  #
+  # Default credentials: neo4j / sentihome. Override via
+  # NEO4J_AUTH env var. The schema lives in src/sentihome_memory and
+  # is applied lazily by Neo4jGraphClient.initialize_schema(); run
+  # any harness scenario or import-and-call to seed it.
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: sentihome-neo4j
+    environment:
+      # Format: 'user/password'. Override with NEO4J_AUTH=user/pass.
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/sentihome}
+      # Plugins: APOC is conventionally useful for ad-hoc admin Cypher.
+      # NEO4JLABS_PLUGINS uses Neo4j's auto-download manifest.
+      NEO4JLABS_PLUGINS: '["apoc"]'
+      # Reasonable dev-scale memory ceilings. Lower than prod defaults
+      # so the container plays nice on a laptop with other services up.
+      NEO4J_server_memory_pagecache_size: 512m
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1g
+      # Required for APOC procedures to be callable.
+      NEO4J_dbms_security_procedures_unrestricted: 'apoc.*'
+    ports:
+      - '7474:7474' # HTTP / Neo4j Browser
+      - '7687:7687' # Bolt driver protocol
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    networks:
+      - sentihome
+    healthcheck:
+      # cypher-shell ships with the image. Empty query verifies the
+      # DB is up and accepting auth.
+      test:
+        [
+          'CMD-SHELL',
+          'cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-sentihome} "RETURN 1" || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   # ───────────────────────────────────────────────────────────────
   # SentiHome services (implementation tracked in respective epics)
   # ───────────────────────────────────────────────────────────────
@@ -122,15 +172,67 @@ services:
       postgres:
         condition: service_healthy
 
+  # Recognition preprocessor (Epic 10). In production this lives on
+  # the inference box (4090 GPU); the dev-compose entry runs it next
+  # to the rest of the stack for fast iteration. Skeleton-phase: the
+  # fake-detection loop emits synthetic PreprocessorOutput events so
+  # the HA-side has a stream to consume without GPU/models present.
   preprocessor:
     <<: *python-service
     container_name: sentihome-preprocessor
     command: ['python', '-m', 'sentihome_preprocessor']
+    environment:
+      - SENTIHOME_ENV=dev
+      - NATS_URL=nats://nats:4222
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+      # Epic 10 preprocessor config (see services/preprocessor/src/
+      # sentihome_preprocessor/config.py for the full env contract).
+      #
+      # Two backends — flip via SENTIHOME_PREPROCESSOR_BACKEND:
+      #
+      #   "synthetic" (default): SyntheticFrameBuffer serves /frame_window
+      #     with deterministic stub frames. Zero external deps. Good
+      #     for HA-side wire validation without cameras.
+      #
+      #   "rtsp": Container runs as a mini-NVR. Per-camera PyAV tasks
+      #     pull H.264 sub-streams, JPEG-encode keyframes, hold them
+      #     in a 5-min rolling buffer. /frame_window serves real frames.
+      #     Requires one SENTIHOME_PREPROCESSOR_RTSP_<CAMERA_ID>=<url>
+      #     env var per camera (uppercase, non-alnum → underscore).
+      - SENTIHOME_PREPROCESSOR_NODE_ID=dev-local
+      - SENTIHOME_PREPROCESSOR_HTTP_HOST=0.0.0.0
+      - SENTIHOME_PREPROCESSOR_HTTP_PORT=8090
+      - SENTIHOME_PREPROCESSOR_EXTERNAL_URL=http://localhost:8090
+      - SENTIHOME_PREPROCESSOR_BACKEND=synthetic
+      - SENTIHOME_PREPROCESSOR_CAMERAS=front_porch,driveway_cam,backyard_cam
+      # Synthetic-backend knobs (no-ops when backend=rtsp):
+      - SENTIHOME_PREPROCESSOR_SYNTHETIC_FPS=2.0
+      - SENTIHOME_PREPROCESSOR_BUFFER_HORIZON_S=300
+      # RTSP-backend knobs (no-ops when backend=synthetic):
+      - SENTIHOME_PREPROCESSOR_CAPTURE_INTERVAL_S=1.0
+      - SENTIHOME_PREPROCESSOR_BUFFER_MAX_ENTRIES=1024
+      # Per-camera RTSP URLs (uncomment + fill when flipping to rtsp).
+      # H.264 sub-stream URLs work best — cheap to decode, sufficient
+      # for motion + general detection. Main-stream pulls are
+      # on-demand in Phase 10.4+.
+      # - SENTIHOME_PREPROCESSOR_RTSP_FRONT_PORCH=rtsp://user:pass@192.168.x.x:554/h264Preview_01_sub
+      # - SENTIHOME_PREPROCESSOR_RTSP_DRIVEWAY_CAM=rtsp://user:pass@192.168.x.x:554/cam/realmonitor?channel=1&subtype=1
+      # - SENTIHOME_PREPROCESSOR_RTSP_BACKYARD_CAM=rtsp://user:pass@192.168.x.x:554/...
+    ports:
+      - '8090:8090' # /healthz, /status, /tune, /actors/enroll
     depends_on:
       nats:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'python -c "import urllib.request; urllib.request.urlopen(\"http://localhost:8090/healthz\").read()"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   detector:
     <<: *python-service
@@ -152,9 +254,23 @@ services:
     <<: *python-service
     container_name: sentihome-memory
     command: ['python', '-m', 'sentihome_memory']
+    environment:
+      - SENTIHOME_ENV=dev
+      - NATS_URL=nats://nats:4222
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+      # Neo4j is the primary memory substrate per Epic 10.
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-sentihome}
     depends_on:
       nats:
         condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      # Postgres + Qdrant retained for now while pre-Epic-10 code paths
+      # migrate; safe to remove once the SQL/vector code is fully
+      # excised from services/memory.
       postgres:
         condition: service_healthy
       qdrant:
@@ -194,3 +310,5 @@ volumes:
   postgres-data:
   qdrant-data:
   redis-data:
+  neo4j-data:
+  neo4j-logs:

@@ -221,25 +221,44 @@ A self-contained service running 24/7 on the inference box. Internal pipeline is
 
 ### External contract
 
-One primary endpoint:
+One primary endpoint — **pull-based**. The preprocessor never broadcasts detection events; clients ask for a window when they need it (typically right after a TriggerEvent fires).
 
 ```
-GET /window?camera=<id>&from=<ts>&to=<ts>[&representative=<n>]
-  → 200 [
-      { ts, jpeg_url, detections: [...], identities: [...], plate?, embeddings_ref },
-      ...
-    ]
+GET /frame_window?camera_id=<id>&ts_start=<unix_s>&ts_end=<unix_s>[&enrich=true]
+  → 200 FrameWindow{
+      camera_id, ts_start, ts_end, preprocessor_node_id,
+      frames: [FrameRef{ts, uri, width, height, quality_score}, ...],
+      detections: [DetectionTag{kind, confidence, bbox, frame_ts, track_id}, ...],
+      actor_matches: [ActorMatch{actor_id, confidence, match_method, frame_ts, track_id}, ...],
+      enrichment_mode: "enriched" | "frames_only",
+      enrichment_latency_ms
+    }
 ```
 
-Optional `representative=N` returns N strategically-picked frames (earliest detection, T0, peak detection count, latest) rather than the full window.
+**Critical**: the preprocessor does NOT know about TriggerEvent. It sees only `(camera_id, ts_start, ts_end, enrich)`. The triage worker on the HA side maps the returned FrameWindow into an EnrichedEvent by adding event_id / trace_id / privacy_tier. Keeps the preprocessor reusable for non-event triggers too (proactive sweeps, debug calls, scheduled checks).
 
 Supporting endpoints:
 
 ```
-GET /capabilities                  → list of cameras + what the preprocessor can extract per camera
+GET /healthz                       → fast liveness probe
+GET /status                        → PreprocessorStatus (uptime, model versions, cameras_active, frame_windows_served_total, actors_cached)
 POST /tune                         → apply a KnobAdjustment (called by dispatcher's preprocessor tuner)
-GET /health                        → service health, model load status, buffer state
+POST /actors/enroll                → fall-back direct enrollment (canonical path is NATS broadcast)
 ```
+
+### NATS surface
+
+The preprocessor has **no outbound NATS traffic**. The only NATS use is **inbound** for one-to-many config-state broadcast from memory to preprocessor:
+
+```
+sentihome.memory.actor.enrolled     → ActorEnrollmentEvent
+sentihome.memory.actor.updated      → ActorEnrollmentEvent
+sentihome.memory.actor.deactivated  → ActorEnrollmentEvent
+```
+
+Memory publishes when a KnownActor changes; the preprocessor subscribes to keep its in-process identity cache fresh without an extra REST round-trip per request.
+
+> **Status (2026-05-27): Phase 10.1 + Phase 10.1.5 skeleton landed.** Wire contracts in `sentihome_shared.preprocessor` (FrameWindow, FrameRef, DetectionTag, ActorMatch, KnobAdjustment, ActorEnrollmentEvent, PreprocessorStatus — strict Pydantic, schema_version="v1"). Service in `services/preprocessor/` with FastAPI app + ActorEnrollmentSubscriber + a `FrameBufferBackend` Protocol holding either `SyntheticFrameBuffer` (CI / wire validation) or `RTSPFrameBuffer`+`RollingBuffer`+`CameraCaptureTask`s (real H.264 sub-stream NVR mode). Backend is config-driven via `SENTIHOME_PREPROCESSOR_BACKEND={synthetic|rtsp}`. `GET /frames/{camera_id}/{ts}.jpg` serves stored JPEG keyframes on demand. Per-camera PyAV tasks pull H.264 sub-streams with TCP transport + bounded exponential backoff on disconnect; JPEG-encoded keyframes held in a 5-min rolling buffer (~75 MB for 5 cameras). Real detection + recognition (YOLO11x, ArcFace, DINOv2, fastALPR) wire in Phase 10.3+ behind the unchanged `get_window` interface. Decoupling guard test enforces no HA-side imports. **108 tests green** (105 unit + 3 integration; 2 integration tests skip without ffmpeg on PATH). Dev compose stack exposes the service at `localhost:8090`. The container can now genuinely act as a mini-NVR for early dev without depending on Agent DVR being online.
 
 ### Source flexibility
 
