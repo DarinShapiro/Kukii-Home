@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 if TYPE_CHECKING:
+    from sentihome_ha_agent.camera_config_publisher import CameraConfigPublisher
     from sentihome_ha_agent.camera_loop import CameraLoopRegistry, HACameraLoop
     from sentihome_ha_agent.client import HAClient
     from sentihome_ha_agent.discovery import DiscoverySpec
@@ -81,10 +82,20 @@ class Reconciler:
         client: HAClient,
         alert_log: AlertLog,
         registry: CameraLoopRegistry,
+        camera_publisher: CameraConfigPublisher | None = None,
     ) -> None:
         self._client = client
         self._alert_log = alert_log
         self._registry = registry
+        self._camera_publisher = camera_publisher
+        """Optional NATS publisher (Epic 10.1.6.2). When provided,
+        every reconcile diff fans out as CameraConfigEvents to the
+        preprocessor — start/restart -> configured, stop -> removed
+        — so the preprocessor's camera set tracks the Web UI Enable
+        toggle in real time without an add-on restart. ``None``
+        (default / tests / standalone-without-preprocessor): events
+        aren't published; the Reconciler still manages HACameraLoops
+        as before."""
         self._running: dict[str, _RunningLoop] = {}
         self._apply_lock = asyncio.Lock()
 
@@ -130,6 +141,30 @@ class Reconciler:
                 diff.restarted.append(device_id)
             else:
                 diff.unchanged.append(device_id)
+
+        # Fan diff out to the preprocessor via NATS (best-effort —
+        # one camera's publish failure must not abort the loop
+        # lifecycle changes we just made locally).
+        if self._camera_publisher is not None:
+            for device_id in diff.started + diff.restarted:
+                spec = target_by_id[device_id]
+                try:
+                    await self._camera_publisher.publish_configured(spec)
+                except Exception as e:
+                    logger.warning(
+                        "reconciler.publish_configured_failed",
+                        device_id=device_id,
+                        error=str(e),
+                    )
+            for device_id in diff.stopped:
+                try:
+                    await self._camera_publisher.publish_removed(device_id)
+                except Exception as e:
+                    logger.warning(
+                        "reconciler.publish_removed_failed",
+                        device_id=device_id,
+                        error=str(e),
+                    )
 
         logger.info(
             "reconciler.applied",

@@ -53,10 +53,7 @@ def test_construct_rtsp_url_dahua_sub():
         password="Plain123",
         stream="sub",
     )
-    assert (
-        url
-        == "rtsp://admin:Plain123@192.168.1.21:554/cam/realmonitor?channel=1&subtype=1"
-    )
+    assert url == "rtsp://admin:Plain123@192.168.1.21:554/cam/realmonitor?channel=1&subtype=1"
 
 
 def test_construct_rtsp_url_escapes_password_special_chars():
@@ -128,9 +125,7 @@ async def test_json_provider_returns_url_for_known_device(tmp_path: Path):
         )
     )
     provider = JsonFileProvider(creds_path)
-    url = await provider.get_rtsp_url(
-        device_id="dev_reolink_front", vendor="reolink"
-    )
+    url = await provider.get_rtsp_url(device_id="dev_reolink_front", vendor="reolink")
     assert url == "rtsp://admin:ReoPass1@192.168.1.20:554/h264Preview_01_sub"
 
 
@@ -205,9 +200,7 @@ class _FixedProvider:
     def __init__(self, url: str | None) -> None:
         self._url = url
 
-    async def get_rtsp_url(
-        self, *, device_id: str, vendor: str | None
-    ) -> str | None:
+    async def get_rtsp_url(self, *, device_id: str, vendor: str | None) -> str | None:
         _ = device_id, vendor
         return self._url
 
@@ -276,9 +269,7 @@ async def test_publish_configured_with_resolvable_creds():
 
 @pytest.mark.asyncio
 async def test_publish_configured_without_creds_returns_false_and_does_not_publish():
-    pub = CameraConfigPublisher(
-        nats_url="nats://unused", creds=_FixedProvider(None)
-    )
+    pub = CameraConfigPublisher(nats_url="nats://unused", creds=_FixedProvider(None))
     pub._nc = _FakeNATS()
 
     spec = _SpecStub(
@@ -293,9 +284,7 @@ async def test_publish_configured_without_creds_returns_false_and_does_not_publi
 
 @pytest.mark.asyncio
 async def test_publish_removed_sends_removed_event():
-    pub = CameraConfigPublisher(
-        nats_url="nats://unused", creds=_FixedProvider(None)
-    )
+    pub = CameraConfigPublisher(nats_url="nats://unused", creds=_FixedProvider(None))
     pub._nc = _FakeNATS()
     await pub.publish_removed("dev_reolink_front")
     log = pub._nc.publish_log  # type: ignore[attr-defined]
@@ -310,24 +299,103 @@ async def test_publish_removed_sends_removed_event():
 
 @pytest.mark.asyncio
 async def test_publish_before_connect_raises():
-    pub = CameraConfigPublisher(
-        nats_url="nats://unused", creds=_FixedProvider("rtsp://x")
-    )
+    pub = CameraConfigPublisher(nats_url="nats://unused", creds=_FixedProvider("rtsp://x"))
     # _nc is None.
-    spec = _SpecStub(
-        device_id="x", camera_entity="camera.x", friendly_name="x"
-    )
+    spec = _SpecStub(device_id="x", camera_entity="camera.x", friendly_name="x")
     with pytest.raises(RuntimeError, match="before connect"):
         await pub.publish_configured(spec)
+
+
+# ─── StreamSourceAttrProvider ───────────────────────────────────────
+
+
+class _FakeHAState:
+    def __init__(self, attributes: dict) -> None:
+        self.attributes = attributes
+
+
+class _FakeHAClient:
+    """Minimal HAClient stand-in returning canned states by entity_id."""
+
+    def __init__(self, states: dict) -> None:
+        self._states = states  # entity_id -> _FakeHAState or None
+
+    async def get_state(self, entity_id: str):
+        return self._states.get(entity_id)
+
+
+@pytest.mark.asyncio
+async def test_stream_source_provider_returns_rtsp_when_present():
+    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+
+    client = _FakeHAClient(
+        {
+            "camera.reolink_front": _FakeHAState(
+                {"stream_source": "rtsp://admin:pw@1.2.3.4:554/h264Preview_01_sub"}
+            )
+        }
+    )
+    provider = StreamSourceAttrProvider(client)
+    provider.register(device_id="dev_reo", camera_entity="camera.reolink_front")
+
+    url = await provider.get_rtsp_url(device_id="dev_reo", vendor="reolink")
+    assert url == "rtsp://admin:pw@1.2.3.4:554/h264Preview_01_sub"
+
+
+@pytest.mark.asyncio
+async def test_stream_source_provider_rejects_hls_url():
+    """User explicitly rejected HLS in the data plane — even when HA
+    exposes one we don't use it; chain falls through."""
+    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+
+    client = _FakeHAClient(
+        {"camera.x": _FakeHAState({"stream_source": "http://192.168.1.20/stream/index.m3u8"})}
+    )
+    provider = StreamSourceAttrProvider(client)
+    provider.register(device_id="dev_x", camera_entity="camera.x")
+    assert await provider.get_rtsp_url(device_id="dev_x", vendor=None) is None
+
+
+@pytest.mark.asyncio
+async def test_stream_source_provider_returns_none_when_attr_missing():
+    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+
+    client = _FakeHAClient({"camera.x": _FakeHAState({"other_attr": "value"})})
+    provider = StreamSourceAttrProvider(client)
+    provider.register(device_id="dev_x", camera_entity="camera.x")
+    assert await provider.get_rtsp_url(device_id="dev_x", vendor=None) is None
+
+
+@pytest.mark.asyncio
+async def test_stream_source_provider_unknown_device_returns_none():
+    """Device wasn't registered -> no entity to look up. Return
+    None silently so the chain falls through."""
+    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+
+    provider = StreamSourceAttrProvider(_FakeHAClient({}))
+    assert await provider.get_rtsp_url(device_id="ghost", vendor=None) is None
+
+
+@pytest.mark.asyncio
+async def test_stream_source_provider_handles_ha_state_read_exception():
+    """HAClient raising (network blip) shouldn't kill the publisher —
+    just return None and let the chain try the next provider."""
+    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+
+    class _FailingClient:
+        async def get_state(self, entity_id: str):
+            raise RuntimeError("HA unreachable")
+
+    provider = StreamSourceAttrProvider(_FailingClient())
+    provider.register(device_id="dev_x", camera_entity="camera.x")
+    assert await provider.get_rtsp_url(device_id="dev_x", vendor=None) is None
 
 
 @pytest.mark.asyncio
 async def test_vendor_inferred_from_entity_name():
     """Reolink in the camera_entity -> vendor=reolink. Affects which
     template is picked + what's stamped on the event."""
-    pub = CameraConfigPublisher(
-        nats_url="nats://unused", creds=_FixedProvider("rtsp://x")
-    )
+    pub = CameraConfigPublisher(nats_url="nats://unused", creds=_FixedProvider("rtsp://x"))
     pub._nc = _FakeNATS()
 
     for cam_entity, friendly, expected_vendor in [

@@ -21,11 +21,18 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import structlog
 from aiohttp import web
 
+from sentihome_ha_agent.camera_config_publisher import (
+    CameraConfigPublisher,
+    ChainProvider,
+    JsonFileProvider,
+    StreamSourceAttrProvider,
+)
 from sentihome_ha_agent.camera_loop import (
     CameraLoop,
     CameraLoopRegistry,
@@ -119,6 +126,14 @@ class BootState:
     # resulting specs to `reconciler.apply()` — which starts/stops
     # HACameraLoops to match.
     reconciler: Reconciler | None = None
+    camera_publisher: CameraConfigPublisher | None = None
+    """Epic 10.1.6.3: NATS publisher that fans Reconciler diffs out
+    as CameraConfigEvents to the preprocessor. None when
+    PREPROCESSOR_PUBLISH_ENABLED is off (default) or when the NATS
+    connection fails — the reconciler still works locally."""
+    stream_source_provider: StreamSourceAttrProvider | None = None
+    """Held on boot so :func:`_reconcile_discovery` can register
+    each spec's device_id -> camera_entity mapping before publishing."""
     discovery_decisions: list[DiscoveryDecision] = field(default_factory=list)
     discovery_error: str | None = None
     auto_discover: bool = True
@@ -1493,6 +1508,15 @@ async def _reconcile_discovery(boot: BootState) -> None:
                     d.motion_switches = []
         boot.discovery_decisions = decisions
         target_specs = [d.spec for d in decisions if d.enabled and d.spec is not None]
+        # Register device_id -> camera_entity so the
+        # StreamSourceAttrProvider can look up `camera.X.stream_source`
+        # when the publisher resolves credentials. Done every reconcile
+        # so newly-enabled cameras are picked up immediately.
+        if boot.stream_source_provider is not None:
+            for spec in target_specs:
+                boot.stream_source_provider.register(
+                    device_id=spec.device_id, camera_entity=spec.camera_entity
+                )
         await boot.reconciler.apply(target_specs)
         boot.discovery_error = None
     except Exception as e:
@@ -1622,10 +1646,45 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
         # the lifecycle of HACameraLoops based on auto-picked specs +
         # per-device overrides edited from the Web UI.
         if boot.auto_discover:
+            # Epic 10.1.6.3: optional NATS publisher so the
+            # preprocessor's camera set tracks the Web UI Enable
+            # toggle in real time. Off by default
+            # (PREPROCESSOR_PUBLISH_ENABLED=1 to turn on). Failure
+            # to connect doesn't block reconciler boot — locally
+            # everything still works.
+            if os.environ.get("PREPROCESSOR_PUBLISH_ENABLED", "").lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            ):
+                stream_source = StreamSourceAttrProvider(client)
+                boot.stream_source_provider = stream_source
+                creds = ChainProvider(
+                    [
+                        stream_source,
+                        JsonFileProvider(Path("/data/sentihome/camera_rtsp_credentials.json")),
+                    ]
+                )
+                nats_url = os.environ.get("NATS_URL", "nats://nats:4222")
+                publisher = CameraConfigPublisher(nats_url=nats_url, creds=creds)
+                try:
+                    await publisher.connect()
+                    boot.camera_publisher = publisher
+                    logger.info("ha_agent.camera_publisher_wired", nats_url=nats_url)
+                except Exception as e:
+                    logger.warning(
+                        "ha_agent.camera_publisher_connect_failed",
+                        error=str(e),
+                        nats_url=nats_url,
+                        hint="reconciler will continue without publishing to the preprocessor",
+                    )
+
             boot.reconciler = Reconciler(
                 client=client,
                 alert_log=alert_log,
                 registry=boot.camera_registry,
+                camera_publisher=boot.camera_publisher,
             )
             await _reconcile_discovery(boot)
             # Periodic re-discovery picks up newly-added HA cameras

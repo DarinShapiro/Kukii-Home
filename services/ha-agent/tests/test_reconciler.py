@@ -220,3 +220,87 @@ async def test_reconciler_concurrent_applies_serialize():
     unchanged_total = sum(len(d.unchanged) for d in diffs)
     assert started_total == 1
     assert unchanged_total == 1
+
+
+# ─── Epic 10.1.6.3: CameraConfigPublisher integration ──────────────
+
+
+class _StubPublisher:
+    """Records publish_configured / publish_removed calls without
+    touching NATS."""
+
+    def __init__(self, fail_on: set[str] | None = None) -> None:
+        self.configured: list[str] = []
+        self.removed: list[str] = []
+        self._fail_on = fail_on or set()
+
+    async def publish_configured(self, spec) -> bool:
+        if spec.device_id in self._fail_on:
+            raise RuntimeError("simulated publish failure")
+        self.configured.append(spec.device_id)
+        return True
+
+    async def publish_removed(self, camera_id: str) -> None:
+        if camera_id in self._fail_on:
+            raise RuntimeError("simulated publish failure")
+        self.removed.append(camera_id)
+
+
+def _make_reconciler_with_publisher(publisher) -> Reconciler:
+    return Reconciler(
+        client=MagicMock(),
+        alert_log=MagicMock(record=MagicMock()),
+        registry=CameraLoopRegistry(),
+        camera_publisher=publisher,
+    )
+
+
+async def test_reconciler_publishes_configured_on_start():
+    pub = _StubPublisher()
+    rec = _make_reconciler_with_publisher(pub)
+    await _apply_with_fake_loop(
+        rec, [_spec(device_id="a"), _spec(device_id="b", camera_entity="camera.b_main")]
+    )
+    assert sorted(pub.configured) == ["a", "b"]
+    assert pub.removed == []
+
+
+async def test_reconciler_publishes_removed_on_stop():
+    pub = _StubPublisher()
+    rec = _make_reconciler_with_publisher(pub)
+    await _apply_with_fake_loop(
+        rec, [_spec(device_id="a"), _spec(device_id="b", camera_entity="camera.b_main")]
+    )
+    pub.configured.clear()
+    await _apply_with_fake_loop(rec, [_spec(device_id="a")])
+    assert pub.removed == ["b"]
+    # Existing "a" is unchanged: no re-publish.
+    assert pub.configured == []
+
+
+async def test_reconciler_publishes_configured_on_restart():
+    """Stream change -> restart -> publish_configured (no separate
+    removed event, since the camera_id is the same and the
+    preprocessor's subscriber treats configured as upsert)."""
+    pub = _StubPublisher()
+    rec = _make_reconciler_with_publisher(pub)
+    await _apply_with_fake_loop(rec, [_spec(device_id="a", camera_entity="camera.a_main")])
+    pub.configured.clear()
+    await _apply_with_fake_loop(rec, [_spec(device_id="a", camera_entity="camera.a_sub")])
+    assert pub.configured == ["a"]
+    assert pub.removed == []
+
+
+async def test_reconciler_publish_failure_does_not_abort_diff():
+    """A NATS publish exception is logged but doesn't unwind the
+    reconcile — local lifecycle state is the source of truth."""
+    pub = _StubPublisher(fail_on={"b"})
+    rec = _make_reconciler_with_publisher(pub)
+    diff = await _apply_with_fake_loop(
+        rec, [_spec(device_id="a"), _spec(device_id="b", camera_entity="camera.b_main")]
+    )
+    # Both loops started locally despite the b publish failing.
+    assert sorted(diff.started) == ["a", "b"]
+    assert rec.running_device_ids == {"a", "b"}
+    # Only "a" made it through the publisher.
+    assert pub.configured == ["a"]

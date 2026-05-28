@@ -42,6 +42,7 @@ from sentihome_shared.preprocessor import (
 )
 
 if TYPE_CHECKING:
+    from sentihome_ha_agent.client import HAClient
     from sentihome_ha_agent.discovery import DiscoverySpec
 
 logger = structlog.get_logger(__name__)
@@ -56,9 +57,7 @@ class CredentialsProvider(Protocol):
     fall back through HA attribute scrape -> config-entry parse ->
     operator-supplied JSON file)."""
 
-    async def get_rtsp_url(
-        self, *, device_id: str, vendor: str | None
-    ) -> str | None: ...
+    async def get_rtsp_url(self, *, device_id: str, vendor: str | None) -> str | None: ...
 
 
 # ─── Vendor URL templates ───────────────────────────────────────────
@@ -93,20 +92,80 @@ def construct_rtsp_url(
     """
     template_set = _VENDOR_TEMPLATES.get(vendor)
     if template_set is None:
-        raise ValueError(
-            f"Unknown vendor {vendor!r}; supported: {sorted(_VENDOR_TEMPLATES)}"
-        )
+        raise ValueError(f"Unknown vendor {vendor!r}; supported: {sorted(_VENDOR_TEMPLATES)}")
     template = template_set.get(stream)
     if template is None:
         raise ValueError(
-            f"Unknown stream {stream!r} for vendor {vendor!r}; "
-            f"supported: {sorted(template_set)}"
+            f"Unknown stream {stream!r} for vendor {vendor!r}; supported: {sorted(template_set)}"
         )
     return template.format(
         user=urlquote(user, safe=""),
         password=urlquote(password, safe=""),
         ip=ip,
     )
+
+
+# ─── StreamSourceAttr provider (HA-native, when available) ──────────
+
+
+class StreamSourceAttrProvider:
+    """Reads the camera entity's ``stream_source`` attribute via HA.
+
+    Some HA integrations (recent Reolink in particular) populate
+    ``camera.X.stream_source`` with the raw RTSP URL — credentials
+    and all. When that's present this is the cheapest credentials
+    source: no JSON file, no integration-private config-entry
+    scrape, just a state read.
+
+    Failure modes (all return None so the chain falls through to
+    the next provider):
+
+    * Entity not in state cache (HA hasn't reported it yet)
+    * ``stream_source`` attribute missing (integration doesn't
+      populate it — e.g. older Dahua, ONVIF, generic camera)
+    * Attribute is a placeholder like ``"hls://...``" or empty
+    """
+
+    def __init__(self, client: HAClient) -> None:
+        self._client = client
+        # Map from device_id (DiscoverySpec.device_id) to the
+        # camera entity_id. Built lazily — we don't have a stable
+        # device→entity mapping at construction time, so the caller
+        # registers as discovery runs. Simple in-memory dict; rebuilt
+        # on each discovery pass.
+        self._device_to_entity: dict[str, str] = {}
+
+    def register(self, *, device_id: str, camera_entity: str) -> None:
+        """Wire device_id -> camera_entity so :meth:`get_rtsp_url`
+        knows which HA state to look up. Discovery + the reconciler
+        call this as specs are produced."""
+        self._device_to_entity[device_id] = camera_entity
+
+    async def get_rtsp_url(self, *, device_id: str, vendor: str | None) -> str | None:
+        _ = vendor  # not needed — the URL is fully populated by HA
+        entity_id = self._device_to_entity.get(device_id)
+        if entity_id is None:
+            return None
+        try:
+            state = await self._client.get_state(entity_id)
+        except Exception as e:
+            logger.debug(
+                "camera_creds.ha_state_read_failed",
+                entity_id=entity_id,
+                error=str(e),
+            )
+            return None
+        if state is None:
+            return None
+        url = state.attributes.get("stream_source")
+        if not url or not isinstance(url, str):
+            return None
+        if not url.startswith(("rtsp://", "rtsps://")):
+            # HLS / HTTP / unknown — defer to the next provider in
+            # the chain. We rejected HLS upstream; not surfacing it
+            # here either.
+            return None
+        return url
 
 
 # ─── JSON file credentials source (v0 fallback) ─────────────────────
@@ -135,9 +194,7 @@ class JsonFileProvider:
     def __init__(self, path: Path) -> None:
         self._path = path
 
-    async def get_rtsp_url(
-        self, *, device_id: str, vendor: str | None
-    ) -> str | None:
+    async def get_rtsp_url(self, *, device_id: str, vendor: str | None) -> str | None:
         import json
 
         if not self._path.exists():
@@ -145,9 +202,7 @@ class JsonFileProvider:
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
         except Exception as e:
-            logger.warning(
-                "camera_creds.read_failed", path=str(self._path), error=str(e)
-            )
+            logger.warning("camera_creds.read_failed", path=str(self._path), error=str(e))
             return None
 
         entry = data.get(device_id)
@@ -182,9 +237,7 @@ class ChainProvider:
     def __init__(self, providers: list[CredentialsProvider]) -> None:
         self._providers = providers
 
-    async def get_rtsp_url(
-        self, *, device_id: str, vendor: str | None
-    ) -> str | None:
+    async def get_rtsp_url(self, *, device_id: str, vendor: str | None) -> str | None:
         for p in self._providers:
             url = await p.get_rtsp_url(device_id=device_id, vendor=vendor)
             if url is not None:
@@ -203,9 +256,7 @@ class CameraConfigPublisher:
     knows *how*.
     """
 
-    def __init__(
-        self, *, nats_url: str, creds: CredentialsProvider
-    ) -> None:
+    def __init__(self, *, nats_url: str, creds: CredentialsProvider) -> None:
         self._url = nats_url
         self._creds = creds
         self._nc: NATS | None = None
@@ -229,9 +280,7 @@ class CameraConfigPublisher:
         False when credentials weren't resolvable (the caller can
         decide whether to log + skip, or surface to the operator)."""
         vendor = _vendor_from_spec(spec)
-        stream_url = await self._creds.get_rtsp_url(
-            device_id=spec.device_id, vendor=vendor
-        )
+        stream_url = await self._creds.get_rtsp_url(device_id=spec.device_id, vendor=vendor)
         if stream_url is None:
             logger.warning(
                 "camera_publisher.no_creds",
@@ -270,9 +319,7 @@ class CameraConfigPublisher:
 
     async def _publish(self, subject: str, event: CameraConfigEvent) -> None:
         if self._nc is None or not self._nc.is_connected:
-            raise RuntimeError(
-                "CameraConfigPublisher.publish before connect"
-            )
+            raise RuntimeError("CameraConfigPublisher.publish before connect")
         await self._nc.publish(subject, event.model_dump_json().encode("utf-8"))
 
 
