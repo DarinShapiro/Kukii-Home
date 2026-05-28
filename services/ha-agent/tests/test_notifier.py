@@ -67,12 +67,14 @@ def test_render_basic_alert():
     assert data["image"] == "/api/camera_proxy/camera.dahuapoolcam_sub"
     # Per-camera dedup tag is always present.
     assert data["tag"] == "sentihome_dahuapoolcam"
-    # Epic 10.8.6: tap URL is the frontend panel route + alert hash.
-    # No /api/ path (those open an external browser → 401), no
-    # ingress token (browser-session-bound → 401).
-    assert data["url"] == "/app/a58a7de9_sentihome#alert=abc123"
-    assert data["clickAction"] == "/app/a58a7de9_sentihome#alert=abc123"
+    # Epic 10.8.6: tap URL is the BARE frontend panel route — exactly
+    # the form proven to open in-app on the phone. No /api/ path
+    # (external browser → 401), no ingress token (session-bound →
+    # 401), no hash (no reader yet).
+    assert data["url"] == "/app/a58a7de9_sentihome"
+    assert data["clickAction"] == "/app/a58a7de9_sentihome"
     assert "/api/" not in data["url"]
+    assert "#" not in data["url"]
 
 
 def test_render_tap_url_is_panel_route_not_ingress():
@@ -97,15 +99,13 @@ def test_render_omits_url_when_no_panel_base():
     assert "clickAction" not in data
 
 
-def test_render_tap_url_without_alert_id_is_bare_panel():
-    """A synthetic ping with no alert_id still gets a tappable URL —
-    just the panel root, no #alert hash."""
+def test_render_tap_url_is_bare_panel_route():
+    """The tap URL is the bare panel route regardless of alert_id —
+    no query, no hash. Exactly the URL proven to open in-app."""
     n, _ = _make_notifier([], panel_url_base="/app/x_sentihome")
-    alert = _alert()
-    alert.pop("alert_id")
-    _, _, data = n._render(alert)
+    _, _, data = n._render(_alert())
     assert data["url"] == "/app/x_sentihome"
-    assert "#alert" not in data["url"]
+    assert "#" not in data["url"] and "?" not in data["url"]
 
 
 def test_render_omits_image_when_no_camera_entity():
@@ -297,5 +297,5 @@ async def test_dispatch_sends_panel_url_to_ha():
     results = await n.test_send(_alert())
     assert results == [{"service": "notify.mobile_app_x", "ok": True, "error": None}]
     data = client.call_service.call_args.kwargs["data"]["data"]
-    assert data["url"] == "/app/a58a7de9_sentihome#alert=abc123"
+    assert data["url"] == "/app/a58a7de9_sentihome"
     assert "/api/" not in data["url"]

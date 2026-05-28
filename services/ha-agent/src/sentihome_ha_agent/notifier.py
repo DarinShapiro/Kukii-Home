@@ -262,20 +262,20 @@ class AlertNotifier:
         # authenticates for us) shows the recent-alerts list; the
         # user taps the specific alert there.
         #
-        # We append the alert id as a hash (``#alert=<id>``) as a
-        # forward hook: a later release can have the in-panel JS read
-        # it and jump straight to the alert. Today the hash is
-        # harmless if unread — the panel still opens to the list.
+        # Tap URL = the BARE panel route, exactly the form confirmed
+        # (via a Developer Tools → notify test) to open in-app and
+        # authenticated on the phone. We deliberately do NOT append a
+        # ``#alert=<id>`` hash yet: it would have no reader today, and
+        # shipping anything other than the proven URL is how this
+        # feature failed six times. Deep-link to the specific alert
+        # lands later as its own step — hash + an in-panel reader,
+        # tested together.
         #
         # When panel_url_base is empty (not under Supervisor / dev),
         # omit the tap URL entirely rather than emit a broken one.
-        alert_id = alert.get("alert_id") or alert.get("event_id")
         if self.panel_url_base:
-            tap_url = self.panel_url_base
-            if alert_id:
-                tap_url = f"{self.panel_url_base}#alert={alert_id}"
-            data["url"] = tap_url
-            data["clickAction"] = tap_url  # iOS Companion field name
+            data["url"] = self.panel_url_base
+            data["clickAction"] = self.panel_url_base  # iOS field name
 
         # v0.3.18 — high-priority delivery flags. SentiHome's portion
         # of notify latency is ~300ms (LAN → HA → return); the user-

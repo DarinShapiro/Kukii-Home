@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.29 — 2026-05-28
+
+**Ship the exact URL that was proven on the phone.**
+
+A 60-second Developer Tools → notify test confirmed that a
+notification with `clickAction: /app/<slug>` opens the SentiHome
+panel **in-app and authenticated** on the phone — no 401, no
+external browser. The notification tap problem (v0.3.15–27) is
+solved.
+
+v0.3.28 appended a `#alert=<id>` hash as a forward hook. The proven
+test used the **bare** `/app/<slug>`. Since the hash has no reader
+yet and "it's probably harmless" is what broke this six times,
+v0.3.29 ships the bare URL — byte-identical to what was tested.
+
+No functional difference from v0.3.28 for the tap; this just
+removes the one untested element. Deep-link to the *specific*
+alert (hash + an in-panel reader) is a separate, deliberately
+tested follow-up.
+
+Add-on only — no HA restart.
+
+---
+
 ## 0.3.28 — 2026-05-28
 
 **Notification tap finally works: point at the frontend panel route.**
