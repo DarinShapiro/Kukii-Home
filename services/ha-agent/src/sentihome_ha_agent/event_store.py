@@ -190,6 +190,56 @@ class EventStore:
             return False
         return True
 
+    def record_enrichment(
+        self,
+        event_id: str,
+        *,
+        detections: list[dict[str, Any]] | None = None,
+        identified_entities: list[dict[str, Any]] | None = None,
+        actor_matches: list[dict[str, Any]] | None = None,
+        annotated_jpeg: bytes | None = None,
+    ) -> bool:
+        """Fold preprocessor recognition into an existing event (Epic
+        10.9).
+
+        Called by :class:`AlertEnricher` after the preprocessor
+        returns a FrameWindow for the alert's camera + time. Merges
+        the detection/identity fields into ``meta.json`` and, when an
+        annotated frame is supplied, writes it as ``annotated.jpg``
+        (the per-alert page serves that in preference to the raw
+        snapshot). Each field is only overwritten when a non-None
+        value is passed, so a partial enrichment doesn't blank out
+        what's already there.
+
+        Returns False for unknown events (the event dir is written
+        synchronously at alert time, before this async enrichment
+        runs, so a missing dir signals a real ordering bug).
+        """
+        event_dir = self._dir_for(event_id)
+        meta_path = event_dir / "meta.json"
+        if not meta_path.exists():
+            logger.warning("event_store.enrich_unknown_event", event_id=event_id)
+            return False
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if detections is not None:
+                meta["detections"] = detections
+            if identified_entities is not None:
+                meta["identified_entities"] = identified_entities
+            if actor_matches is not None:
+                meta["actor_matches"] = actor_matches
+            from datetime import UTC, datetime
+
+            meta["enriched"] = True
+            meta["enriched_at"] = datetime.now(UTC).isoformat()
+            self._write_meta(event_dir, meta)
+            if annotated_jpeg:
+                (event_dir / "annotated.jpg").write_bytes(annotated_jpeg)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("event_store.enrich_write_failed", event_id=event_id, error=str(e))
+            return False
+        return True
+
     def mark_dismissed(self, event_id: str) -> bool:
         """Tag the event as user-dismissed.
 

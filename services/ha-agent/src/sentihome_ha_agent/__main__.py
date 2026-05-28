@@ -44,6 +44,7 @@ from sentihome_ha_agent.camera_loop import (
 from sentihome_ha_agent.client import HAClient, HAClientSettings
 from sentihome_ha_agent.config import HAAgentSettings
 from sentihome_ha_agent.discovery import DiscoveryDecision, build_decisions
+from sentihome_ha_agent.enricher import AlertEnricher
 from sentihome_ha_agent.event_store import EventStore
 from sentihome_ha_agent.http_api import AlertLog, HAAgentAPI
 from sentihome_ha_agent.mcp_tools import HATools
@@ -58,6 +59,7 @@ from sentihome_ha_agent.overrides import (
     save_overrides,
     set_device_override,
 )
+from sentihome_ha_agent.preprocessor_client import PreprocessorClient
 from sentihome_ha_agent.reconciler import Reconciler
 from sentihome_ha_agent.supervisor import (
     get_ingress_url_prefix,
@@ -171,6 +173,14 @@ class BootState:
     the SentiHome panel IN-APP with the user's session (never 401s,
     unlike the /api/ and ingress-token URLs we tried in v0.3.15-27).
     Empty when not under Supervisor."""
+    preprocessor_client: PreprocessorClient | None = None
+    """Epic 10.9: HTTP client to the preprocessor (inference box).
+    None when SENTIHOME_PREPROCESSOR_URL isn't set. Held so its
+    httpx session can be closed cleanly at shutdown."""
+    enricher: AlertEnricher | None = None
+    """Epic 10.9: AlertEnricher subscribed to AlertLog. Pulls
+    recognition for each alert from the preprocessor and folds it
+    into the stored event. None when no preprocessor is configured."""
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -494,6 +504,8 @@ def _render_alert_page(event: dict[str, Any], event_id: str) -> str:
         "</div></div>"
         # Flash banners.
         + flash_html
+        # Rule that fired (Epic 10.9 Part A).
+        + _render_trigger_card(event)
         # Identities + detections.
         + "<section class='card'><h2>Identities</h2>"
         + identity_html
@@ -520,6 +532,30 @@ def _render_alert_page(event: dict[str, Any], event_id: str) -> str:
         + ("" if feedback else _render_fp_form(safe_id))
         + "</body></html>"
     )
+
+
+def _render_trigger_card(event: dict[str, Any]) -> str:
+    """The rule/sensor that fired this alert (Epic 10.9 Part A).
+
+    Surfaces *why* the user got pinged — the HA AI classification
+    (person / vehicle / animal) and the underlying binary_sensor
+    entity — so the alert page explains itself before any
+    preprocessor enrichment lands. Omitted entirely for alerts with
+    no trigger info (shouldn't happen for HA-camera alerts, but keeps
+    synthetic/legacy alerts clean)."""
+    classification = event.get("sensor_classification")
+    sensor = event.get("triggering_sensor")
+    if not classification and not sensor:
+        return ""
+    bits = []
+    if classification:
+        label = html.escape(str(classification).replace("_", " ").title(), quote=True)
+        bits.append(f"<strong>{label}</strong> detected")
+    else:
+        bits.append("Motion detected")
+    if sensor:
+        bits.append(f"by <code>{html.escape(str(sensor), quote=True)}</code>")
+    return f"<section class='card'><h2>Triggered by</h2><p>{' '.join(bits)}</p></section>"
 
 
 def _render_identity_strip(identities: list[dict[str, Any]]) -> str:
@@ -2093,6 +2129,27 @@ async def _run() -> None:
     event_store = EventStore(root=Path("/data/sentihome/events"))
     alert_log.add_on_record(event_store.record_from_alert)
 
+    # Epic 10.9: enrich alerts with preprocessor recognition. When a
+    # preprocessor URL is configured, every recorded alert triggers an
+    # async pull of that camera's FrameWindow (detections + identified
+    # entities + annotated frame) which is folded into the event. The
+    # callback is registered AFTER event_store.record_from_alert so the
+    # event directory already exists when record_enrichment runs.
+    # Unconfigured (no inference box reachable) → simply skipped; alerts
+    # keep their HA snapshot + rule-that-fired.
+    preprocessor_url = os.environ.get("SENTIHOME_PREPROCESSOR_URL", "").strip()
+    if preprocessor_url:
+        boot.preprocessor_client = PreprocessorClient(preprocessor_url)
+        enricher = AlertEnricher(client=boot.preprocessor_client, event_store=event_store)
+        alert_log.add_on_record(enricher.on_alert)
+        boot.enricher = enricher
+        logger.info("ha_agent.enricher_wired", preprocessor_url=preprocessor_url)
+    else:
+        logger.info(
+            "ha_agent.enricher_disabled",
+            hint="set SENTIHOME_PREPROCESSOR_URL to enrich alerts with recognition",
+        )
+
     # Bring the HTTP server up FIRST. If this fails, there's a real
     # network-level problem (port in use, no interface, etc.) and there's
     # nothing the status page can do about it.
@@ -2110,9 +2167,7 @@ async def _run() -> None:
     from sentihome_ha_agent import __version__ as _pkg_version
     from sentihome_ha_agent.discovery_publish import publish_sentihome
 
-    boot.discovery_handle = publish_sentihome(
-        port=LISTEN_PORT, version=_pkg_version
-    )
+    boot.discovery_handle = publish_sentihome(port=LISTEN_PORT, version=_pkg_version)
 
     # Now do the rest in the background. Any failure surfaces on the page.
     bootstrap_task = asyncio.create_task(_bootstrap_topology_and_ha(boot, alert_log=alert_log))
@@ -2134,6 +2189,8 @@ async def _run() -> None:
         await runner.cleanup()
         if boot.client is not None:
             await boot.client.stop()
+        if boot.preprocessor_client is not None:
+            await boot.preprocessor_client.close()
 
 
 def main() -> None:

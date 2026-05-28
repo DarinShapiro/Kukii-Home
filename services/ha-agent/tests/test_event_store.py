@@ -113,6 +113,57 @@ def test_record_from_alert_treats_dotdot_in_id_safely(tmp_path: Path):
     assert store.get(bad_id) is not None
 
 
+# ─── record_enrichment (Epic 10.9) ──────────────────────────────────
+
+
+def test_record_enrichment_merges_detections_and_identities(tmp_path: Path):
+    store = _store(tmp_path)
+    store.record_from_alert(_alert("a1"))
+    ok = store.record_enrichment(
+        "a1",
+        detections=[{"kind": "person", "confidence": 0.9}],
+        identified_entities=[{"actor_name": "Alice", "identity_method": "face_arcface"}],
+        actor_matches=[{"actor_id": "alice", "match_method": "face_arcface"}],
+    )
+    assert ok is True
+    meta = store.get("a1")
+    assert meta is not None
+    assert meta["detections"][0]["kind"] == "person"
+    assert meta["identified_entities"][0]["actor_name"] == "Alice"
+    assert meta["actor_matches"][0]["actor_id"] == "alice"
+    assert meta["enriched"] is True
+    assert "enriched_at" in meta
+
+
+def test_record_enrichment_writes_annotated_jpeg(tmp_path: Path):
+    store = _store(tmp_path)
+    store.record_from_alert(_alert("a1"))
+    assert store.frame_path("a1", annotated=True) is None  # none yet
+    store.record_enrichment("a1", annotated_jpeg=b"\xff\xd8\xff\xd9ANNOTATED")
+    annotated = store.frame_path("a1", annotated=True)
+    assert annotated is not None
+    assert annotated.read_bytes() == b"\xff\xd8\xff\xd9ANNOTATED"
+
+
+def test_record_enrichment_partial_does_not_blank_existing(tmp_path: Path):
+    """Passing only detections must not wipe identified_entities that
+    a prior enrichment (or the original alert) already set."""
+    store = _store(tmp_path)
+    store.record_from_alert(_alert("a1", identified_entities=[{"actor_name": "Bob"}]))
+    store.record_enrichment("a1", detections=[{"kind": "dog", "confidence": 0.8}])
+    meta = store.get("a1")
+    assert meta["detections"][0]["kind"] == "dog"
+    # Untouched because we passed identified_entities=None (the default).
+    assert meta["identified_entities"][0]["actor_name"] == "Bob"
+
+
+def test_record_enrichment_returns_false_for_unknown_event(tmp_path: Path):
+    store = _store(tmp_path)
+    assert store.record_enrichment("ghost", detections=[]) is False
+    # No orphan dir/file created for the unknown id.
+    assert not (tmp_path / "events" / "ghost").exists()
+
+
 # ─── get ────────────────────────────────────────────────────────────
 
 

@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.3.30 — 2026-05-28
+
+**Alerts get enriched with recognition (Epic 10.9).**
+
+When HA's AI motion sensor fires, the add-on records an alert with a
+camera snapshot — but until now it had no idea *who or what* set it
+off. The preprocessor (inference box) has been quietly buffering RTSP
+frames for the same cameras and running YOLO + face / body-ID / pet
+recognition over them. This release closes the loop.
+
+Two parts:
+
+- **Rule that fired** (always on): the per-alert page now opens with a
+  "Triggered by" card — the HA classification (Person / Vehicle /
+  Animal) and the underlying `binary_sensor` that latched. The alert
+  explains itself before any enrichment lands.
+
+- **Recognition enrichment** (when a preprocessor is configured): each
+  recorded alert fires an async pull of that camera's frame window
+  around the event time. Detections, identified entities (Alice / Rex
+  / "Bob's truck"), and a boxes-drawn annotated frame are folded into
+  the stored event — so the page's Identities/Detections sections and
+  the annotated hero image light up automatically.
+
+  Set the new **`preprocessor_url`** option (e.g.
+  `http://192.168.68.50:8090`) to your inference box. Leave it blank
+  if you don't run a separate preprocessor — alerts still fire with
+  the HA snapshot + rule.
+
+Fully graceful: a sleeping/unreachable inference box, an empty window,
+or a parse error simply leaves the alert with its HA snapshot. The
+notification path is never blocked on the network round-trip
+(fire-and-forget, exactly like the notifier).
+
+Add-on only — no HA restart.
+
+---
+
 ## 0.3.29 — 2026-05-28
 
 **Ship the exact URL that was proven on the phone.**

@@ -112,6 +112,29 @@ async def test_alert_page_shows_detection_summary(setup):
     assert "x 2" in text
 
 
+async def test_alert_page_shows_rule_that_fired(setup):
+    """Epic 10.9 Part A: the page surfaces WHY it fired — the HA AI
+    classification + the triggering binary_sensor entity."""
+    client, alert_log, _, _ = setup
+    alert_log.record(_alert(triggering_sensor="binary_sensor.front_porch_person"))
+    resp = await client.get("/alert/evt1")
+    text = await resp.text()
+    assert "Triggered by" in text
+    # Classification rendered title-cased.
+    assert "Person" in text
+    # Underlying sensor entity surfaced for the curious / debugging.
+    assert "binary_sensor.front_porch_person" in text
+
+
+async def test_alert_page_omits_trigger_card_without_trigger_info(setup):
+    """No classification + no sensor → no empty 'Triggered by' card."""
+    client, alert_log, _, _ = setup
+    alert_log.record(_alert(sensor_classification=None, triggering_sensor=None))
+    resp = await client.get("/alert/evt1")
+    text = await resp.text()
+    assert "Triggered by" not in text
+
+
 async def test_alert_page_shows_vlm_not_yet_analyzed_when_none(setup):
     """The VLM hook is reserved in the schema but not populated
     yet — page should say so explicitly so a debugging operator

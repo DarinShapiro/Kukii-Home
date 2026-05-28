@@ -17,6 +17,12 @@ export SENTIHOME_CONFIG="$OPTIONS_FILE"
 LOG_LEVEL="$(jq -r '.log_level // "INFO"' "$OPTIONS_FILE")"
 echo "$LOG_LEVEL" > /var/run/s6/container_environment/LOG_LEVEL
 
+# Epic 10.9: preprocessor (inference box) URL. When set, the ha-agent
+# enriches each alert with the preprocessor's recognition. Empty/absent
+# -> enrichment is simply skipped (alerts keep the HA snapshot + rule).
+PREPROCESSOR_URL="$(jq -r '.preprocessor_url // ""' "$OPTIONS_FILE")"
+echo "$PREPROCESSOR_URL" > /var/run/s6/container_environment/SENTIHOME_PREPROCESSOR_URL
+
 # When Supervisor injects a token, expose it under both the HA_TOKEN and
 # SUPERVISOR_TOKEN names so the topology loader and the ha-agent both
 # pick it up regardless of which one they look for.
