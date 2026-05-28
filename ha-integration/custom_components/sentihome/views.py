@@ -34,29 +34,93 @@ before merging — so ``<id>/frame.jpg`` from
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.helpers.network import async_sign_path
 
 if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+
     from .api_client import SentiHomeAPIClient
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def register_alert_views(hass, client: SentiHomeAPIClient) -> None:
+# How long a signed alert URL stays tap-able after the notification
+# fires. Long enough for "I'll check when I get home" but not
+# permanent — if a phone is compromised days later, old notification
+# URLs eventually expire.
+_SIGN_EXPIRATION = timedelta(hours=24)
+
+
+def register_alert_views(hass: HomeAssistant, client: SentiHomeAPIClient) -> None:
     """Register all per-alert HTTP views on HA's HTTP component.
 
     Idempotent enough for the integration's setup_entry flow — HA
     raises on duplicate registration, which we let propagate (a
     duplicate registration is a real bug, not something to swallow).
     """
+    hass.http.register_view(SignURLView(hass))
     hass.http.register_view(AlertPageView(client))
     hass.http.register_view(AlertFrameView(client))
     hass.http.register_view(AlertAnnotatedView(client))
     hass.http.register_view(AlertDismissView(client))
     hass.http.register_view(AlertFeedbackView(client))
+
+
+# ─── URL signing helper ─────────────────────────────────────────────
+
+
+class SignURLView(HomeAssistantView):
+    """Epic 10.8.5: returns a signed version of an /api/sentihome/...
+    path so notification taps work in the HA Companion app's webview.
+
+    Problem: the Companion app's notification tap loads URLs in an
+    in-app webview using SESSION COOKIES from the user's HA login.
+    That cookie is bound to the browser session, not the mobile-app
+    session, so /api/sentihome/* requests fail auth (401 with
+    "Login attempt failed").
+
+    Fix: HA's signed-path mechanism. ``async_sign_path`` returns a
+    URL with a ``?authSig=<jwt>`` query token that HA's auth
+    middleware accepts in place of cookie/bearer auth. Same pattern
+    /api/camera_proxy/ uses for its notification image attachments.
+
+    Caller (the add-on's notifier) hits this view with its
+    Supervisor token to obtain a signed URL, then embeds the result
+    in the notification's ``data.url``. The mobile app fetches the
+    signed URL; HA validates the JWT; no cookie needed.
+
+    URL: GET /api/sentihome/sign?path=/api/sentihome/alert/<id>
+    Returns: {"signed_url": "/api/sentihome/alert/<id>?authSig=<jwt>"}
+    """
+
+    url = "/api/sentihome/sign"
+    name = "api:sentihome:sign"
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self._hass = hass
+
+    async def get(self, request: web.Request) -> web.Response:
+        path = request.query.get("path", "")
+        # Sanity: only sign /api/sentihome/* paths. Don't become a
+        # general-purpose signer for arbitrary HA routes — that
+        # would be a credential-elevation primitive.
+        if not path.startswith("/api/sentihome/"):
+            return web.json_response(
+                {"error": "path must start with /api/sentihome/"}, status=400
+            )
+        try:
+            signed = async_sign_path(
+                self._hass, path, expiration=_SIGN_EXPIRATION
+            )
+        except Exception as e:
+            _LOGGER.warning("sentihome.sign_url_failed path=%s error=%s", path, e)
+            return web.json_response({"error": str(e)}, status=500)
+        return web.json_response({"signed_url": signed})
 
 
 # ─── HTML page ──────────────────────────────────────────────────────

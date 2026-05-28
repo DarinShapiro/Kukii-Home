@@ -296,3 +296,59 @@ async def test_test_send_with_no_services_returns_empty():
     n, _ = _make_notifier([])
     results = await n.test_send(_alert())
     assert results == []
+
+
+# ─── Epic 10.8.5: signed URL flow ────────────────────────────────────
+
+
+async def test_dispatch_signs_alert_url_via_client():
+    """The dispatch path should call client.sign_url with the alert's
+    /api/sentihome/alert/<id> path and use the signed result in
+    data.url + data.clickAction (replacing the unsigned placeholder
+    that _render emits)."""
+    n, client = _make_notifier(["notify.mobile_app_x"])
+    client.sign_url = AsyncMock(
+        return_value="/api/sentihome/alert/abc123?authSig=JWT_FAKE"
+    )
+    results = await n.test_send(_alert())
+    # Service was called.
+    assert results == [{"service": "notify.mobile_app_x", "ok": True, "error": None}]
+    # Sign helper hit once with the right path.
+    client.sign_url.assert_called_once_with("/api/sentihome/alert/abc123")
+    # The notify payload sent to HA had the SIGNED url.
+    call_args = client.call_service.call_args
+    data = call_args.kwargs["data"]["data"]
+    assert data["url"] == "/api/sentihome/alert/abc123?authSig=JWT_FAKE"
+    assert data["clickAction"] == "/api/sentihome/alert/abc123?authSig=JWT_FAKE"
+    # The internal _sentihome_alert_id placeholder is gone — never
+    # leaked to HA.
+    assert "_sentihome_alert_id" not in data
+
+
+async def test_dispatch_falls_back_to_unsigned_when_sign_fails():
+    """If client.sign_url returns None (integration not loaded,
+    HA restarting, etc.), the notification still fires — just with
+    the unsigned URL. Logs warn so we can diagnose."""
+    n, client = _make_notifier(["notify.mobile_app_x"])
+    client.sign_url = AsyncMock(return_value=None)
+    await n.test_send(_alert())
+    call_args = client.call_service.call_args
+    data = call_args.kwargs["data"]["data"]
+    # Unsigned URL stays in place — tap will likely 401, but at
+    # least the notification reaches the phone with a debuggable URL.
+    assert data["url"] == "/api/sentihome/alert/abc123"
+    assert "authSig" not in data["url"]
+
+
+async def test_dispatch_signs_fp_action_button_uri_too():
+    """The FP lock-screen action's uri also needs the signed form
+    (with #fp anchor preserved). Otherwise tapping False Positive
+    from the lock screen would 401."""
+    n, client = _make_notifier(["notify.mobile_app_x"])
+    client.sign_url = AsyncMock(
+        return_value="/api/sentihome/alert/abc123?authSig=JWT"
+    )
+    await n.test_send(_alert())
+    data = client.call_service.call_args.kwargs["data"]["data"]
+    fp_action = next(a for a in data["actions"] if a["action"] == "SENTIHOME_FP")
+    assert fp_action["uri"] == "/api/sentihome/alert/abc123?authSig=JWT#fp"

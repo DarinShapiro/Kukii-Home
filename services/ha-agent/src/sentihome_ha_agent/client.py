@@ -216,6 +216,39 @@ class HAClient:
 
     # ─── REST: service calls ───────────────────────────────────────
 
+    async def sign_url(self, path: str) -> str | None:
+        """Ask the SentiHome integration to sign a /api/sentihome/...
+        path for use in notification tap actions. Epic 10.8.5.
+
+        Returns the signed URL (with ``?authSig=<jwt>`` appended)
+        that the HA Companion app can fetch without needing a
+        session cookie — the JWT in the query string substitutes
+        for the cookie HA's middleware would otherwise require.
+
+        Returns ``None`` when the integration isn't installed /
+        responding. Caller falls back to the unsigned URL (which
+        won't auth-bypass but is still informative for debugging).
+        """
+        try:
+            resp = await self._http.get(
+                "/api/sentihome/sign", params={"path": path}
+            )
+        except httpx.HTTPError as e:
+            logger.warning("ha_client.sign_url_failed", path=path, error=str(e))
+            return None
+        if resp.status_code >= 400:
+            logger.warning(
+                "ha_client.sign_url_http_error",
+                path=path,
+                status=resp.status_code,
+                body=resp.text[:200],
+            )
+            return None
+        try:
+            return resp.json().get("signed_url")
+        except json.JSONDecodeError:
+            return None
+
     async def call_service(
         self,
         domain: str,

@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.3.26 — 2026-05-28
+
+**Real fix for notification 401: HA signed-path URLs (Epic 10.8.5).**
+
+User tested v0.3.25 and the notification tap still 401'd. HA's
+log showed "Login attempt or request with invalid authentication
+from <phone-IP>." Root cause: the HA Companion app's notification
+tap loads URLs in an in-app webview using SESSION COOKIES, not
+bearer tokens. My v0.3.23 assumption that `/api/*` would accept
+bearer auth from the Companion was incomplete — bearer works for
+explicit REST calls the app makes, but the URL-tap path uses
+cookies, and the cookie isn't valid for arbitrary phone IPs.
+
+Fix: HA's **signed-path** mechanism. Same pattern
+`/api/camera_proxy/` uses for the notification image
+attachments — that's why those have always worked while our
+own paths didn't.
+
+### How it works
+
+1. Integration (v0.3.1) registers a new `SignURLView` at
+   `/api/sentihome/sign?path=...` that calls HA's
+   `async_sign_path` helper to produce a URL with `?authSig=<jwt>`
+   appended. 24-hour expiration.
+2. Add-on, when building each notification, makes an HTTP call to
+   that view and uses the signed URL in `data.url`,
+   `data.clickAction`, and all action button `uri` fields.
+3. HA's auth middleware sees the JWT in the URL and accepts it
+   in place of a session cookie. No cookie needed → no IP-bound
+   auth issue → tap works.
+
+### What's signed
+
+* The main tap URL
+* iOS lock-screen action buttons (Dismiss / Open / False positive
+  — FP keeps its `#fp` anchor for the form scroll-to)
+
+### What's NOT changed
+
+The image attachment (`data.image = /api/camera_proxy/...`) keeps
+working as before — HA's camera_proxy uses signed paths internally
+when emitting URLs to the Companion. Our handling now matches that
+pattern.
+
+### Failure mode (logged at warning)
+
+If the integration's sign view is unreachable (HA still
+restarting, integration not yet loaded), the notification fires
+with the unsigned URL. Tap will 401 (same as v0.3.25), but the
+notification body + image still work. Logs say
+`notifier.url_unsigned ... Restart HA Core if persistent
+notification asked you to.`
+
+### Testing
+
+24/24 notifier tests pass, including 3 new tests for the sign
+flow + the FP action signing + the unsigned fallback.
+
+---
+
 ## 0.3.25 — 2026-05-28
 
 **Fix: stop auto-restarting HA Core (Epic 10.8.4 follow-up).**

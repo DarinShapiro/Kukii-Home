@@ -102,6 +102,12 @@ class AlertNotifier:
         them in the UI). Shared so the two paths can't diverge.
         """
         title, message, data = self._render(alert)
+        # Epic 10.8.5: sign the tap-URL via the integration's
+        # /api/sentihome/sign helper. The Companion app's webview
+        # uses session cookies — signed URLs let us auth-bypass
+        # via the JWT in the query string (same trick HA's
+        # /api/camera_proxy/ uses for notification images).
+        await self._maybe_sign_alert_url(data)
         # Concurrent fan-out — one slow/failing service can't block
         # another. return_exceptions so we collect rather than raise.
         results = await asyncio.gather(
@@ -142,6 +148,55 @@ class AlertNotifier:
         if data:
             body["data"] = data
         await self.client.call_service(domain, svc, data=body)
+
+    async def _maybe_sign_alert_url(self, data: dict[str, Any]) -> None:
+        """Replace the placeholder /api/sentihome/alert/<id> URL in
+        ``data`` with a signed version (``?authSig=<jwt>``) HA's
+        auth middleware accepts in place of a session cookie.
+
+        The HA Companion app's notification-tap webview uses the
+        user's session cookie, not bearer auth. Cookies don't
+        propagate cleanly to all phone IPs (we saw "Login attempt
+        failed from <phone-IP>" in HA logs). Signed paths work
+        because the JWT travels in the URL itself; same pattern
+        /api/camera_proxy/ uses for the image attachment.
+
+        Failure mode: if the integration's sign-url view doesn't
+        respond (e.g. user hasn't restarted HA yet to load the new
+        views), we leave the URL unsigned. The tap will 401 like
+        v0.3.23, but everything else still works. Logged at warning.
+        """
+        alert_id = data.pop("_sentihome_alert_id", None)
+        if not alert_id:
+            return
+        path = f"/api/sentihome/alert/{alert_id}"
+        try:
+            signed = await self.client.sign_url(path)
+        except Exception as e:
+            logger.warning("notifier.sign_url_failed", error=str(e))
+            signed = None
+        if not signed:
+            # Leave the unsigned URL in place. Tap likely fails
+            # until the integration's sign view is reachable.
+            logger.warning(
+                "notifier.url_unsigned",
+                alert_id=alert_id,
+                hint=(
+                    "Integration may not be loaded yet. Restart HA "
+                    "Core if persistent notification asked you to."
+                ),
+            )
+            return
+        data["url"] = signed
+        data["clickAction"] = signed
+        # The FP action button's uri also needs the signed form +
+        # the #fp anchor preserved.
+        if "actions" in data:
+            for action in data["actions"]:
+                if action.get("action") == "SENTIHOME_FP":
+                    action["uri"] = f"{signed}#fp"
+                else:
+                    action["uri"] = signed
 
     def _render(self, alert: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
         """Build (title, message, data) for the HA notify payload.
@@ -250,22 +305,25 @@ class AlertNotifier:
         # * v0.3.20-22: ingress URL re-tried → 401 again, as
         #   predicted by v0.3.15.
         #
-        # Current strategy (Epic 10.8.3): /api/sentihome/alert/<id>.
-        # This is registered as a HomeAssistantView in the custom
-        # integration; HA's auth middleware accepts the Companion
-        # app's bearer token for /api/* paths. The view proxies to
-        # the add-on's /alert/<id> endpoint internally — Companion
-        # never talks to the add-on directly, so the ingress-auth
-        # mismatch never arises.
+        # Current strategy (Epic 10.8.5): /api/sentihome/alert/<id>
+        # SIGNED via the integration's sign-url helper. HA Companion
+        # app loads notification URLs in an in-app webview using
+        # session cookies, not bearer tokens — so plain /api/* paths
+        # 401 (v0.3.23 lesson). The signed URL has ?authSig=<jwt>
+        # which HA's auth middleware accepts in place of the cookie.
         #
-        # Requires the SentiHome custom integration to be installed
-        # AND a config entry to exist. Without those views aren't
-        # registered and the URL 404s. (Setup is automatic — the
-        # integration ships with the add-on.)
+        # Signing is async + requires an HTTP call to HA, so it
+        # happens in _dispatch_capture before the notify service
+        # call. _render just stamps a placeholder url; the actual
+        # signing rewrites data['url'] + data['clickAction'] later.
+        # See _maybe_sign_alert_url.
         alert_id = alert.get("alert_id") or alert.get("event_id")
         if alert_id:
             data["url"] = f"/api/sentihome/alert/{alert_id}"
             data["clickAction"] = data["url"]  # iOS Companion field
+            # Tag the alert_id on data so _dispatch_capture can find
+            # it cheaply when signing.
+            data["_sentihome_alert_id"] = alert_id
 
         # iOS Companion app supports up to 4 action buttons on a
         # notification (lock-screen long-press or notification expand).
