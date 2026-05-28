@@ -1,0 +1,61 @@
+# Example fixture — NOT loaded by the harness (skipped by filename).
+# Copy this to <fixture_id>.yaml and edit. Companion JPEG must live at
+# <fixture_id>.jpg alongside.
+#
+# The harness reads:
+#   1. known_actors:        substituted into question prompts
+#   2. identified_entities: ground-truth identity claims; also fed into
+#                           the markup pipeline to render the annotated
+#                           variant
+#   3. ground_truth:        expected answer per question id (see
+#                           questions.py for the keys)
+
+fixture_id: example_reolink_alice_arriving
+camera_id: reolink_front
+captured_ts: 1779938468.989
+width: 1536
+height: 432
+
+# Actors the hypothetical system knows at this moment in time.
+# The harness substitutes these names into the question prompts so
+# the VLM has the same "ambient knowledge" both variants see.
+known_actors:
+  - id: actor_alice
+    name: Alice
+  - id: actor_bob
+    name: Bob
+  - id: actor_rex
+    name: Rex
+  - id: actor_alice_car
+    name: Alice's car
+
+# Entities the recognition pipeline (face/pet/plate) would correctly
+# identify in THIS frame. Each becomes:
+#   1. A line in the text-metadata block both variants get
+#   2. A pixel-burned box in the annotated variant only
+identified_entities:
+  - actor_id: actor_alice
+    actor_name: Alice
+    kind: person
+    bbox: [0.42, 0.18, 0.55, 0.78]   # x1, y1, x2, y2 normalized
+    identity_method: face_arcface
+    identity_confidence: 0.93
+    detection_confidence: 0.95
+    track_id: t-alice-1
+  - actor_id: actor_alice_car
+    actor_name: Alice's car
+    kind: vehicle
+    bbox: [0.57, 0.47, 0.70, 0.82]
+    identity_method: plate_lpr
+    identity_confidence: 0.88
+    detection_confidence: 0.91
+    track_id: t-car-1
+
+# Ground truth answers for each question in questions.py. Used by the
+# scoring pass to compute per-variant accuracy.
+ground_truth:
+  identity_present: "YES, Alice"        # identity_known_present
+  anomaly_present: "NO"                  # anomaly_unknown_alongside_known
+  vehicle_count: 1                       # counting_vehicles
+  behavior_summary: "Alice is walking up the driveway toward the house, her car parked behind her."
+  alert_tier: TIER_0                     # alert_tier

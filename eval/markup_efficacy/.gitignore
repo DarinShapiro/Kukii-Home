@@ -1,0 +1,12 @@
+# Real camera frames live in this directory but stay LOCAL — they're
+# private to the operator's home setup and never get pushed to git.
+# Only the EXAMPLE.yaml schema documentation gets tracked.
+fixtures/*.jpg
+fixtures/*.yaml
+!fixtures/EXAMPLE.yaml
+
+# VLM response cache — local to each developer's run. Re-buildable.
+cache/
+
+# Generated reports — re-buildable from cache + ground truth.
+results/
