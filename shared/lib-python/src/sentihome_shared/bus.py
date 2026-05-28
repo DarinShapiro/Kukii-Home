@@ -239,14 +239,19 @@ class Bus:
             "name": name,
             "subjects": subjects,
         }
+        # nats-py StreamConfig expresses durations in SECONDS and
+        # converts to nanoseconds itself when serializing (see
+        # nats.js.api._to_nanoseconds). Passing pre-multiplied ns here
+        # double-converts → e.g. 60s became 6e19 ns, overflowing the
+        # server's int64 time.Duration (BadRequestError 10025).
         if max_age_seconds is not None:
-            kwargs["max_age"] = max_age_seconds * 1_000_000_000  # nanoseconds
+            kwargs["max_age"] = max_age_seconds
         if max_msgs is not None:
             kwargs["max_msgs"] = max_msgs
         if max_msg_size is not None:
             kwargs["max_msg_size"] = max_msg_size
         if duplicate_window_seconds is not None:
-            kwargs["duplicate_window"] = duplicate_window_seconds * 1_000_000_000
+            kwargs["duplicate_window"] = duplicate_window_seconds
 
         config = StreamConfig(**kwargs)
         try:
@@ -272,7 +277,9 @@ class Bus:
         config = ConsumerConfig(
             durable_name=consumer,
             filter_subject=filter_subject,
-            ack_wait=ack_wait_seconds * 1_000_000_000,
+            # ack_wait is in SECONDS — nats-py converts to ns itself
+            # (same reasoning as max_age in ensure_stream).
+            ack_wait=ack_wait_seconds,
             max_deliver=max_deliver,
             max_ack_pending=max_ack_pending,
         )
