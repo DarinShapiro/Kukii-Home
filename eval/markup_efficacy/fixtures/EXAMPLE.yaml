@@ -37,7 +37,7 @@ identified_entities:
   - actor_id: actor_alice
     actor_name: Alice
     kind: person
-    bbox: [0.42, 0.18, 0.55, 0.78]   # x1, y1, x2, y2 normalized
+    bbox: [0.42, 0.18, 0.55, 0.78] # x1, y1, x2, y2 normalized
     identity_method: face_arcface
     identity_confidence: 0.93
     detection_confidence: 0.95
@@ -54,8 +54,8 @@ identified_entities:
 # Ground truth answers for each question in questions.py. Used by the
 # scoring pass to compute per-variant accuracy.
 ground_truth:
-  identity_present: "YES, Alice"        # identity_known_present
-  anomaly_present: "NO"                  # anomaly_unknown_alongside_known
-  vehicle_count: 1                       # counting_vehicles
-  behavior_summary: "Alice is walking up the driveway toward the house, her car parked behind her."
-  alert_tier: TIER_0                     # alert_tier
+  identity_present: 'YES, Alice' # identity_known_present
+  anomaly_present: 'NO' # anomaly_unknown_alongside_known
+  vehicle_count: 1 # counting_vehicles
+  behavior_summary: 'Alice is walking up the driveway toward the house, her car parked behind her.'
+  alert_tier: TIER_0 # alert_tier

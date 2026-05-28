@@ -41,9 +41,7 @@ CANONICAL_SCENARIOS = [
 
 
 @pytest.mark.parametrize("scenario_name", CANONICAL_SCENARIOS)
-def test_backends_produce_identical_graph_state(
-    scenario_name: str, in_memory_client, neo4j_client
-):
+def test_backends_produce_identical_graph_state(scenario_name: str, in_memory_client, neo4j_client):
     """Run ``scenario_name`` against both backends; snapshots must match.
 
     Eagerly requests both clients (not via the lazy ``scenario_client``
@@ -75,6 +73,5 @@ def test_backends_produce_identical_graph_state(
     diffs = diff_snapshots(snap_a, snap_b)
 
     assert not diffs, (
-        f"backends produced different graph state for {scenario_name!r}:\n  "
-        + "\n  ".join(diffs)
+        f"backends produced different graph state for {scenario_name!r}:\n  " + "\n  ".join(diffs)
     )

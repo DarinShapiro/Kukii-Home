@@ -62,10 +62,7 @@ def mediamtx_url():
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.waiting_utils import wait_for_logs
 
-    container = (
-        DockerContainer("bluenviron/mediamtx:1.8.4")
-        .with_exposed_ports(8554)
-    )
+    container = DockerContainer("bluenviron/mediamtx:1.8.4").with_exposed_ports(8554)
     container.start()
     try:
         wait_for_logs(container, "RTSP listener opened", timeout=30)
@@ -94,16 +91,26 @@ def ffmpeg_publisher(mediamtx_url):
         [
             "ffmpeg",
             "-hide_banner",
-            "-loglevel", "warning",
-            "-f", "lavfi",
-            "-i", "testsrc=size=1280x720:rate=15",
-            "-pix_fmt", "yuv420p",
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-tune", "zerolatency",
-            "-g", "15",  # keyframe every second @ 15 fps
-            "-f", "rtsp",
-            "-rtsp_transport", "tcp",
+            "-loglevel",
+            "warning",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=1280x720:rate=15",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-tune",
+            "zerolatency",
+            "-g",
+            "15",  # keyframe every second @ 15 fps
+            "-f",
+            "rtsp",
+            "-rtsp_transport",
+            "tcp",
             publish_url,
         ],
         stdout=subprocess.DEVNULL,

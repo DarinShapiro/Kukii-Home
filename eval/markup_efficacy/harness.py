@@ -102,7 +102,9 @@ def _cmd_capture(args: argparse.Namespace) -> int:
         # Fetch the actual JPEG bytes.
         jpeg = client.get(frame["uri"]).content
 
-    fixture_id = f"{args.camera}_{int(ts)}_{args.label}" if args.label else f"{args.camera}_{int(ts)}"
+    fixture_id = (
+        f"{args.camera}_{int(ts)}_{args.label}" if args.label else f"{args.camera}_{int(ts)}"
+    )
     fixture_id = fixture_id.replace(" ", "_")
     jpeg_path = FIXTURES_DIR / f"{fixture_id}.jpg"
     yaml_path = FIXTURES_DIR / f"{fixture_id}.yaml"
@@ -195,9 +197,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _run_all(
-    fixtures: list[Fixture], model: str, api_key: str, *, force: bool
-) -> None:
+async def _run_all(fixtures: list[Fixture], model: str, api_key: str, *, force: bool) -> None:
     from anthropic import AsyncAnthropic
 
     client = AsyncAnthropic(api_key=api_key)
@@ -282,11 +282,7 @@ async def _ask_vlm(
         camera_id=fixture.camera_id,
         known_actor_names=fixture.known_actor_names(),
     )
-    full_text = (
-        metadata_block_for(fixture)
-        + "\n\n"
-        + rendered
-    )
+    full_text = metadata_block_for(fixture) + "\n\n" + rendered
     msg = await client.messages.create(
         model=model,
         max_tokens=200,
@@ -307,9 +303,7 @@ async def _ask_vlm(
             }
         ],
     )
-    response_text = "".join(
-        block.text for block in msg.content if hasattr(block, "text")
-    ).strip()
+    response_text = "".join(block.text for block in msg.content if hasattr(block, "text")).strip()
     usage = {
         "input_tokens": msg.usage.input_tokens,
         "output_tokens": msg.usage.output_tokens,
@@ -476,9 +470,7 @@ def main() -> int:
 
     p_capture = sub.add_parser("capture", help="capture a fresh fixture")
     p_capture.add_argument("--camera", required=True)
-    p_capture.add_argument(
-        "--preprocessor-url", default="http://localhost:8090"
-    )
+    p_capture.add_argument("--preprocessor-url", default="http://localhost:8090")
     p_capture.add_argument(
         "--label",
         default=None,

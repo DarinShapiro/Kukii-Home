@@ -104,9 +104,7 @@ class CameraCaptureTask:
     async def start(self) -> None:
         if self._task is not None:
             return
-        self._task = asyncio.create_task(
-            self._run(), name=f"rtsp-capture-{self._camera_id}"
-        )
+        self._task = asyncio.create_task(self._run(), name=f"rtsp-capture-{self._camera_id}")
 
     async def stop(self) -> None:
         if self._task is None:
@@ -176,9 +174,7 @@ class CameraCaptureTask:
                     url=self.state.rtsp_url_sanitized,
                 )
 
-                video_stream = next(
-                    s for s in container.streams if s.type == "video"
-                )
+                video_stream = next(s for s in container.streams if s.type == "video")
                 last_capture_ts = 0.0
                 for frame in container.decode(video_stream):
                     now = time.time()
@@ -218,9 +214,7 @@ class CameraCaptureTask:
                         has_motion=has_motion,
                     )
                     # Hand off to the event loop's RollingBuffer.
-                    asyncio.run_coroutine_threadsafe(
-                        self._write(buffered), loop
-                    )
+                    asyncio.run_coroutine_threadsafe(self._write(buffered), loop)
             finally:
                 container.close()
 
@@ -312,9 +306,7 @@ class RTSPCaptureSupervisor:
         # Lock-free read: dict iteration is atomic under CPython,
         # and CameraCaptureState mutations on the per-task object
         # are read-mostly + non-critical for status surfaces.
-        return tuple(
-            self._tasks[cam].state for cam in sorted(self._tasks.keys())
-        )
+        return tuple(self._tasks[cam].state for cam in sorted(self._tasks.keys()))
 
     def camera_ids(self) -> tuple[str, ...]:
         return tuple(sorted(self._tasks.keys()))

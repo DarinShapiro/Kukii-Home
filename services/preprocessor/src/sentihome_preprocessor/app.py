@@ -144,9 +144,7 @@ def create_app(state: AppState) -> FastAPI:
         """
         data = await state.frame_buffer.serve_annotated_frame(camera_id, ts)
         if data is None:
-            raise HTTPException(
-                status_code=404, detail="annotated frame not available"
-            )
+            raise HTTPException(status_code=404, detail="annotated frame not available")
         return Response(content=data, media_type="image/jpeg")
 
     @app.get("/frame_window", response_model=FrameWindow)

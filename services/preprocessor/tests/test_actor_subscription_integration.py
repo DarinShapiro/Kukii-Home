@@ -83,9 +83,7 @@ async def test_actor_enrollment_flows_into_cache(nats_container: str):
         access_profile="full",
         face_embedding=tuple(0.01 * i for i in range(8)),
     )
-    await publisher_nc.publish(
-        SUBJECT_ACTOR_ENROLLED, event.model_dump_json().encode("utf-8")
-    )
+    await publisher_nc.publish(SUBJECT_ACTOR_ENROLLED, event.model_dump_json().encode("utf-8"))
     await publisher_nc.flush()
 
     try:
@@ -111,9 +109,7 @@ async def test_actor_deactivation_removes_from_cache(nats_container: str):
 
     cache = ActorCache()
     # Seed with an existing actor (bypass NATS for setup).
-    await cache.upsert(
-        ActorEnrollmentEvent(actor_id="actor_bob", action="enrolled", name="Bob")
-    )
+    await cache.upsert(ActorEnrollmentEvent(actor_id="actor_bob", action="enrolled", name="Bob"))
 
     subscriber = ActorEnrollmentSubscriber(nats_container, cache)
     await subscriber.connect()
@@ -122,9 +118,7 @@ async def test_actor_deactivation_removes_from_cache(nats_container: str):
     await asyncio.sleep(0.1)
 
     event = ActorEnrollmentEvent(actor_id="actor_bob", action="deactivated")
-    await publisher_nc.publish(
-        SUBJECT_ACTOR_DEACTIVATED, event.model_dump_json().encode("utf-8")
-    )
+    await publisher_nc.publish(SUBJECT_ACTOR_DEACTIVATED, event.model_dump_json().encode("utf-8"))
     await publisher_nc.flush()
 
     try:

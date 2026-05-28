@@ -75,6 +75,12 @@ extend-exclude = [
     "**/build/**",
     "**/dist/**",
     "**/node_modules/**",
+    # Vendored HA integration: shipped to /config/custom_components and
+    # content-hashed by the add-on's installer. Its formatting is frozen
+    # on purpose — reformatting churns the hash and triggers an
+    # integration re-install + restart notification. Not part of the
+    # workspace lint/format gate (also outside CI's ruff scope).
+    "ha-integration/custom_components/**",
 ]
 
 [tool.ruff.lint]

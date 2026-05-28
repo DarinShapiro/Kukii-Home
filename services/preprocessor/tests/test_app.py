@@ -149,9 +149,7 @@ def test_frame_window_too_old_returns_empty(client: TestClient):
     assert r.json()["frames"] == []
 
 
-def test_frame_window_increments_served_counter(
-    client: TestClient, app_state: AppState
-):
+def test_frame_window_increments_served_counter(client: TestClient, app_state: AppState):
     now = time.time()
     for _ in range(3):
         client.get(
@@ -191,9 +189,7 @@ def test_tune_records_knob(client: TestClient, app_state: AppState):
 
 
 def test_tune_with_scope_keys_by_camera(client: TestClient, app_state: AppState):
-    client.post(
-        "/tune", json={"knob_id": "face.match_threshold", "new_value": 0.7}
-    )
+    client.post("/tune", json={"knob_id": "face.match_threshold", "new_value": 0.7})
     client.post(
         "/tune",
         json={
@@ -232,9 +228,7 @@ def test_enroll_caches_actor(client: TestClient):
 
 
 def test_deactivate_removes_actor(client: TestClient):
-    client.post(
-        "/actors/enroll", json={"actor_id": "actor_alice", "action": "enrolled"}
-    )
+    client.post("/actors/enroll", json={"actor_id": "actor_alice", "action": "enrolled"})
     r = client.post(
         "/actors/enroll",
         json={"actor_id": "actor_alice", "action": "deactivated"},
@@ -282,9 +276,7 @@ def test_frames_route_serves_bytes_from_rtsp_backend():
     async def _seed() -> None:
         await rolling.write(
             "front_porch",
-            BufferedFrame(
-                ts=99.001, jpeg_bytes=payload, width=1280, height=720
-            ),
+            BufferedFrame(ts=99.001, jpeg_bytes=payload, width=1280, height=720),
         )
 
     _asyncio.run(_seed())

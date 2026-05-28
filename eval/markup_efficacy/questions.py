@@ -99,6 +99,4 @@ QUESTION_BATTERY: tuple[Question, ...] = (
 def render_prompt(q: Question, *, camera_id: str, known_actor_names: list[str]) -> str:
     """Fill in the per-fixture placeholders in the question prompt."""
     actors_str = ", ".join(known_actor_names) if known_actor_names else "(none)"
-    return q.prompt.format(
-        camera_id=camera_id, known_actor_names=actors_str
-    )
+    return q.prompt.format(camera_id=camera_id, known_actor_names=actors_str)

@@ -24,14 +24,14 @@ frame → YOLO11x object detection
 
 Concrete model locks from Epic 10 (the locked picks for the inference box; supersede the "ArcFace / AdaFace" model-agnostic framing in Tier 2 below and the "RetinaFace / SCRFD" alternation in Tier 1):
 
-| Task                                   | Model                                                       |
-| -------------------------------------- | ----------------------------------------------------------- |
-| Object detection                       | **YOLO11x** (Ultralytics)                                   |
-| Face detect + align                    | **RetinaFace-R50** (InsightFace `buffalo_l` bundle)         |
-| Face recognition (embedding)           | **ArcFace ResNet100** (InsightFace `buffalo_l`), 512-d      |
-| Vehicle ReID                           | **DINOv2 base** + cosine match in Neo4j vector index        |
-| License plate                          | **fastALPR** (YOLOv8 plate detector + lightweight OCR)      |
-| Pet ID (per-pet)                       | **DINOv2 embeddings** + KnownPet centroid match             |
+| Task                         | Model                                                  |
+| ---------------------------- | ------------------------------------------------------ |
+| Object detection             | **YOLO11x** (Ultralytics)                              |
+| Face detect + align          | **RetinaFace-R50** (InsightFace `buffalo_l` bundle)    |
+| Face recognition (embedding) | **ArcFace ResNet100** (InsightFace `buffalo_l`), 512-d |
+| Vehicle ReID                 | **DINOv2 base** + cosine match in Neo4j vector index   |
+| License plate                | **fastALPR** (YOLOv8 plate detector + lightweight OCR) |
+| Pet ID (per-pet)             | **DINOv2 embeddings** + KnownPet centroid match        |
 
 The VMS is **Agent DVR** (not Frigate). The recognition outputs land in **Neo4j 5.x** as embedding properties on `KnownActor` / `KnownVehicle` / `KnownPet` nodes with native vector indexes; the prior "vector DB (HNSW) + SQL gallery metadata" split is gone (see §11 status note).
 

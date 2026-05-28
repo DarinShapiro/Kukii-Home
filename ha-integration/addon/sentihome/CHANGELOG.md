@@ -5,7 +5,7 @@
 **Alerts get enriched with recognition (Epic 10.9).**
 
 When HA's AI motion sensor fires, the add-on records an alert with a
-camera snapshot — but until now it had no idea *who or what* set it
+camera snapshot — but until now it had no idea _who or what_ set it
 off. The preprocessor (inference box) has been quietly buffering RTSP
 frames for the same cameras and running YOLO + face / body-ID / pet
 recognition over them. This release closes the loop.
@@ -54,7 +54,7 @@ yet and "it's probably harmless" is what broke this six times,
 v0.3.29 ships the bare URL — byte-identical to what was tested.
 
 No functional difference from v0.3.28 for the tap; this just
-removes the one untested element. Deep-link to the *specific*
+removes the one untested element. Deep-link to the _specific_
 alert (hash + an in-panel reader) is a separate, deliberately
 tested follow-up.
 
@@ -161,8 +161,8 @@ own paths didn't.
 
 ### What's signed
 
-* The main tap URL
-* iOS lock-screen action buttons (Dismiss / Open / False positive
+- The main tap URL
+- iOS lock-screen action buttons (Dismiss / Open / False positive
   — FP keeps its `#fp` anchor for the form scroll-to)
 
 ### What's NOT changed
@@ -197,10 +197,10 @@ Assistant Core immediately after syncing the integration files.
 That was wrong — installing a single add-on should not bring down
 your whole smart home:
 
-* Every other integration drops and reconnects
-* Z-Wave / Zigbee / Matter networks re-handshake (30-60s recovery)
-* Automations pause; in-flight scripts may abort
-* Timers, occupancy state, notification ring all reset
+- Every other integration drops and reconnects
+- Z-Wave / Zigbee / Matter networks re-handshake (30-60s recovery)
+- Automations pause; in-flight scripts may abort
+- Timers, occupancy state, notification ring all reset
 
 Now: the script posts a **persistent notification** asking you to
 restart at your convenience (Settings → System → Power). The
@@ -210,6 +210,7 @@ notifications, so the message naturally goes away at the right
 moment.
 
 What you'll see after this update:
+
 1. Bell icon shows: "SentiHome: restart needed"
 2. You click Restart Home Assistant when you're ready (after
    dinner, in the morning, whenever)
@@ -235,6 +236,7 @@ v0.3.15/17/20/23 failure mode) is now structurally impossible.
 ### What changes for you
 
 **Install (fresh):**
+
 1. Add the SentiHome add-on repository.
 2. Install the SentiHome add-on.
 3. Start it. The add-on copies the integration into
@@ -247,22 +249,22 @@ it automatically. No HACS step, no second restart.
 
 ### What changed under the hood
 
-* Add-on `config.yaml`: `map:` adds `config:rw` so the add-on can
+- Add-on `config.yaml`: `map:` adds `config:rw` so the add-on can
   write to `/config/custom_components/`. You'll see a one-time
   permission prompt during the update.
-* New `cont-init` script `20-install-integration.sh` syncs the
+- New `cont-init` script `20-install-integration.sh` syncs the
   bundled integration files on every boot. Uses a content-hash
   stamp so it no-ops when nothing changed (common path).
-* After sync, the script asks Supervisor to restart HA Core via
+- After sync, the script asks Supervisor to restart HA Core via
   the REST API so the new integration code loads. Falls back to
   a "please restart manually" log line if Supervisor doesn't
   respond.
-* New `discovery_publish.py` in ha-agent registers an
+- New `discovery_publish.py` in ha-agent registers an
   `_sentihome._tcp.local.` mDNS service on the LAN. The
   integration's `manifest.json` declares it consumes this service
   type, so HA's zeroconf component routes the broadcast to the
   integration's discovery flow.
-* New `async_step_zeroconf` in the integration's `config_flow.py`
+- New `async_step_zeroconf` in the integration's `config_flow.py`
   handles the auto-discovery, pre-fills host/port from the TXT
   records, and shows a one-click confirm card.
 
@@ -274,10 +276,10 @@ trying to support both was the source of the install/update bugs
 in v0.3.15/17/20/23. The bundled-with-add-on install is strictly
 better for this product shape:
 
-* One install path
-* One update path
-* Version skew impossible by construction
-* Easier discoverability (zeroconf surfaces it without HACS browsing)
+- One install path
+- One update path
+- Version skew impossible by construction
+- Easier discoverability (zeroconf surfaces it without HACS browsing)
 
 If you'd previously installed the integration via HACS, you can
 remove it — the add-on will install its own copy in the right place.
@@ -307,8 +309,9 @@ Companion DOES carry. The view proxies to the add-on's existing
 directly, so the ingress-auth mismatch never arises.
 
 ### Notification tap target
+
 - **Before:** `/api/hassio_ingress/<token>/alert/<id>` → 401
-- **Now:**    `/api/sentihome/alert/<id>` → works
+- **Now:** `/api/sentihome/alert/<id>` → works
 
 ### Custom integration bumped to v0.2.0
 
@@ -370,25 +373,25 @@ Yellow (aarch64)            ◀── LAN (NATS + REST) ──▶   Laptop (x86_
 
 ### What changed under the hood
 
-* `MOG2MotionDetector` moved from `sentihome_preprocessor.motion`
+- `MOG2MotionDetector` moved from `sentihome_preprocessor.motion`
   to `sentihome_shared.motion`. Existing import paths still work
   via a re-export shim, but new code should import from shared.
-* `sentihome-preprocessor` dropped from `sentihome-ha-agent`'s
+- `sentihome-preprocessor` dropped from `sentihome-ha-agent`'s
   pyproject deps. Yellow no longer pulls torch.
-* Add-on Dockerfile now uses
+- Add-on Dockerfile now uses
   `uv sync --frozen --no-dev --package sentihome-ha-agent`
   instead of `--all-packages`. Only ha-agent + its deps install.
-* Reverted the v0.3.21 openvino platform marker — no longer
+- Reverted the v0.3.21 openvino platform marker — no longer
   needed since the preprocessor isn't in the add-on's dep graph
   at all. The marker was a workaround; this is the actual fix.
 
 ### Why you'd care
 
-* Add-on image shrinks by ~3GB (no torch / onnxruntime /
+- Add-on image shrinks by ~3GB (no torch / onnxruntime /
   openvino / insightface).
-* Add-on builds finish in ~1 min instead of ~5+ min on Yellow.
-* Yellow's image-cap pressure drops significantly.
-* Architecturally honest: Yellow IS the HA bridge, not the
+- Add-on builds finish in ~1 min instead of ~5+ min on Yellow.
+- Yellow's image-cap pressure drops significantly.
+- Architecturally honest: Yellow IS the HA bridge, not the
   inference host.
 
 No functional change for users running the preprocessor on a
@@ -439,6 +442,7 @@ Tap a notification → SentiHome opens to `/alert/<id>` showing:
 
 Long-press the notification on iOS lock screen → three quick
 actions:
+
 - **Dismiss** (red, no app open) — fires in the background
 - **Open** — same as default tap
 - **False positive** — opens the page scrolled to the FP form

@@ -68,14 +68,10 @@ def _match(
     )
 
 
-async def _cache_with_actor(
-    actor_id: str = "actor_alice", name: str = "Alice"
-) -> ActorCache:
+async def _cache_with_actor(actor_id: str = "actor_alice", name: str = "Alice") -> ActorCache:
     cache = ActorCache()
     await cache.upsert(
-        ActorEnrollmentEvent(
-            actor_id=actor_id, action="enrolled", name=name, role="resident"
-        )
+        ActorEnrollmentEvent(actor_id=actor_id, action="enrolled", name=name, role="resident")
     )
     return cache
 
@@ -137,9 +133,7 @@ async def test_vehicle_plate_correlation():
     cache = await _cache_with_actor("actor_truck", "Bob's truck")
     ents = await _correlate_identities(
         detections=(_det(kind="vehicle"),),
-        actor_matches=(
-            _match(actor_id="actor_truck", method="plate_lpr", confidence=0.88),
-        ),
+        actor_matches=(_match(actor_id="actor_truck", method="plate_lpr", confidence=0.88),),
         cache=cache,
     )
     assert len(ents) == 1

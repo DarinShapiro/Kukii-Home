@@ -137,9 +137,7 @@ def generate_noise_events(
 
         # Hour window for sampling. daylight_only → 14h; otherwise 24h.
         window_start_s, window_end_s = (
-            (_DAYLIGHT_START_S, _DAYLIGHT_END_S)
-            if pattern.daylight_only
-            else (0, _DAY_SECONDS)
+            (_DAYLIGHT_START_S, _DAYLIGHT_END_S) if pattern.daylight_only else (0, _DAY_SECONDS)
         )
         window_hours = (window_end_s - window_start_s) / 3600.0
 
@@ -191,9 +189,7 @@ def _resolve_rate_per_hour(pattern: AmbientPattern) -> float | None:
 def _parse_rate(rate_str: str) -> float:
     """Parse 'X/hr' or 'X/min' into events-per-hour."""
     if "/" not in rate_str:
-        raise ValueError(
-            f"Unparseable rate {rate_str!r}; expected 'X/hr' or 'X/min'"
-        )
+        raise ValueError(f"Unparseable rate {rate_str!r}; expected 'X/hr' or 'X/min'")
     val_str, unit = rate_str.split("/", 1)
     val = float(val_str.strip())
     unit = unit.strip().lower()

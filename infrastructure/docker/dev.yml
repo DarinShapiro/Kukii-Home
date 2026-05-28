@@ -146,10 +146,7 @@ services:
       # cypher-shell ships with the image. Empty query verifies the
       # DB is up and accepting auth.
       test:
-        [
-          'CMD-SHELL',
-          'cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-sentihome} "RETURN 1" || exit 1',
-        ]
+        ['CMD-SHELL', 'cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-sentihome} "RETURN 1" || exit 1']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -244,7 +241,10 @@ services:
         condition: service_healthy
     healthcheck:
       test:
-        ['CMD-SHELL', 'python -c "import urllib.request; urllib.request.urlopen(\"http://localhost:8090/healthz\").read()"']
+        [
+          'CMD-SHELL',
+          'python -c "import urllib.request; urllib.request.urlopen(\"http://localhost:8090/healthz\").read()"',
+        ]
       interval: 15s
       timeout: 5s
       retries: 5

@@ -47,7 +47,9 @@ sys.path.insert(0, str(REPO_ROOT / "services/memory/tests"))
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "scenario",
         nargs="?",

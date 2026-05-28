@@ -48,9 +48,7 @@ async def test_frames_are_evenly_spaced_starting_at_ts_start(
     fw = await buf.get_window(
         camera_id="cam_a", ts_start=now - 2.0, ts_end=now, enrich=False, cache=cache
     )
-    diffs = [
-        fw.frames[i + 1].ts - fw.frames[i].ts for i in range(len(fw.frames) - 1)
-    ]
+    diffs = [fw.frames[i + 1].ts - fw.frames[i].ts for i in range(len(fw.frames) - 1)]
     assert all(abs(d - 0.5) < 1e-6 for d in diffs)
 
 

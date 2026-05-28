@@ -115,9 +115,7 @@ def _load_one(yaml_path: Path) -> Fixture:
     if not jpeg_path.exists():
         raise FileNotFoundError(f"companion JPEG not found: {jpeg_path}")
 
-    known_actors = tuple(
-        (a["id"], a["name"]) for a in raw.get("known_actors", [])
-    )
+    known_actors = tuple((a["id"], a["name"]) for a in raw.get("known_actors", []))
 
     entities_raw = raw.get("identified_entities", []) or []
     entities = tuple(
@@ -157,7 +155,7 @@ def metadata_block_for(fixture: Fixture) -> str:
         return "No identified entities in this frame."
     lines: list[str] = ["Identified entities in this frame (per the recognition pipeline):"]
     for e in fixture.identified_entities:
-        bbox_pct = f"({e.bbox[0]*100:.0f}-{e.bbox[2]*100:.0f}% x, {e.bbox[1]*100:.0f}-{e.bbox[3]*100:.0f}% y)"
+        bbox_pct = f"({e.bbox[0] * 100:.0f}-{e.bbox[2] * 100:.0f}% x, {e.bbox[1] * 100:.0f}-{e.bbox[3] * 100:.0f}% y)"
         lines.append(
             f"  - {e.actor_name} ({e.kind}, "
             f"{e.identity_method}, identity_confidence={e.identity_confidence:.2f}) "

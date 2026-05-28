@@ -87,9 +87,7 @@ def diff_snapshots(a: GraphSnapshot, b: GraphSnapshot) -> list[str]:
 # ─── Per-collection diffing ──────────────────────────────────────────
 
 
-def _diff_events(
-    a: tuple[Event, ...], b: tuple[Event, ...], out: list[str]
-) -> None:
+def _diff_events(a: tuple[Event, ...], b: tuple[Event, ...], out: list[str]) -> None:
     by_id_a = {e.id: e for e in a}
     by_id_b = {e.id: e for e in b}
     only_in_a = set(by_id_a) - set(by_id_b)
@@ -103,9 +101,7 @@ def _diff_events(
         if not _close(ea.ts, eb.ts):
             out.append(f"Event {eid!r} ts differs: A={ea.ts} vs B={eb.ts}")
         if ea.camera_id != eb.camera_id:
-            out.append(
-                f"Event {eid!r} camera_id differs: A={ea.camera_id!r} vs B={eb.camera_id!r}"
-            )
+            out.append(f"Event {eid!r} camera_id differs: A={ea.camera_id!r} vs B={eb.camera_id!r}")
         if tuple(ea.tag_set) != tuple(eb.tag_set):
             out.append(
                 f"Event {eid!r} tag_set differs: A={list(ea.tag_set)} vs B={list(eb.tag_set)}"
@@ -116,14 +112,10 @@ def _diff_events(
                 f"A={list(ea.matched_actor_ids)} vs B={list(eb.matched_actor_ids)}"
             )
         if ea.metadata != eb.metadata:
-            out.append(
-                f"Event {eid!r} metadata differs: A={ea.metadata} vs B={eb.metadata}"
-            )
+            out.append(f"Event {eid!r} metadata differs: A={ea.metadata} vs B={eb.metadata}")
 
 
-def _diff_actors(
-    a: tuple[KnownActor, ...], b: tuple[KnownActor, ...], out: list[str]
-) -> None:
+def _diff_actors(a: tuple[KnownActor, ...], b: tuple[KnownActor, ...], out: list[str]) -> None:
     by_id_a = {x.id: x for x in a}
     by_id_b = {x.id: x for x in b}
     only_in_a = set(by_id_a) - set(by_id_b)
@@ -145,9 +137,7 @@ def _diff_actors(
             )
 
 
-def _diff_decisions(
-    a: tuple[VLMDecision, ...], b: tuple[VLMDecision, ...], out: list[str]
-) -> None:
+def _diff_decisions(a: tuple[VLMDecision, ...], b: tuple[VLMDecision, ...], out: list[str]) -> None:
     by_id_a = {d.id: d for d in a}
     by_id_b = {d.id: d for d in b}
     only_in_a = set(by_id_a) - set(by_id_b)
@@ -170,9 +160,7 @@ def _diff_decisions(
             out.append(f"VLMDecision {did!r} findings_summary differs")
 
 
-def _diff_policies(
-    a: tuple[Policy, ...], b: tuple[Policy, ...], out: list[str]
-) -> None:
+def _diff_policies(a: tuple[Policy, ...], b: tuple[Policy, ...], out: list[str]) -> None:
     by_id_a = {p.id: p for p in a}
     by_id_b = {p.id: p for p in b}
     only_in_a = set(by_id_a) - set(by_id_b)
@@ -200,14 +188,10 @@ def _diff_policies(
                 f"Policy {pid!r} ttl_seconds differs: A={pa.ttl_seconds} vs B={pb.ttl_seconds}"
             )
         if not _close(pa.created_ts, pb.created_ts):
-            out.append(
-                f"Policy {pid!r} created_ts differs: A={pa.created_ts} vs B={pb.created_ts}"
-            )
+            out.append(f"Policy {pid!r} created_ts differs: A={pa.created_ts} vs B={pb.created_ts}")
 
 
-def _diff_cited_edges(
-    a: tuple[CitedEdge, ...], b: tuple[CitedEdge, ...], out: list[str]
-) -> None:
+def _diff_cited_edges(a: tuple[CitedEdge, ...], b: tuple[CitedEdge, ...], out: list[str]) -> None:
     by_key_a = {(e.decision_id, e.memory_id): e for e in a}
     by_key_b = {(e.decision_id, e.memory_id): e for e in b}
     only_in_a = set(by_key_a) - set(by_key_b)
@@ -219,9 +203,7 @@ def _diff_cited_edges(
     for k in sorted(set(by_key_a) & set(by_key_b)):
         ea, eb = by_key_a[k], by_key_b[k]
         if not _close(ea.weight, eb.weight):
-            out.append(
-                f"CITED edge {k[0]}→{k[1]} weight differs: A={ea.weight} vs B={eb.weight}"
-            )
+            out.append(f"CITED edge {k[0]}→{k[1]} weight differs: A={ea.weight} vs B={eb.weight}")
         if not _close(ea.created_ts, eb.created_ts):
             out.append(
                 f"CITED edge {k[0]}→{k[1]} created_ts differs: "

@@ -62,9 +62,7 @@ async def test_configured_event_routes_to_applier_on_configured():
     async def cb(ev: CameraConfigEvent) -> None:
         received.append(ev)
 
-    sub = CameraConfigSubscriber(
-        "nats://unused", CallbackApplier(on_configured=cb)
-    )
+    sub = CameraConfigSubscriber("nats://unused", CallbackApplier(on_configured=cb))
     ev = CameraConfigEvent(
         action="configured",
         camera_id="cam_a",
@@ -82,9 +80,7 @@ async def test_removed_event_routes_to_applier_on_removed():
     async def cb(ev: CameraConfigEvent) -> None:
         received.append(ev)
 
-    sub = CameraConfigSubscriber(
-        "nats://unused", CallbackApplier(on_removed=cb)
-    )
+    sub = CameraConfigSubscriber("nats://unused", CallbackApplier(on_removed=cb))
     ev = CameraConfigEvent(action="removed", camera_id="cam_a")
     await sub._on_removed(_msg(SUBJECT_CAMERA_REMOVED, ev))  # type: ignore[arg-type]
     assert received == [ev]
@@ -102,9 +98,7 @@ async def test_configured_event_without_stream_url_is_dropped():
     async def cb(ev: CameraConfigEvent) -> None:
         received.append(ev)
 
-    sub = CameraConfigSubscriber(
-        "nats://unused", CallbackApplier(on_configured=cb)
-    )
+    sub = CameraConfigSubscriber("nats://unused", CallbackApplier(on_configured=cb))
     # Bypass Pydantic by constructing a raw message — the actual
     # payload has no stream_url, which is allowed by the schema
     # for the removed case but not for the configured case.
@@ -121,9 +115,7 @@ async def test_malformed_payload_is_logged_not_raised():
     async def cb(ev: CameraConfigEvent) -> None:
         received.append(ev)
 
-    sub = CameraConfigSubscriber(
-        "nats://unused", CallbackApplier(on_configured=cb)
-    )
+    sub = CameraConfigSubscriber("nats://unused", CallbackApplier(on_configured=cb))
     bad_msg = _FakeMsg(subject=SUBJECT_CAMERA_CONFIGURED, data=b"not json")
     # Should not raise; just logs the bad payload.
     await sub._on_configured(bad_msg)  # type: ignore[arg-type]
@@ -164,9 +156,7 @@ async def test_noop_applier_swallows_both_actions():
     effects to observe, just verify it returns cleanly."""
     applier = NoOpApplier()
     await applier.on_configured(
-        CameraConfigEvent(
-            action="configured", camera_id="x", stream_url="rtsp://x/s"
-        )
+        CameraConfigEvent(action="configured", camera_id="x", stream_url="rtsp://x/s")
     )
     await applier.on_removed(CameraConfigEvent(action="removed", camera_id="x"))
 

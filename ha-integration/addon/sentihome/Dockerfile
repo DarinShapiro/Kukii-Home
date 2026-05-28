@@ -48,8 +48,17 @@ ARG SENTIHOME_REPO=https://github.com/DarinShapiro/SentiHome.git
 ARG SENTIHOME_REF=main
 
 WORKDIR /app
+# Fetch the requested ref via init+fetch+checkout rather than
+# `clone --branch`. `clone --branch` only accepts a branch/tag NAME,
+# but CI pins SENTIHOME_REF to a commit SHA (github.sha) so PR/CI
+# builds verify the exact commit. fetch-by-ref handles BOTH a branch
+# (Supervisor's default `main`) and a bare SHA (GitHub allows fetching
+# a reachable commit), so the real Supervisor build is unaffected.
 RUN echo "Cache key: ${CACHEBUST}" \
-    && git clone --depth=1 --branch "${SENTIHOME_REF}" "${SENTIHOME_REPO}" /app \
+    && git init /app \
+    && git -C /app remote add origin "${SENTIHOME_REPO}" \
+    && git -C /app fetch --depth=1 origin "${SENTIHOME_REF}" \
+    && git -C /app checkout --detach FETCH_HEAD \
     && rm -rf /app/.git
 
 # Epic 10.8.2: only install the ha-agent package + its deps. The

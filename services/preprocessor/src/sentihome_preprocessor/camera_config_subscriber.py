@@ -179,9 +179,7 @@ class NoOpApplier:
         )
 
     async def on_removed(self, event: CameraConfigEvent) -> None:
-        logger.info(
-            "preprocessor.camera_config.noop_removed", camera_id=event.camera_id
-        )
+        logger.info("preprocessor.camera_config.noop_removed", camera_id=event.camera_id)
 
 
 # ─── Functional applier (tests) ──────────────────────────────────────

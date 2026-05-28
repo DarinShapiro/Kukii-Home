@@ -18,3 +18,9 @@ uv.lock
 
 # Documentation generated content
 docs/_build/
+
+# Vendored HA integration: shipped to /config/custom_components and
+# content-hashed by the add-on installer. Formatting is frozen on
+# purpose — churning these files triggers an integration re-install +
+# HA restart notification. Keep them byte-stable.
+ha-integration/custom_components/

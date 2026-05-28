@@ -465,10 +465,8 @@ def _eval_one(
 
     if isinstance(assertion, AssertCitationCount):
         if citations_written != assertion.expected:
-            return (
-                f"citation_count: expected {assertion.expected}, "
-                f"got {citations_written}"
-                + (f" — {assertion.description}" if assertion.description else "")
+            return f"citation_count: expected {assertion.expected}, got {citations_written}" + (
+                f" — {assertion.description}" if assertion.description else ""
             )
         return None
 

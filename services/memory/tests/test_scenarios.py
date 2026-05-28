@@ -150,9 +150,8 @@ def test_pool_dog_scenario(scenario_client: GraphClient):
         f"dismissed={result.events_dismissed_by_policy}"
     )
 
-    assert result.passed, (
-        "PoolDog scenario assertions failed:\n  "
-        + "\n  ".join(result.assertion_failures)
+    assert result.passed, "PoolDog scenario assertions failed:\n  " + "\n  ".join(
+        result.assertion_failures
     )
 
 
@@ -197,9 +196,8 @@ def test_rare_event_scenario(scenario_client: GraphClient):
         f"simulated_days={result.elapsed_simulated_seconds / 86400:.1f}"
     )
 
-    assert result.passed, (
-        "RareEvent scenario assertions failed:\n  "
-        + "\n  ".join(result.assertion_failures)
+    assert result.passed, "RareEvent scenario assertions failed:\n  " + "\n  ".join(
+        result.assertion_failures
     )
 
 
@@ -354,9 +352,8 @@ def test_camera_scoped_policy_scenario(scenario_client: GraphClient):
         f"dismissed={result.events_dismissed_by_policy}"
     )
 
-    assert result.passed, (
-        "CameraScopedPolicy scenario assertions failed:\n  "
-        + "\n  ".join(result.assertion_failures)
+    assert result.passed, "CameraScopedPolicy scenario assertions failed:\n  " + "\n  ".join(
+        result.assertion_failures
     )
 
 
@@ -416,9 +413,7 @@ def test_soak_one_year(scenario_client: GraphClient):
     # * actor_threat IS a candidate at any threshold strictly above
     #   the floor (0.06), proving decay actually fired.
     end_ts = result.final_simulated_ts
-    low_threshold_candidates = scenario_client.candidates_for_pruning(
-        threshold=0.04, now_ts=end_ts
-    )
+    low_threshold_candidates = scenario_client.candidates_for_pruning(threshold=0.04, now_ts=end_ts)
     low_ids = {c.node_id for c in low_threshold_candidates}
     assert "actor_threat" not in low_ids, (
         "after 365 days of disuse, actor_threat's weight (1.0) x "
@@ -426,9 +421,7 @@ def test_soak_one_year(scenario_client: GraphClient):
         "long-tail protection at year scale"
     )
 
-    above_floor_candidates = scenario_client.candidates_for_pruning(
-        threshold=0.06, now_ts=end_ts
-    )
+    above_floor_candidates = scenario_client.candidates_for_pruning(threshold=0.06, now_ts=end_ts)
     above_floor_ids = {c.node_id for c in above_floor_candidates}
     assert "actor_threat" in above_floor_ids, (
         "at threshold 0.06 (above the floor), actor_threat should be "

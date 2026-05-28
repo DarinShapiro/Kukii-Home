@@ -28,12 +28,8 @@ async def test_upsert_then_get_returns_event():
 @pytest.mark.asyncio
 async def test_upsert_overwrites_on_repeated_actor_id():
     cache = ActorCache()
-    await cache.upsert(
-        ActorEnrollmentEvent(actor_id="a", action="enrolled", name="Old")
-    )
-    await cache.upsert(
-        ActorEnrollmentEvent(actor_id="a", action="updated", name="New")
-    )
+    await cache.upsert(ActorEnrollmentEvent(actor_id="a", action="enrolled", name="Old"))
+    await cache.upsert(ActorEnrollmentEvent(actor_id="a", action="updated", name="New"))
     fetched = await cache.get("a")
     assert fetched is not None
     assert fetched.name == "New"
@@ -54,9 +50,7 @@ async def test_upsert_refuses_deactivated_event():
     upsert(). Surfacing the mis-route loudly."""
     cache = ActorCache()
     with pytest.raises(ValueError, match="deactivat"):
-        await cache.upsert(
-            ActorEnrollmentEvent(actor_id="a", action="deactivated")
-        )
+        await cache.upsert(ActorEnrollmentEvent(actor_id="a", action="deactivated"))
 
 
 @pytest.mark.asyncio

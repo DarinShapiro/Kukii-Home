@@ -68,19 +68,14 @@ def main() -> int:
     try:
         from ultralytics import YOLO  # type: ignore[import-not-found]
     except ImportError:
-        print(
-            "ERROR: ultralytics not installed. `pip install ultralytics`."
-        )
+        print("ERROR: ultralytics not installed. `pip install ultralytics`.")
         return 1
 
     print(f"loading source weights: {args.weights}")
     model = YOLO(args.weights)
 
     t0 = time.perf_counter()
-    print(
-        f"exporting -> openvino  imgsz={args.imgsz} "
-        f"int8={args.int8} half={args.half}..."
-    )
+    print(f"exporting -> openvino  imgsz={args.imgsz} int8={args.int8} half={args.half}...")
     out_path = model.export(
         format="openvino",
         imgsz=args.imgsz,

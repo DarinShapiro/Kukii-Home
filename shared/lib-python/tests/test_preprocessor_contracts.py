@@ -114,22 +114,16 @@ def test_frame_window_enrichment_mode_is_constrained():
 
 def test_detection_tag_clamps_confidence_to_unit_interval():
     with pytest.raises(ValidationError):
-        DetectionTag(
-            kind="person", confidence=1.5, bbox=(0, 0, 1, 1), frame_ts=0.0
-        )
+        DetectionTag(kind="person", confidence=1.5, bbox=(0, 0, 1, 1), frame_ts=0.0)
     with pytest.raises(ValidationError):
-        DetectionTag(
-            kind="person", confidence=-0.1, bbox=(0, 0, 1, 1), frame_ts=0.0
-        )
+        DetectionTag(kind="person", confidence=-0.1, bbox=(0, 0, 1, 1), frame_ts=0.0)
 
 
 def test_detection_tag_requires_frame_ts():
     """Per the corrected contract, detections must carry the frame
     they came from — so the caller can correlate."""
     with pytest.raises(ValidationError):
-        DetectionTag.model_validate(
-            {"kind": "person", "confidence": 0.5, "bbox": [0, 0, 1, 1]}
-        )
+        DetectionTag.model_validate({"kind": "person", "confidence": 0.5, "bbox": [0, 0, 1, 1]})
 
 
 # ─── ActorMatch ──────────────────────────────────────────────────────

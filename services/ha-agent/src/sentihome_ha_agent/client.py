@@ -230,9 +230,7 @@ class HAClient:
         won't auth-bypass but is still informative for debugging).
         """
         try:
-            resp = await self._http.get(
-                "/api/sentihome/sign", params={"path": path}
-            )
+            resp = await self._http.get("/api/sentihome/sign", params={"path": path})
         except httpx.HTTPError as e:
             logger.warning("ha_client.sign_url_failed", path=path, error=str(e))
             return None

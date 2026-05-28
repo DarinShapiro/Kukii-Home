@@ -291,9 +291,7 @@ async def test_dispatch_sends_panel_url_to_ha():
     """End-to-end: with panel_url_base set, the notify payload that
     reaches HA carries the /app/<slug> tap URL — no signing, no
     /api/ path, no async round-trip."""
-    n, client = _make_notifier(
-        ["notify.mobile_app_x"], panel_url_base="/app/a58a7de9_sentihome"
-    )
+    n, client = _make_notifier(["notify.mobile_app_x"], panel_url_base="/app/a58a7de9_sentihome")
     results = await n.test_send(_alert())
     assert results == [{"service": "notify.mobile_app_x", "ok": True, "error": None}]
     data = client.call_service.call_args.kwargs["data"]["data"]

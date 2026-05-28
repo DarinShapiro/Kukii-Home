@@ -87,16 +87,12 @@ def _cmd_configure(args: argparse.Namespace) -> int:
         vendor=args.vendor,
         sub_stream=args.sub_stream,
     )
-    return asyncio.run(
-        _publish([(SUBJECT_CAMERA_CONFIGURED, event)], args.nats_url)
-    )
+    return asyncio.run(_publish([(SUBJECT_CAMERA_CONFIGURED, event)], args.nats_url))
 
 
 def _cmd_remove(args: argparse.Namespace) -> int:
     event = CameraConfigEvent(action="removed", camera_id=args.camera_id)
-    return asyncio.run(
-        _publish([(SUBJECT_CAMERA_REMOVED, event)], args.nats_url)
-    )
+    return asyncio.run(_publish([(SUBJECT_CAMERA_REMOVED, event)], args.nats_url))
 
 
 def _cmd_from_file(args: argparse.Namespace) -> int:
@@ -142,13 +138,9 @@ def main() -> int:
     p_cfg = sub.add_parser("configure", help="publish a 'configured' event")
     p_cfg.add_argument("--camera-id", required=True)
     p_cfg.add_argument("--stream-url", required=True)
-    p_cfg.add_argument(
-        "--stream-protocol", choices=["rtsp", "hls"], default="rtsp"
-    )
+    p_cfg.add_argument("--stream-protocol", choices=["rtsp", "hls"], default="rtsp")
     p_cfg.add_argument("--vendor", default=None)
-    p_cfg.add_argument(
-        "--sub-stream", action=argparse.BooleanOptionalAction, default=True
-    )
+    p_cfg.add_argument("--sub-stream", action=argparse.BooleanOptionalAction, default=True)
     p_cfg.set_defaults(func=_cmd_configure)
 
     p_rm = sub.add_parser("remove", help="publish a 'removed' event")

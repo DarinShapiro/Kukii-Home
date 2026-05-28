@@ -158,13 +158,9 @@ class YOLODetector:
         stays responsive.
         """
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, self._detect_sync, jpeg_bytes, frame_ts
-        )
+        return await loop.run_in_executor(None, self._detect_sync, jpeg_bytes, frame_ts)
 
-    async def detect_batch(
-        self, frames: list[tuple[bytes, float]]
-    ) -> tuple[DetectionTag, ...]:
+    async def detect_batch(self, frames: list[tuple[bytes, float]]) -> tuple[DetectionTag, ...]:
         """Run detection on a batch of frames in one inference call.
 
         Ultralytics batches automatically when handed a list of
@@ -184,9 +180,7 @@ class YOLODetector:
         will load lazily. Calling at startup makes the first real
         request fast."""
         async with self._load_lock:
-            await asyncio.get_running_loop().run_in_executor(
-                None, self._ensure_model
-            )
+            await asyncio.get_running_loop().run_in_executor(None, self._ensure_model)
 
     # ─── internals (run in executor) ───────────────────────────────
 
@@ -240,9 +234,7 @@ class YOLODetector:
         )
         return _results_to_tags(results, img.shape, frame_ts)
 
-    def _detect_batch_sync(
-        self, frames: list[tuple[bytes, float]]
-    ) -> tuple[DetectionTag, ...]:
+    def _detect_batch_sync(self, frames: list[tuple[bytes, float]]) -> tuple[DetectionTag, ...]:
         images: list[np.ndarray] = []
         timestamps: list[float] = []
         for jpeg_bytes, ts in frames:
@@ -263,9 +255,7 @@ class YOLODetector:
         )
         out: list[DetectionTag] = []
         for result, ts in zip(results, timestamps, strict=False):
-            out.extend(
-                _results_to_tags([result], images[0].shape, ts)
-            )
+            out.extend(_results_to_tags([result], images[0].shape, ts))
         return tuple(out)
 
 

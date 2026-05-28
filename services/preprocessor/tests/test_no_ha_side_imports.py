@@ -31,9 +31,7 @@ from pathlib import Path
 
 import pytest
 
-_PREPROCESSOR_SRC = (
-    Path(__file__).resolve().parent.parent / "src" / "sentihome_preprocessor"
-)
+_PREPROCESSOR_SRC = Path(__file__).resolve().parent.parent / "src" / "sentihome_preprocessor"
 
 # These are HA-side packages. The preprocessor must NEVER import any
 # of them. ``sentihome_shared`` is the legitimate coupling point and

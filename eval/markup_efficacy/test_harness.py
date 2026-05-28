@@ -259,9 +259,7 @@ def test_question_battery_has_all_required_categories():
 
 def test_render_prompt_substitutes_actors():
     q = next(q for q in QUESTION_BATTERY if q.category == "identity")
-    rendered = render_prompt(
-        q, camera_id="cam_a", known_actor_names=["Alice", "Rex"]
-    )
+    rendered = render_prompt(q, camera_id="cam_a", known_actor_names=["Alice", "Rex"])
     assert "Alice" in rendered
     assert "Rex" in rendered
 

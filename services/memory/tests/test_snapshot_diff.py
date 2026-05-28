@@ -49,13 +49,9 @@ def test_missing_event_surfaces_as_diff():
 def test_extra_actor_surfaces_as_diff():
     a = _populated_client()
     b = _populated_client()
-    b.write_known_actor(
-        KnownActor(id="actor_extra", name="Surprise", role="visitor_unknown")
-    )
+    b.write_known_actor(KnownActor(id="actor_extra", name="Surprise", role="visitor_unknown"))
     diffs = diff_snapshots(GraphSnapshot.from_client(a), GraphSnapshot.from_client(b))
-    assert any(
-        "KnownActor 'actor_extra' present in B but missing in A" in d for d in diffs
-    )
+    assert any("KnownActor 'actor_extra' present in B but missing in A" in d for d in diffs)
 
 
 def test_diverging_event_camera_id_surfaces_as_diff():

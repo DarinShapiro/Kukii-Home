@@ -210,9 +210,7 @@ class SyntheticFrameBuffer:
                 )
 
                 if kind == "person" and cached_actors and rng.random() < 0.40:
-                    actor = cached_actors[
-                        rng.randint(0, len(cached_actors) - 1)
-                    ]
+                    actor = cached_actors[rng.randint(0, len(cached_actors) - 1)]
                     actor_matches.append(
                         ActorMatch(
                             actor_id=actor.actor_id,
