@@ -105,12 +105,16 @@ class PreprocessorConfig:
     real frames. Defaults to False so adding ultralytics as a hard
     dep at runtime is opt-in — the service can run without it."""
 
-    detection_weights: str = "yolo11n.pt"
-    """Ultralytics model name or path to .pt file. ``yolo11n`` is
-    the smallest (good for CPU + dev); ``yolo11x`` is production
-    quality on GPU."""
+    detection_weights: str = "yolo11x.pt"
+    """Ultralytics model name or path to .pt file. ``yolo11x`` is
+    the production target: ~109 MB, much higher mAP than the nano
+    model, sub-30ms on a 4090 (~500-1000ms on CPU). Unit tests pin
+    yolo11n explicitly for speed; everywhere else gets the real
+    model. We learned the hard way that yolo11n hallucinates "car"
+    on a pool surface — false positives erase the value of the
+    whole detection pipeline."""
 
-    detection_confidence_min: float = 0.35
+    detection_confidence_min: float = 0.5
     detection_image_size: int = 640
     detection_device: str | None = None
     """``"cuda:0"`` / ``"cpu"`` / None (auto-pick)."""

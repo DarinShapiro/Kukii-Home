@@ -50,10 +50,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Default model. yolo11n is small + fast (~5 MB weights, ~50ms CPU
-# inference at 640px); yolo11x is the full production target (~100 MB
-# weights, much higher mAP). Operators flip via env / config.
-_DEFAULT_WEIGHTS = "yolo11n.pt"
+# Default model. yolo11x is the production target (~109 MB weights,
+# ~30ms on a 4090, ~500-1000ms on CPU, much higher mAP than nano).
+# yolo11n (~5 MB) hallucinates "car" on textured surfaces like pool
+# water — verified empirically. Use yolo11n explicitly only when
+# you've accepted that tradeoff (unit tests do, for speed).
+_DEFAULT_WEIGHTS = "yolo11x.pt"
 
 # COCO class names that the dispatcher actually cares about. Anything
 # YOLO detects with a class outside this set gets a generic
@@ -77,12 +79,13 @@ _INTERESTING_COCO_CLASSES: dict[str, str] = {
     "deer": "animal",
 }
 
-# Default confidence floor. Below this, YOLO's call is shaky enough
-# we'd rather drop it than waste downstream pipeline cycles. The
-# preprocessor's KnobAdjustment surface (POST /tune yolo.confidence_min)
-# can override this at runtime once the feedback-loop subsystem
-# lands.
-_DEFAULT_CONFIDENCE_MIN = 0.35
+# Default confidence floor. 0.5 chosen after seeing yolo11n produce
+# false-positive "car" detections at 0.59 on a pool-surface frame —
+# even moderate-confidence YOLO outputs in out-of-distribution scenes
+# are unreliable. The preprocessor's KnobAdjustment surface
+# (POST /tune yolo.confidence_min) can override this at runtime
+# once the feedback-loop subsystem lands.
+_DEFAULT_CONFIDENCE_MIN = 0.5
 
 
 @dataclass

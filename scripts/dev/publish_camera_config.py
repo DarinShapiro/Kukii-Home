@@ -66,8 +66,9 @@ async def _publish(events: list[tuple[str, CameraConfigEvent]], nats_url: str) -
     try:
         for subject, event in events:
             await nc.publish(subject, event.model_dump_json().encode("utf-8"))
+            # ASCII arrow — Windows cp1252 console barfs on '→'.
             print(
-                f"published → {subject}  {event.action} "
+                f"published -> {subject}  {event.action} "
                 f"camera_id={event.camera_id!r} "
                 f"url={event.stream_url!r}"
             )

@@ -217,8 +217,8 @@ services:
       # from captured frames. Off by default — opt in once cameras are
       # streaming and ultralytics is installed in the runtime.
       - SENTIHOME_PREPROCESSOR_DETECTION=false
-      - SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS=yolo11n.pt
-      - SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN=0.35
+      - SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS=yolo11x.pt
+      - SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN=0.5
       - SENTIHOME_PREPROCESSOR_DETECTION_IMG_SIZE=640
       # SENTIHOME_PREPROCESSOR_DETECTION_DEVICE=cuda:0   # set on the
       # inference box; auto-picks otherwise.
