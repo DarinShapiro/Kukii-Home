@@ -210,42 +210,91 @@ class CameraCaptureTask:
 
 
 class RTSPCaptureSupervisor:
-    """Owns the capture tasks for every configured camera.
+    """Owns the capture tasks across the configured camera set.
 
-    Started once at process boot, stopped on shutdown. The
-    individual ``CameraCaptureTask.state`` instances are exposed via
-    the FastAPI ``/status`` route.
+    Supports dynamic add/remove so the
+    :class:`~sentihome_preprocessor.nats_subscriber.CameraConfigSubscriber`
+    can wire camera config from ha-agent's broadcast and the
+    supervisor reacts in real time — start a capture task when a
+    new camera is configured, stop one when removed, restart with
+    a new URL when the URL changes (e.g. HLS token refresh).
+
+    All mutations go through :attr:`_lock` so concurrent add/remove
+    from the NATS callback path is safe.
     """
 
-    def __init__(
-        self, *, camera_urls: dict[str, str], buffer: RollingBuffer
-    ) -> None:
+    def __init__(self, *, buffer: RollingBuffer) -> None:
         self._buffer = buffer
-        self._tasks: dict[str, CameraCaptureTask] = {
-            cam: CameraCaptureTask(
-                camera_id=cam, rtsp_url=url, buffer=buffer
-            )
-            for cam, url in camera_urls.items()
-        }
+        self._tasks: dict[str, CameraCaptureTask] = {}
+        self._lock = asyncio.Lock()
 
     async def start(self) -> None:
-        for task in self._tasks.values():
-            await task.start()
+        """No-op at the supervisor level. Tasks added via
+        :meth:`add` start themselves; existing tasks are already
+        running. Kept as a hook for symmetry with subscribers'
+        ``connect()`` lifecycle."""
         logger.info(
             "preprocessor.rtsp.supervisor_started",
             cameras=sorted(self._tasks.keys()),
         )
 
     async def stop(self) -> None:
+        async with self._lock:
+            tasks = list(self._tasks.values())
+            self._tasks.clear()
         await asyncio.gather(
-            *(t.stop() for t in self._tasks.values()),
+            *(t.stop() for t in tasks),
             return_exceptions=True,
         )
 
+    async def add(self, *, camera_id: str, rtsp_url: str) -> None:
+        """Start (or restart) a capture task for ``camera_id``.
+
+        If a task already exists for this camera, it's stopped and a
+        new one with the fresh URL is started. That's the right
+        semantics for HLS token refresh AND for raw-RTSP URL changes
+        (e.g. operator rotated the camera password).
+        """
+        async with self._lock:
+            existing = self._tasks.pop(camera_id, None)
+            new_task = CameraCaptureTask(
+                camera_id=camera_id,
+                rtsp_url=rtsp_url,
+                buffer=self._buffer,
+            )
+            self._tasks[camera_id] = new_task
+
+        # Release the lock before the potentially-slow stop+start.
+        if existing is not None:
+            await existing.stop()
+        await new_task.start()
+        logger.info(
+            "preprocessor.rtsp.camera_added",
+            camera_id=camera_id,
+            replaced=existing is not None,
+        )
+
+    async def remove(self, camera_id: str) -> bool:
+        """Stop the camera's capture task. Returns True if there
+        was one to remove; False if it was already gone."""
+        async with self._lock:
+            existing = self._tasks.pop(camera_id, None)
+        if existing is None:
+            return False
+        await existing.stop()
+        logger.info("preprocessor.rtsp.camera_removed", camera_id=camera_id)
+        return True
+
     def state_snapshot(self) -> tuple[CameraCaptureState, ...]:
+        # Lock-free read: dict iteration is atomic under CPython,
+        # and CameraCaptureState mutations on the per-task object
+        # are read-mostly + non-critical for status surfaces.
         return tuple(
             self._tasks[cam].state for cam in sorted(self._tasks.keys())
         )
+
+    def camera_ids(self) -> tuple[str, ...]:
+        return tuple(sorted(self._tasks.keys()))
 
 
 # ─── helpers ─────────────────────────────────────────────────────────

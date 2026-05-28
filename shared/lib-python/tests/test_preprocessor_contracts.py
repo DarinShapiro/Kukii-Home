@@ -224,3 +224,81 @@ def test_no_preprocessor_output_subject():
         f"Preprocessor must not broadcast detection events — found "
         f"forbidden subject re-introduced: {public & forbidden}"
     )
+
+
+# ─── CameraConfigEvent ───────────────────────────────────────────────
+
+
+def test_camera_config_event_configured_roundtrips():
+    from sentihome_shared.preprocessor import CameraConfigEvent
+
+    ev = CameraConfigEvent(
+        action="configured",
+        camera_id="front_porch",
+        stream_url="rtsp://user:pass@192.168.1.20:554/h264Preview_01_sub",
+        stream_protocol="rtsp",
+        vendor="reolink",
+        sub_stream=True,
+    )
+    rebuilt = CameraConfigEvent.model_validate_json(ev.model_dump_json())
+    assert rebuilt == ev
+
+
+def test_camera_config_event_removed_omits_stream_url():
+    from sentihome_shared.preprocessor import CameraConfigEvent
+
+    ev = CameraConfigEvent(action="removed", camera_id="front_porch")
+    assert ev.stream_url is None
+    assert ev.stream_protocol is None
+
+
+def test_camera_config_event_hls_refresh_lifetime():
+    """HLS URLs typically carry short-lived tokens. The
+    refresh_after_seconds hint tells the subscriber when to expect
+    a follow-up event."""
+    from sentihome_shared.preprocessor import CameraConfigEvent
+
+    ev = CameraConfigEvent(
+        action="configured",
+        camera_id="cam_a",
+        stream_url="http://homeassistant:8123/api/hls/abc.m3u8?token=xyz",
+        stream_protocol="hls",
+        refresh_after_seconds=240.0,
+    )
+    assert ev.refresh_after_seconds == 240.0
+
+
+def test_camera_config_event_rejects_unknown_action():
+    from pydantic import ValidationError
+    from sentihome_shared.preprocessor import CameraConfigEvent
+
+    with pytest.raises(ValidationError):
+        CameraConfigEvent(action="disabled", camera_id="cam_a")  # type: ignore[arg-type]
+
+
+def test_camera_config_event_rejects_unknown_protocol():
+    from pydantic import ValidationError
+    from sentihome_shared.preprocessor import CameraConfigEvent
+
+    with pytest.raises(ValidationError):
+        CameraConfigEvent(
+            action="configured",
+            camera_id="cam_a",
+            stream_url="webrtc://example",
+            stream_protocol="webrtc",  # type: ignore[arg-type]
+        )
+
+
+def test_camera_subjects_are_stable():
+    from sentihome_shared.preprocessor import (
+        ALL_CAMERA_SUBJECTS,
+        SUBJECT_CAMERA_CONFIGURED,
+        SUBJECT_CAMERA_REMOVED,
+    )
+
+    assert SUBJECT_CAMERA_CONFIGURED == "sentihome.ha.camera.configured"
+    assert SUBJECT_CAMERA_REMOVED == "sentihome.ha.camera.removed"
+    assert ALL_CAMERA_SUBJECTS == (
+        SUBJECT_CAMERA_CONFIGURED,
+        SUBJECT_CAMERA_REMOVED,
+    )

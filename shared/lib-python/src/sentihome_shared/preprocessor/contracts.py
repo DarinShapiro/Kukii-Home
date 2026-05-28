@@ -197,6 +197,63 @@ class KnobAdjustment(_Strict):
     """If set, applies only to this camera; None = global."""
 
 
+# ─── CameraConfig — INBOUND broadcast (ha-agent → preprocessor) ─────
+
+
+class CameraConfigEvent(_Strict):
+    """Published by ha-agent whenever a camera's stream configuration
+    changes (newly discovered, URL refreshed, user-disabled, removed).
+
+    The preprocessor's :class:`CameraConfigSubscriber` consumes these
+    and dynamically (re)starts the per-camera RTSP capture task.
+    Eliminates the env-var "type your RTSP URLs" step — the
+    HA-side already knows about cameras (via the HA add-on's
+    discovery layer), so the preprocessor learns from there.
+
+    The ``stream_url`` may be either:
+
+    * Raw RTSP (``rtsp://user:pass@host:port/path``) — fast, low
+      latency, but only works for integrations that expose the URL.
+    * HA HLS proxy (``http://homeassistant:8123/api/hls/.../playlist.m3u8``)
+      — universal across integrations, ~5s latency. Obtained from HA's
+      WebSocket ``camera/stream`` command.
+
+    PyAV decodes both — the capture task doesn't care which.
+    """
+
+    schema_version: Literal["v1"] = "v1"
+
+    action: Literal["configured", "removed"]
+
+    camera_id: str
+    """Stable identifier across the SentiHome topology. Matches the
+    same camera_id the topology + memory + events use."""
+
+    stream_url: str | None = None
+    """Required when action="configured", omitted when action="removed".
+    The URL the preprocessor will open for capture."""
+
+    stream_protocol: Literal["rtsp", "hls"] | None = None
+    """Hint about what PyAV will see. The capture task uses
+    ``rtsp_transport=tcp`` for RTSP; HLS uses default HTTP options.
+    Optional; capture task can fall back to URL-scheme inspection."""
+
+    vendor: str | None = None
+    """e.g. ``"reolink"``, ``"dahua"``, ``"unifi"``. Informational —
+    surfaces in logs / status. Not used for routing."""
+
+    sub_stream: bool = True
+    """True if this is the low-res sub-stream (cheap to decode,
+    sufficient for motion + general detection). False = main stream.
+    Phase 10.4 will use this to decide whether to also open a
+    parallel main-stream session for face/plate detail."""
+
+    refresh_after_seconds: float | None = None
+    """For HLS streams whose URL contains a short-lived token: the
+    expected lifetime. ha-agent should republish before this elapses.
+    None for RTSP (no token refresh needed)."""
+
+
 # ─── ActorEnrollment — INBOUND broadcast (memory → preprocessor) ─────
 
 

@@ -24,6 +24,7 @@ Architectural decisions: ``planning/epics/10-identity-recognition.md``.
 from sentihome_shared.preprocessor.contracts import (
     ActorEnrollmentEvent,
     ActorMatch,
+    CameraConfigEvent,
     DetectionTag,
     FrameRef,
     FrameWindow,
@@ -32,18 +33,25 @@ from sentihome_shared.preprocessor.contracts import (
 )
 from sentihome_shared.preprocessor.nats_subjects import (
     ALL_ACTOR_SUBJECTS,
+    ALL_CAMERA_SUBJECTS,
     SUBJECT_ACTOR_DEACTIVATED,
     SUBJECT_ACTOR_ENROLLED,
     SUBJECT_ACTOR_UPDATED,
+    SUBJECT_CAMERA_CONFIGURED,
+    SUBJECT_CAMERA_REMOVED,
 )
 
 __all__ = [
     "ALL_ACTOR_SUBJECTS",
+    "ALL_CAMERA_SUBJECTS",
     "SUBJECT_ACTOR_DEACTIVATED",
     "SUBJECT_ACTOR_ENROLLED",
     "SUBJECT_ACTOR_UPDATED",
+    "SUBJECT_CAMERA_CONFIGURED",
+    "SUBJECT_CAMERA_REMOVED",
     "ActorEnrollmentEvent",
     "ActorMatch",
+    "CameraConfigEvent",
     "DetectionTag",
     "FrameRef",
     "FrameWindow",

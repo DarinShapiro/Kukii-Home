@@ -1,16 +1,20 @@
-"""Service entry point — wires the actor-event subscriber, the
-configured frame-buffer backend, and the FastAPI app, then runs
-forever.
+"""Service entry point — wires actor-event + camera-config NATS
+subscribers, the configured frame-buffer backend, and the FastAPI app,
+then runs forever.
 
 Backend selection is config-driven:
 
 * ``backend == "synthetic"`` → :class:`SyntheticFrameBuffer`. No
-  external dependencies. CI / unit-test default.
+  external dependencies. CI / unit-test default. Camera-config
+  events are still subscribed (uniform shape) but no-op'd via
+  :class:`NoOpApplier`.
 * ``backend == "rtsp"``      → :class:`RTSPFrameBuffer` reading from
   :class:`RollingBuffer` filled by per-camera
   :class:`CameraCaptureTask` instances. The container acts as the
-  NVR — pulls RTSP sub-streams directly from cameras, JPEG-encodes
-  keyframes, holds them in a 5-minute rolling buffer.
+  NVR — pulls RTSP / HLS streams directly, JPEG-encodes keyframes,
+  holds them in a 5-minute rolling buffer. Camera-config events
+  dynamically add/remove capture tasks via
+  :class:`SupervisorApplier`.
 
 Phase 10.3+ replaces the empty enrichment in RTSPFrameBuffer with
 real detection (YOLO11x) + recognition (ArcFace, DINOv2, fastALPR)
@@ -27,6 +31,12 @@ import structlog
 import uvicorn
 
 from sentihome_preprocessor.app import AppState, create_app
+from sentihome_preprocessor.camera_config_subscriber import (
+    CameraConfigApplier,
+    CameraConfigSubscriber,
+    NoOpApplier,
+    SupervisorApplier,
+)
 from sentihome_preprocessor.config import PreprocessorConfig, load_from_env
 from sentihome_preprocessor.nats_subscriber import ActorEnrollmentSubscriber
 from sentihome_preprocessor.pipelines import FrameBufferBackend
@@ -41,12 +51,20 @@ logger = structlog.get_logger(__name__)
 
 def _build_backend(
     config: PreprocessorConfig,
-) -> tuple[FrameBufferBackend, RTSPCaptureSupervisor | None]:
-    """Returns (frame_buffer, optional capture supervisor).
+) -> tuple[
+    FrameBufferBackend,
+    RTSPCaptureSupervisor | None,
+    CameraConfigApplier,
+]:
+    """Returns (frame_buffer, optional capture supervisor, camera-config applier).
 
-    The supervisor exists only in ``rtsp`` mode; ``synthetic`` mode
-    returns ``None`` for it. Caller is responsible for starting +
-    stopping the supervisor.
+    Synthetic mode: supervisor=None, applier=NoOpApplier.
+    RTSP mode: supervisor + SupervisorApplier wired to it.
+
+    Bootstrap env-var URLs (``SENTIHOME_PREPROCESSOR_RTSP_<CAMERA>``)
+    are preserved as a fallback for operators who want to bring up
+    cameras without ha-agent — the supervisor is pre-populated, then
+    camera-config events from ha-agent can replace/add to that set.
     """
     if config.backend == "synthetic":
         return (
@@ -57,6 +75,7 @@ def _build_backend(
                 buffer_horizon_seconds=config.synthetic_buffer_horizon_seconds,
             ),
             None,
+            NoOpApplier(),
         )
 
     if config.backend == "rtsp":
@@ -64,31 +83,14 @@ def _build_backend(
             horizon_seconds=config.rtsp_buffer_horizon_seconds,
             max_entries_per_camera=config.rtsp_buffer_max_entries_per_camera,
         )
-        # Only spin tasks for cameras with a URL configured. Missing
-        # URLs surface as a startup log warning so the operator
-        # spots the misconfig.
-        configured: dict[str, str] = {}
-        for cam in config.cameras:
-            url = config.camera_rtsp_urls.get(cam, "")
-            if not url:
-                logger.warning(
-                    "preprocessor.rtsp.no_url_configured",
-                    camera_id=cam,
-                    hint=f"set SENTIHOME_PREPROCESSOR_RTSP_{cam.upper()}=rtsp://...",
-                )
-                continue
-            configured[cam] = url
-
-        supervisor = RTSPCaptureSupervisor(
-            camera_urls=configured, buffer=rolling
-        )
+        supervisor = RTSPCaptureSupervisor(buffer=rolling)
         frame_buffer = RTSPFrameBuffer(
             rolling_buffer=rolling,
             configured_cameras=config.cameras,
             node_id=config.node_id,
             external_base_url=config.external_base_url,
         )
-        return frame_buffer, supervisor
+        return frame_buffer, supervisor, SupervisorApplier(supervisor)
 
     raise ValueError(
         f"Unknown SENTIHOME_PREPROCESSOR_BACKEND={config.backend!r}; "
@@ -96,17 +98,35 @@ def _build_backend(
     )
 
 
+async def _bootstrap_rtsp_from_env(
+    config: PreprocessorConfig, supervisor: RTSPCaptureSupervisor
+) -> None:
+    """Pre-populate the supervisor with any env-var-supplied URLs.
+
+    Camera-config events from ha-agent can subsequently replace
+    these (e.g. ha-agent publishes a fresher HLS URL). The env-var
+    path exists for operators running without ha-agent.
+    """
+    for cam in config.cameras:
+        url = config.camera_rtsp_urls.get(cam, "")
+        if not url:
+            continue
+        await supervisor.add(camera_id=cam, rtsp_url=url)
+
+
 async def _run(config: PreprocessorConfig) -> None:
     cache = ActorCache()
-    subscriber = ActorEnrollmentSubscriber(config.nats_url, cache)
+    actor_subscriber = ActorEnrollmentSubscriber(config.nats_url, cache)
+    await actor_subscriber.connect()
 
-    # Connect the inbound NATS subscription first.
-    await subscriber.connect()
+    frame_buffer, capture_supervisor, camera_applier = _build_backend(config)
 
-    frame_buffer, capture_supervisor = _build_backend(config)
+    camera_subscriber = CameraConfigSubscriber(config.nats_url, camera_applier)
+    await camera_subscriber.connect()
 
     if capture_supervisor is not None:
         await capture_supervisor.start()
+        await _bootstrap_rtsp_from_env(config, capture_supervisor)
 
     state = AppState(
         config=config,
@@ -141,7 +161,8 @@ async def _run(config: PreprocessorConfig) -> None:
     finally:
         if capture_supervisor is not None:
             await capture_supervisor.stop()
-        await subscriber.close()
+        await camera_subscriber.close()
+        await actor_subscriber.close()
         logger.info("preprocessor.stopped")
 
 

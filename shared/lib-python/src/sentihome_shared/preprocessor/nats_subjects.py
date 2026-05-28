@@ -38,3 +38,18 @@ ALL_ACTOR_SUBJECTS = (
     SUBJECT_ACTOR_UPDATED,
     SUBJECT_ACTOR_DEACTIVATED,
 )
+
+
+# ─── Camera config (ha-agent → preprocessor) ────────────────────────
+
+SUBJECT_CAMERA_CONFIGURED = "sentihome.ha.camera.configured"
+"""Published by ha-agent when a camera becomes ready for capture —
+newly discovered, stream URL refreshed, user (re)enabled.
+Preprocessor starts (or restarts) a CameraCaptureTask for it."""
+
+SUBJECT_CAMERA_REMOVED = "sentihome.ha.camera.removed"
+"""Published by ha-agent when a camera is no longer eligible —
+user-disabled in the override UI, deleted from HA, etc.
+Preprocessor stops the corresponding CameraCaptureTask."""
+
+ALL_CAMERA_SUBJECTS = (SUBJECT_CAMERA_CONFIGURED, SUBJECT_CAMERA_REMOVED)
