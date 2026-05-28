@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.21 — 2026-05-28
+
+**Hotfix: aarch64 build failure (HA Yellow / Raspberry Pi).**
+
+v0.3.20 failed to build on aarch64 because the `openvino`
+package (Epic 10.3.1) only ships x86_64 Linux / macOS / Windows
+wheels — no aarch64 wheel exists. `uv sync` correctly refused
+to install it on HA Yellow and the build aborted.
+
+Fix: marker-gate the openvino dep to the platforms where it
+actually has wheels. On aarch64 the dependency graph skips it
+entirely. The OpenVINO inference backend was never usable on
+aarch64 anyway (no Intel iGPU); the PyTorch backend works fine
+via torch's aarch64 wheels.
+
+No functional change for x86_64 hosts. This patch unblocks the
+0.3.20 notification UX update on HA Yellow.
+
+---
+
 ## 0.3.20 — 2026-05-28
 
 **Notification tap UX (Epic 10.8.1).**

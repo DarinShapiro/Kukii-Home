@@ -27,7 +27,14 @@ dependencies = [
     # PyTorch CPU on Intel CPUs/iGPUs. Used when the YOLODetector
     # is constructed with backend="openvino"; pytorch backend
     # never imports openvino so this is effectively optional.
-    "openvino>=2024.4.0",
+    #
+    # Marker: openvino only ships wheels for x86_64 Linux, macOS, and
+    # Windows. On aarch64 (HA Yellow, Raspberry Pi 4/5) it has no
+    # wheel and no source build, so we exclude it from the dependency
+    # graph entirely — the openvino backend isn't usable there anyway
+    # (no Intel iGPU to target). The pytorch backend works fine on
+    # aarch64 via torch's aarch64 wheels.
+    "openvino>=2024.4.0; platform_machine == 'x86_64' or sys_platform == 'darwin' or sys_platform == 'win32'",
     # Epic 10.4 — face recognition. InsightFace bundles detection +
     # ArcFace embedding; onnxruntime is the inference engine. CPU
     # provider is default; CUDA/OpenVINO providers are optional
