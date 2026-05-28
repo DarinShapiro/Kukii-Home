@@ -17,6 +17,11 @@ dependencies = [
     # sentihome-shared's deps.
     # Epic 10.1.6.2 — publish CameraConfigEvents to the preprocessor.
     "nats-py>=2.9.0",
+    # Epic 10.8.4 — mDNS publisher so the SentiHome custom integration
+    # appears as a "Discovered" device in HA's Settings → Devices &
+    # Services. Removes the manual host/port entry from the install
+    # flow. Tiny pure-Python dep (~150KB), aarch64-friendly.
+    "zeroconf>=0.130.0",
 ]
 
 [project.scripts]

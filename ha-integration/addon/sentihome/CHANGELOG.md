@@ -1,5 +1,73 @@
 # Changelog
 
+## 0.3.24 — 2026-05-28
+
+**Auto-install integration + zeroconf discovery (Epic 10.8.4).**
+
+Eliminates the two-component install dance. Going forward, the
+SentiHome add-on bundles the matching custom integration and
+installs it automatically on first boot. Updates always ship the
+integration version that matches the add-on — version skew (the
+v0.3.15/17/20/23 failure mode) is now structurally impossible.
+
+### What changes for you
+
+**Install (fresh):**
+1. Add the SentiHome add-on repository.
+2. Install the SentiHome add-on.
+3. Start it. The add-on copies the integration into
+   `/config/custom_components/sentihome/` and asks HA to restart.
+4. After HA restarts: a "Discovered: SentiHome" card appears in
+   Settings → Devices & Services. Click Configure → Done.
+
+**Update:** click Update on the add-on; the integration updates with
+it automatically. No HACS step, no second restart.
+
+### What changed under the hood
+
+* Add-on `config.yaml`: `map:` adds `config:rw` so the add-on can
+  write to `/config/custom_components/`. You'll see a one-time
+  permission prompt during the update.
+* New `cont-init` script `20-install-integration.sh` syncs the
+  bundled integration files on every boot. Uses a content-hash
+  stamp so it no-ops when nothing changed (common path).
+* After sync, the script asks Supervisor to restart HA Core via
+  the REST API so the new integration code loads. Falls back to
+  a "please restart manually" log line if Supervisor doesn't
+  respond.
+* New `discovery_publish.py` in ha-agent registers an
+  `_sentihome._tcp.local.` mDNS service on the LAN. The
+  integration's `manifest.json` declares it consumes this service
+  type, so HA's zeroconf component routes the broadcast to the
+  integration's discovery flow.
+* New `async_step_zeroconf` in the integration's `config_flow.py`
+  handles the auto-discovery, pre-fills host/port from the TXT
+  records, and shows a one-click confirm card.
+
+### Dropping HACS support
+
+SentiHome is no longer distributable via HACS — the two-component
+shape doesn't fit HACS's "independent integration" assumption, and
+trying to support both was the source of the install/update bugs
+in v0.3.15/17/20/23. The bundled-with-add-on install is strictly
+better for this product shape:
+
+* One install path
+* One update path
+* Version skew impossible by construction
+* Easier discoverability (zeroconf surfaces it without HACS browsing)
+
+If you'd previously installed the integration via HACS, you can
+remove it — the add-on will install its own copy in the right place.
+
+### What this fixes
+
+The 404-on-tap from v0.3.23: now genuinely impossible because the
+integration that handles `/api/sentihome/alert/<id>` is always
+present at the matching version whenever the add-on is.
+
+---
+
 ## 0.3.23 — 2026-05-28
 
 **Real fix for the notification tap 401 (Epic 10.8.3).**

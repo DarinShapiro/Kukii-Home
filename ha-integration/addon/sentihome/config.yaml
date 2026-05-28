@@ -2,7 +2,7 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: SentiHome
-version: '0.3.23'
+version: '0.3.24'
 slug: sentihome
 description: AI-powered home security and presence understanding
 url: https://github.com/DarinShapiro/SentiHome
@@ -30,6 +30,13 @@ homeassistant_api: true
 map:
   - addon_config:rw
   - share:rw
+  # Epic 10.8.4: config:rw lets the add-on auto-install + auto-update
+  # its companion custom integration at /config/custom_components/sentihome/.
+  # The cont-init script syncs the bundled integration files on every
+  # boot so the add-on version and integration version can't drift —
+  # eliminating the "did you update both?" failure mode from
+  # v0.3.15/17/20/23.
+  - config:rw
 
 # Ingress mode: HA proxies the Web UI through its own auth + URL space.
 # No port published to the host network — eliminates the entire class of

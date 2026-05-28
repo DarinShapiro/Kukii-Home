@@ -128,6 +128,9 @@ class BootState:
     # resulting specs to `reconciler.apply()` — which starts/stops
     # HACameraLoops to match.
     reconciler: Reconciler | None = None
+    discovery_handle: Any | None = None
+    """Epic 10.8.4: zeroconf publisher handle. Held to keep the mDNS
+    registration alive for the add-on's lifetime; close()d at shutdown."""
     camera_publisher: CameraConfigPublisher | None = None
     """Epic 10.1.6.3: NATS publisher that fans Reconciler diffs out
     as CameraConfigEvents to the preprocessor. None when
@@ -2083,6 +2086,17 @@ async def _run() -> None:
     site = web.TCPSite(runner, LISTEN_HOST, LISTEN_PORT)
     await site.start()
     logger.info("ha_agent.listening", host=LISTEN_HOST, port=LISTEN_PORT)
+
+    # Epic 10.8.4: publish mDNS so HA's zeroconf discovery sees us.
+    # Held on boot so the registration outlives this function. Best-
+    # effort — if zeroconf isn't importable or registration fails the
+    # manual config flow still works.
+    from sentihome_ha_agent import __version__ as _pkg_version
+    from sentihome_ha_agent.discovery_publish import publish_sentihome
+
+    boot.discovery_handle = publish_sentihome(
+        port=LISTEN_PORT, version=_pkg_version
+    )
 
     # Now do the rest in the background. Any failure surfaces on the page.
     bootstrap_task = asyncio.create_task(_bootstrap_topology_and_ha(boot, alert_log=alert_log))
