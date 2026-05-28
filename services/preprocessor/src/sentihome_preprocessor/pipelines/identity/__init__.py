@@ -11,6 +11,9 @@ parallelism axes, and what's intentionally left out of the minimal
 shape.
 """
 
+from sentihome_preprocessor.pipelines.identity.body_id_pipeline import (
+    BodyIdPipeline,
+)
 from sentihome_preprocessor.pipelines.identity.face_pipeline import FacePipeline
 from sentihome_preprocessor.pipelines.identity.router import (
     EnrolledCorpus,
@@ -19,6 +22,7 @@ from sentihome_preprocessor.pipelines.identity.router import (
 )
 
 __all__ = [
+    "BodyIdPipeline",
     "EnrolledCorpus",
     "FacePipeline",
     "IdentityPipeline",

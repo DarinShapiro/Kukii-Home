@@ -152,6 +152,25 @@ class PreprocessorConfig:
     default — set via env to ``CUDAExecutionProvider`` on the 4090
     box or ``OpenVINOExecutionProvider`` on Intel iGPU."""
 
+    # ─── Body re-ID (Phase 10.5.1) ─────────────────────────────────
+    body_id_enabled: bool = False
+    """When True (and backend=rtsp), the IdentityRouter gets a
+    BodyIdPipeline. Off by default — needs an OSNet ONNX model
+    available at ``body_id_model_path``."""
+
+    body_id_model_path: str = "/data/sentihome/models/osnet_x1_0.onnx"
+    """Filesystem path to the pre-exported OSNet ONNX. Produced by
+    ``scripts/dev/export_osnet_onnx.py``. The recognizer logs an
+    error + treats every match as 'no match' if the file is missing,
+    so the preprocessor stays up even with a misconfig."""
+
+    body_id_match_threshold: float = 0.6
+    """OSNet cosine threshold. Lower than ArcFace's 0.5 because
+    OSNet embeddings live in a looser similarity space; tune via
+    KnobAdjustment if FP/FN balance is off in production."""
+
+    body_id_providers: list[str] = field(default_factory=lambda: ["CPUExecutionProvider"])
+
 
 def load_from_env() -> PreprocessorConfig:
     """Build a :class:`PreprocessorConfig` from environment variables.
@@ -201,6 +220,17 @@ def load_from_env() -> PreprocessorConfig:
         face_det_size=_env_int("SENTIHOME_PREPROCESSOR_FACE_DET_SIZE", 640),
         face_providers=_env_list(
             "SENTIHOME_PREPROCESSOR_FACE_PROVIDERS",
+            ["CPUExecutionProvider"],
+        ),
+        body_id_enabled=os.environ.get("SENTIHOME_PREPROCESSOR_BODY_ID", "false").lower()
+        in ("1", "true", "yes", "on"),
+        body_id_model_path=os.environ.get(
+            "SENTIHOME_PREPROCESSOR_BODY_ID_MODEL_PATH",
+            "/data/sentihome/models/osnet_x1_0.onnx",
+        ),
+        body_id_match_threshold=_env_float("SENTIHOME_PREPROCESSOR_BODY_ID_MATCH_THRESHOLD", 0.6),
+        body_id_providers=_env_list(
+            "SENTIHOME_PREPROCESSOR_BODY_ID_PROVIDERS",
             ["CPUExecutionProvider"],
         ),
     )

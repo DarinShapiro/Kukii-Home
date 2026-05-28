@@ -78,7 +78,7 @@ class ActorMatch(_Strict):
 
     actor_id: str
     confidence: float = Field(ge=0.0, le=1.0)
-    match_method: Literal["face_arcface", "pet_dinov2", "plate_lpr"]
+    match_method: Literal["face_arcface", "body_id_osnet", "pet_dinov2", "plate_lpr"]
 
     frame_ts: float
     """Frame the match was observed on."""
@@ -158,7 +158,7 @@ class IdentifiedEntity(_Strict):
     on this: solid green box at >= 0.85, dashed yellow 0.6-0.85,
     not annotated < 0.6."""
 
-    identity_method: Literal["face_arcface", "pet_dinov2", "plate_lpr"]
+    identity_method: Literal["face_arcface", "body_id_osnet", "pet_dinov2", "plate_lpr"]
 
     track_id: str | None = None
 
@@ -349,6 +349,13 @@ class ActorEnrollmentEvent(_Strict):
     """Length matches the face model output (512 for ArcFace R100;
     placeholder 128 for in-memory testing). None for non-face actors
     (pets, vehicles)."""
+
+    body_embedding: tuple[float, ...] | None = None
+    """L2-normalized OSNet feature vector (512-d for osnet_x1_0).
+    Powers body re-identification — the fallback when face isn't
+    visible (subject turned away, partial occlusion, distance).
+    Averaged across N enrollment crops; None for actors without
+    body enrollment (Phase 10.5+)."""
 
     pet_dinov2_centroid: tuple[float, ...] | None = None
     """DINOv2 patch-feature centroid for pet recognition."""

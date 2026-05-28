@@ -115,6 +115,24 @@ def _build_backend(
             )
             identity_pipelines.append(FacePipeline(face_recognizer))
 
+        if config.body_id_enabled:
+            # Lazy import: onnxruntime is heavy, body_id only loaded
+            # when opted in.
+            from sentihome_preprocessor.pipelines.body_id import (
+                BodyIdConfig,
+                BodyIdRecognizer,
+            )
+            from sentihome_preprocessor.pipelines.identity import BodyIdPipeline
+
+            body_id_recognizer = BodyIdRecognizer(
+                BodyIdConfig(
+                    model_path=config.body_id_model_path,
+                    match_threshold=config.body_id_match_threshold,
+                    providers=tuple(config.body_id_providers),
+                )
+            )
+            identity_pipelines.append(BodyIdPipeline(body_id_recognizer))
+
         identity_router = None
         if identity_pipelines:
             from sentihome_preprocessor.pipelines.identity import IdentityRouter

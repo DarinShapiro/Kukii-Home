@@ -53,13 +53,21 @@ class _StubPipeline:
         triggers_on: frozenset[str],
         has_enroll: bool = True,
         delay_seconds: float = 0.0,
+        depends_on: tuple[str, ...] = (),
+        skip_when_upstream_matched_above: float | None = None,
+        match_confidence: float = 0.9,
+        match_actor_id: str | None = None,
     ) -> None:
         self.name = name
         self.triggers_on = triggers_on
+        self.depends_on = depends_on
+        self.skip_when_upstream_matched_above = skip_when_upstream_matched_above
         self._has_enroll = has_enroll
         self._delay = delay_seconds
-        self.calls: list[tuple[float, tuple[str, ...]]] = []
-        # (frame_ts, det_kinds)
+        self._match_confidence = match_confidence
+        self._match_actor_id = match_actor_id or f"actor_for_{name}"
+        self.calls: list[tuple[float, tuple[str, ...], tuple[str | None, ...]]] = []
+        # (frame_ts, det_kinds, det_track_ids)
 
     def has_enrollments(self, corpus: EnrolledCorpus) -> bool:
         _ = corpus
@@ -69,16 +77,29 @@ class _StubPipeline:
         _ = corpus
         if self._delay:
             await asyncio.sleep(self._delay)
-        self.calls.append((frame.ts, tuple(d.kind for d in detections)))
-        return (
-            ActorMatch(
-                actor_id=f"actor_for_{self.name}",
-                confidence=0.9,
-                match_method=self.name,
-                frame_ts=frame.ts,
-                track_id="t1",
-            ),
+        self.calls.append(
+            (
+                frame.ts,
+                tuple(d.kind for d in detections),
+                tuple(d.track_id for d in detections),
+            )
         )
+        # Emit one match per (tracked) detection so chain tests can
+        # inspect per-track behavior.
+        out: list[ActorMatch] = []
+        for d in detections:
+            if d.track_id is None:
+                continue
+            out.append(
+                ActorMatch(
+                    actor_id=self._match_actor_id,
+                    confidence=self._match_confidence,
+                    match_method=self.name,
+                    frame_ts=frame.ts,
+                    track_id=d.track_id,
+                )
+            )
+        return tuple(out)
 
 
 # ─── EnrolledCorpus ─────────────────────────────────────────────────
@@ -197,7 +218,7 @@ async def test_router_invokes_pipeline_with_filtered_detections():
     assert len(out) == 1
     assert out[0].match_method == "face_arcface"
     assert len(face.calls) == 1
-    _ts, kinds = face.calls[0]
+    _ts, kinds, _track_ids = face.calls[0]
     assert kinds == ("person",)  # vehicle filtered out
 
 
@@ -263,3 +284,254 @@ async def test_router_exposes_pipeline_names_for_telemetry():
     plate = _StubPipeline("plate_lpr", frozenset({"vehicle"}))
     router = IdentityRouter([face, plate])
     assert router.pipeline_names == ("face_arcface", "plate_lpr")
+
+
+# ─── Phase 10.5.1: depends_on + short-circuit chains ────────────────
+
+
+def _det_with_track(kind: str, ts: float, track_id: str) -> DetectionTag:
+    return DetectionTag(
+        kind=kind,
+        confidence=0.9,
+        bbox=(0.0, 0.0, 1.0, 1.0),
+        frame_ts=ts,
+        track_id=track_id,
+    )
+
+
+def test_branch_summary_groups_dependent_pipelines_into_one_chain():
+    """face + body_id (depends_on face) collapse to one branch;
+    plate is independent. Branch summary surfaces this for ops."""
+    face = _StubPipeline("face_arcface", frozenset({"person"}))
+    body = _StubPipeline(
+        "body_id_osnet",
+        frozenset({"person"}),
+        depends_on=("face_arcface",),
+        skip_when_upstream_matched_above=0.85,
+    )
+    plate = _StubPipeline("plate_lpr", frozenset({"vehicle"}))
+    router = IdentityRouter([face, body, plate])
+    assert router.branch_summary == (
+        ("face_arcface", "body_id_osnet"),
+        ("plate_lpr",),
+    )
+
+
+def test_branch_summary_unmet_dep_becomes_singleton_branch():
+    """body_id depends on face but face isn't registered. Router
+    treats the missing dep as already-satisfied -> body_id is its
+    own branch (runs on every triggering det, no short-circuit
+    skip since there's no upstream to compare against)."""
+    body = _StubPipeline(
+        "body_id_osnet",
+        frozenset({"person"}),
+        depends_on=("face_arcface",),
+        skip_when_upstream_matched_above=0.85,
+    )
+    router = IdentityRouter([body])
+    assert router.branch_summary == (("body_id_osnet",),)
+
+
+@pytest.mark.asyncio
+async def test_chain_skips_downstream_for_high_confidence_upstream_match():
+    """Face matches t1 at 0.91 (above body's 0.85 skip threshold).
+    Body should not run for t1 — saves the inference cost."""
+    face = _StubPipeline("face_arcface", frozenset({"person"}), match_confidence=0.91)
+    body = _StubPipeline(
+        "body_id_osnet",
+        frozenset({"person"}),
+        depends_on=("face_arcface",),
+        skip_when_upstream_matched_above=0.85,
+    )
+    router = IdentityRouter([face, body])
+    out = await router.identify(
+        buffered=[_frame(1.0)],
+        detections=(_det_with_track("person", 1.0, "t1"),),
+        cache=ActorCache(),
+    )
+    # Face ran; body was triggered (kind matches + enrollments
+    # exist) but received zero detections after short-circuit.
+    assert len(face.calls) == 1
+    # Body either didn't run at all (relevant filter dropped all
+    # dets so run was skipped), or ran with empty input. Either is
+    # a valid skip outcome; what matters is no body match emitted.
+    assert all(m.match_method == "face_arcface" for m in out)
+
+
+@pytest.mark.asyncio
+async def test_chain_runs_downstream_when_upstream_confidence_below_threshold():
+    """Face matches t1 at 0.70 (below body's 0.85 skip threshold).
+    Body should still run for t1 — the fallback case."""
+    face = _StubPipeline("face_arcface", frozenset({"person"}), match_confidence=0.70)
+    body = _StubPipeline(
+        "body_id_osnet",
+        frozenset({"person"}),
+        depends_on=("face_arcface",),
+        skip_when_upstream_matched_above=0.85,
+        match_actor_id="alice_from_body",
+    )
+    router = IdentityRouter([face, body])
+    out = await router.identify(
+        buffered=[_frame(1.0)],
+        detections=(_det_with_track("person", 1.0, "t1"),),
+        cache=ActorCache(),
+    )
+    methods = {m.match_method for m in out}
+    assert methods == {"face_arcface", "body_id_osnet"}
+
+
+@pytest.mark.asyncio
+async def test_chain_skips_only_track_ids_face_matched_confidently():
+    """Two persons in frame: face nails t1 at 0.92 but misses t2.
+    Body should skip t1 and run only for t2 — the per-track
+    granularity the chain enables."""
+    body = _StubPipeline(
+        "body_id_osnet",
+        frozenset({"person"}),
+        depends_on=("face_arcface",),
+        skip_when_upstream_matched_above=0.85,
+        match_actor_id="someone_body",
+    )
+
+    # Custom stub: face only emits for t1 (t2 left unmatched).
+    class _SelectiveFace:
+        name = "face_arcface"
+        triggers_on = frozenset({"person"})
+        depends_on: tuple[str, ...] = ()
+        skip_when_upstream_matched_above: float | None = None
+
+        def __init__(self) -> None:
+            self.calls: list = []
+
+        def has_enrollments(self, corpus):
+            return True
+
+        async def run(self, *, frame, detections, corpus):
+            from sentihome_shared.preprocessor import ActorMatch
+
+            self.calls.append(tuple(d.track_id for d in detections))
+            # Only emit for t1.
+            return tuple(
+                ActorMatch(
+                    actor_id="alice",
+                    confidence=0.92,
+                    match_method="face_arcface",
+                    frame_ts=frame.ts,
+                    track_id=d.track_id,
+                )
+                for d in detections
+                if d.track_id == "t1"
+            )
+
+    selective_face = _SelectiveFace()
+    router = IdentityRouter([selective_face, body])
+    await router.identify(
+        buffered=[_frame(1.0)],
+        detections=(
+            _det_with_track("person", 1.0, "t1"),
+            _det_with_track("person", 1.0, "t2"),
+        ),
+        cache=ActorCache(),
+    )
+    # Body was called once, with only t2 in its input.
+    assert len(body.calls) == 1
+    _ts, _kinds, track_ids = body.calls[0]
+    assert track_ids == ("t2",)
+
+
+@pytest.mark.asyncio
+async def test_independent_branches_run_in_parallel_with_chain():
+    """face+body chain runs concurrently with plate. Wall-clock =
+    max(chain_total, plate)."""
+    import time
+
+    face = _StubPipeline(
+        "face_arcface",
+        frozenset({"person"}),
+        delay_seconds=0.05,
+        match_confidence=0.50,  # below body's skip threshold
+    )
+    body = _StubPipeline(
+        "body_id_osnet",
+        frozenset({"person"}),
+        depends_on=("face_arcface",),
+        skip_when_upstream_matched_above=0.85,
+        delay_seconds=0.05,
+        match_actor_id="alice_body",
+    )
+    plate = _StubPipeline("plate_lpr", frozenset({"vehicle"}), delay_seconds=0.05)
+    router = IdentityRouter([face, body, plate])
+
+    t0 = time.perf_counter()
+    out = await router.identify(
+        buffered=[_frame(1.0)],
+        detections=(
+            _det_with_track("person", 1.0, "t1"),
+            _det_with_track("vehicle", 1.0, "tv1"),
+        ),
+        cache=ActorCache(),
+    )
+    elapsed = time.perf_counter() - t0
+
+    methods = {m.match_method for m in out}
+    assert methods == {"face_arcface", "body_id_osnet", "plate_lpr"}
+    # Chain (face 0.05 + body 0.05 = 0.10) runs concurrently with
+    # plate (0.05). Wall-clock ~= 0.10, not 0.15. Generous slack
+    # for executor overhead.
+    assert elapsed < 0.14, f"expected ~0.10s parallel, got {elapsed:.3f}s"
+
+
+@pytest.mark.asyncio
+async def test_chain_skip_does_not_affect_other_frames():
+    """Face nails t1 in frame 1 only. Body should still run for t1
+    in frame 2 (matches are per-frame, not persistent across the
+    window)."""
+
+    # Face only matches in frame 1 — use a custom stub for
+    # frame-conditional behavior.
+    class _F:
+        name = "face_arcface"
+        triggers_on = frozenset({"person"})
+        depends_on: tuple[str, ...] = ()
+        skip_when_upstream_matched_above: float | None = None
+
+        def has_enrollments(self, corpus):
+            return True
+
+        async def run(self, *, frame, detections, corpus):
+            from sentihome_shared.preprocessor import ActorMatch
+
+            if frame.ts == 1.0:
+                return tuple(
+                    ActorMatch(
+                        actor_id="alice",
+                        confidence=0.95,
+                        match_method="face_arcface",
+                        frame_ts=frame.ts,
+                        track_id=d.track_id,
+                    )
+                    for d in detections
+                )
+            return ()
+
+    body = _StubPipeline(
+        "body_id_osnet",
+        frozenset({"person"}),
+        depends_on=("face_arcface",),
+        skip_when_upstream_matched_above=0.85,
+    )
+    router = IdentityRouter([_F(), body])
+    await router.identify(
+        buffered=[_frame(1.0), _frame(2.0)],
+        detections=(
+            _det_with_track("person", 1.0, "t1"),
+            _det_with_track("person", 2.0, "t1"),
+        ),
+        cache=ActorCache(),
+    )
+    # Body called once total — only for frame 2 (skipped in frame 1
+    # because face matched above threshold there).
+    assert len(body.calls) == 1
+    frame_ts, _kinds, track_ids = body.calls[0]
+    assert frame_ts == 2.0
+    assert track_ids == ("t1",)

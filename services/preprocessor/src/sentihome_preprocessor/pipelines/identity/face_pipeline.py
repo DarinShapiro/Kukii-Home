@@ -47,6 +47,15 @@ class FacePipeline:
 
     name = "face_arcface"
     triggers_on = frozenset({"person"})
+    depends_on: tuple[str, ...] = ()
+    """Face has no upstream — runs first in any chain that
+    includes it (body_id_osnet declares depends_on=('face_arcface',))."""
+
+    skip_when_upstream_matched_above: float | None = None
+    """Face is always the cheapest signal we have for people, so
+    even with an upstream it would run anyway. Kept None for
+    forward-compat (e.g. if a future pipeline detects "person not in
+    frame" cheaply and we want face to skip)."""
 
     def __init__(self, recognizer: FaceRecognizer) -> None:
         self._recognizer = recognizer
