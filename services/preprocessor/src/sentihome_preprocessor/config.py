@@ -171,6 +171,22 @@ class PreprocessorConfig:
 
     body_id_providers: list[str] = field(default_factory=lambda: ["CPUExecutionProvider"])
 
+    # ─── Pet recognition (Phase 10.5.3) ────────────────────────────
+    pet_enabled: bool = False
+    """When True (and backend=rtsp), the IdentityRouter gets a
+    PetPipeline. Off by default — needs a DINOv2 ONNX model at
+    ``pet_model_path``."""
+
+    pet_model_path: str = "/data/sentihome/models/dinov2_vits14.onnx"
+    """Filesystem path to the pre-exported DINOv2 ONNX. Produced by
+    ``scripts/dev/export_dinov2_onnx.py``."""
+
+    pet_match_threshold: float = 0.6
+    """DINOv2 cosine threshold for 'same animal'. Raise toward 0.7
+    if a neighbor's same-breed pet false-matches."""
+
+    pet_providers: list[str] = field(default_factory=lambda: ["CPUExecutionProvider"])
+
 
 def load_from_env() -> PreprocessorConfig:
     """Build a :class:`PreprocessorConfig` from environment variables.
@@ -231,6 +247,17 @@ def load_from_env() -> PreprocessorConfig:
         body_id_match_threshold=_env_float("SENTIHOME_PREPROCESSOR_BODY_ID_MATCH_THRESHOLD", 0.6),
         body_id_providers=_env_list(
             "SENTIHOME_PREPROCESSOR_BODY_ID_PROVIDERS",
+            ["CPUExecutionProvider"],
+        ),
+        pet_enabled=os.environ.get("SENTIHOME_PREPROCESSOR_PET", "false").lower()
+        in ("1", "true", "yes", "on"),
+        pet_model_path=os.environ.get(
+            "SENTIHOME_PREPROCESSOR_PET_MODEL_PATH",
+            "/data/sentihome/models/dinov2_vits14.onnx",
+        ),
+        pet_match_threshold=_env_float("SENTIHOME_PREPROCESSOR_PET_MATCH_THRESHOLD", 0.6),
+        pet_providers=_env_list(
+            "SENTIHOME_PREPROCESSOR_PET_PROVIDERS",
             ["CPUExecutionProvider"],
         ),
     )

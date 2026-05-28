@@ -133,6 +133,22 @@ def _build_backend(
             )
             identity_pipelines.append(BodyIdPipeline(body_id_recognizer))
 
+        if config.pet_enabled:
+            from sentihome_preprocessor.pipelines.identity import PetPipeline
+            from sentihome_preprocessor.pipelines.pet import (
+                PetConfig,
+                PetRecognizer,
+            )
+
+            pet_recognizer = PetRecognizer(
+                PetConfig(
+                    model_path=config.pet_model_path,
+                    match_threshold=config.pet_match_threshold,
+                    providers=tuple(config.pet_providers),
+                )
+            )
+            identity_pipelines.append(PetPipeline(pet_recognizer))
+
         identity_router = None
         if identity_pipelines:
             from sentihome_preprocessor.pipelines.identity import IdentityRouter

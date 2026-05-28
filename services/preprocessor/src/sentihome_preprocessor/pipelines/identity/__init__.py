@@ -15,6 +15,7 @@ from sentihome_preprocessor.pipelines.identity.body_id_pipeline import (
     BodyIdPipeline,
 )
 from sentihome_preprocessor.pipelines.identity.face_pipeline import FacePipeline
+from sentihome_preprocessor.pipelines.identity.pet_pipeline import PetPipeline
 from sentihome_preprocessor.pipelines.identity.router import (
     EnrolledCorpus,
     IdentityPipeline,
@@ -27,4 +28,5 @@ __all__ = [
     "FacePipeline",
     "IdentityPipeline",
     "IdentityRouter",
+    "PetPipeline",
 ]
