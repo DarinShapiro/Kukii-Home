@@ -12,6 +12,13 @@ dependencies = [
     "opentelemetry-sdk>=1.27.0",
     "anyio>=4.6.0",
     "pyyaml>=6.0",
+    # Epic 10.8.2: MOG2MotionDetector lives here so the HA-agent
+    # add-on can use motion detection without installing the entire
+    # preprocessor stack (which pulls torch + onnxruntime). cv2 + numpy
+    # are small + have wheels on every platform we care about
+    # (x86_64, aarch64, macOS).
+    "opencv-python-headless>=4.10.0",
+    "numpy>=2.0.0",
 ]
 
 [build-system]

@@ -28,13 +28,10 @@ dependencies = [
     # is constructed with backend="openvino"; pytorch backend
     # never imports openvino so this is effectively optional.
     #
-    # Marker: openvino only ships wheels for x86_64 Linux, macOS, and
-    # Windows. On aarch64 (HA Yellow, Raspberry Pi 4/5) it has no
-    # wheel and no source build, so we exclude it from the dependency
-    # graph entirely — the openvino backend isn't usable there anyway
-    # (no Intel iGPU to target). The pytorch backend works fine on
-    # aarch64 via torch's aarch64 wheels.
-    "openvino>=2024.4.0; platform_machine == 'x86_64' or sys_platform == 'darwin' or sys_platform == 'win32'",
+    # The preprocessor only runs on an x86_64 / macOS / Windows
+    # inference box (Epic 10.8.2 split the deployment topology — HA
+    # Yellow runs ha-agent only). openvino has wheels for all those.
+    "openvino>=2024.4.0",
     # Epic 10.4 — face recognition. InsightFace bundles detection +
     # ArcFace embedding; onnxruntime is the inference engine. CPU
     # provider is default; CUDA/OpenVINO providers are optional

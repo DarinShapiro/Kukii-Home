@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.3.22 — 2026-05-28
+
+**Add-on packaging split: ha-agent only on Yellow (Epic 10.8.2).**
+
+Stops installing the preprocessor (with torch, onnxruntime,
+openvino, insightface — ~3GB of inference stack) on the Yellow
+add-on image. The preprocessor was never going to run inference
+on Yellow's aarch64 CPU anyway; it runs on a separate inference
+box (your laptop, NUC, etc.) and the add-on calls its REST
+endpoints over the LAN.
+
+### Topology
+
+```
+Yellow (aarch64)            ◀── LAN (NATS + REST) ──▶   Laptop (x86_64 + Intel iGPU)
+  SentiHome add-on                                          Preprocessor (Docker)
+    ha-agent                                                  RTSP capture
+    Web UI                                                    YOLO11x via OpenVINO
+    Notifications                                             ArcFace, OSNet
+    Alert pipeline                                            Identity router
+```
+
+### What changed under the hood
+
+* `MOG2MotionDetector` moved from `sentihome_preprocessor.motion`
+  to `sentihome_shared.motion`. Existing import paths still work
+  via a re-export shim, but new code should import from shared.
+* `sentihome-preprocessor` dropped from `sentihome-ha-agent`'s
+  pyproject deps. Yellow no longer pulls torch.
+* Add-on Dockerfile now uses
+  `uv sync --frozen --no-dev --package sentihome-ha-agent`
+  instead of `--all-packages`. Only ha-agent + its deps install.
+* Reverted the v0.3.21 openvino platform marker — no longer
+  needed since the preprocessor isn't in the add-on's dep graph
+  at all. The marker was a workaround; this is the actual fix.
+
+### Why you'd care
+
+* Add-on image shrinks by ~3GB (no torch / onnxruntime /
+  openvino / insightface).
+* Add-on builds finish in ~1 min instead of ~5+ min on Yellow.
+* Yellow's image-cap pressure drops significantly.
+* Architecturally honest: Yellow IS the HA bridge, not the
+  inference host.
+
+No functional change for users running the preprocessor on a
+separate box (which is everyone — the previous packaging was
+just installing dead code on Yellow).
+
+---
+
 ## 0.3.21 — 2026-05-28
 
 **Hotfix: aarch64 build failure (HA Yellow / Raspberry Pi).**

@@ -10,7 +10,7 @@ LABEL \
     io.hass.name="SentiHome" \
     io.hass.description="AI-powered home security and presence understanding" \
     io.hass.type="addon" \
-    io.hass.version="0.3.21" \
+    io.hass.version="0.3.22" \
     maintainer="Darin Shapiro <darin@example.com>"
 
 ENV \
@@ -52,20 +52,19 @@ RUN echo "Cache key: ${CACHEBUST}" \
     && git clone --depth=1 --branch "${SENTIHOME_REF}" "${SENTIHOME_REPO}" /app \
     && rm -rf /app/.git
 
-# Install every workspace member into /app/.venv (debian base = glibc =
-# every manylinux wheel works including opencv + onnxruntime).
-RUN uv sync --frozen --no-dev --all-packages
+# Epic 10.8.2: only install the ha-agent package + its deps. The
+# preprocessor (with torch + onnxruntime + openvino + insightface,
+# ~3GB of inference stack) runs on a separate inference box, not on
+# Yellow. The add-on calls the preprocessor's REST endpoints via the
+# LAN. See docs/architecture/ for the deployment topology.
+RUN uv sync --frozen --no-dev --package sentihome-ha-agent
 
-# Build-time verification: import every SentiHome package via the venv
-# python. If anything's missing, fail HERE instead of crash-looping in
-# your add-on log.
+# Build-time verification: import the packages the add-on actually
+# uses at runtime. If anything's missing, fail HERE instead of
+# crash-looping in the add-on log.
 RUN /app/.venv/bin/python -c "import sentihome_shared.topology; \
-    import sentihome_core; \
-    import sentihome_memory; \
+    import sentihome_shared.motion; \
     import sentihome_ha_agent; \
-    import sentihome_notify; \
-    import sentihome_vlm_router; \
-    import sentihome_preprocessor; \
     print('SentiHome packages OK:', sentihome_ha_agent.__version__)"
 
 # Stamp the add-on version into the image so /debug/version can return it.

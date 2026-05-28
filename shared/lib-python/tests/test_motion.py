@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from sentihome_preprocessor.cache import InMemoryMetadataCache
 from sentihome_preprocessor.corroboration import corroborate
-from sentihome_preprocessor.motion import (
+from sentihome_shared.motion import (
     MOG2MotionDetector,
     MotionConfig,
     _confidence_from_regions,

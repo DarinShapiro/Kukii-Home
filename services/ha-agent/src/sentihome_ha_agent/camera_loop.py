@@ -103,7 +103,7 @@ class CameraLoop:
 
     async def run(self) -> None:
         """Top-level loop: open stream, sample frames, detect motion. Self-heals."""
-        from sentihome_preprocessor.motion import MOG2MotionDetector
+        from sentihome_shared.motion import MOG2MotionDetector
 
         self._detector = MOG2MotionDetector()
         while not self._stop_event.is_set():
