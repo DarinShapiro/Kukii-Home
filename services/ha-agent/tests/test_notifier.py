@@ -61,28 +61,62 @@ def test_render_basic_alert():
     # Message uses friendly camera name, not the slug.
     assert "DahuaPoolCam Main" in message or "Person detected" in message
     assert "14:23:01" in message
-    # v0.3.19: no url/clickAction — both prior URL strategies broke
-    # (401 on token-based, 404 on /hassio/ingress/<slug>). Notification
-    # just opens HA Companion on tap; user navigates manually.
-    assert "url" not in data
-    assert "clickAction" not in data
     # Image is HA's own camera_proxy — auth via mobile session.
     assert data["image"] == "/api/camera_proxy/camera.dahuapoolcam_sub"
     # Per-camera dedup tag is always present.
     assert data["tag"] == "sentihome_dahuapoolcam"
+    # Epic 10.8.1: with no ingress base configured, url falls back
+    # to a relative path the Companion may resolve in-app. Always set
+    # when we have an alert_id.
+    assert data["url"] == "/alert/abc123"
 
 
-def test_render_no_url_regardless_of_ingress_base():
-    """v0.3.19: even with an ingress_url_base set (v0.3.15 plumbing),
-    we no longer emit url/clickAction. Both HA paths we tried for
-    tap-action broke; safer to omit until we work out the right form."""
+def test_render_url_uses_ingress_base_when_set():
+    """Epic 10.8.1: with the ingress base wired in, the tap URL is the
+    absolute path through HA Ingress (where the SentiHome panel lives).
+    Both `url` and the iOS-specific `clickAction` get it."""
     n, _ = _make_notifier(
         ["notify.mobile_app_x"],
         sentihome_ingress_base="/api/hassio_ingress/TOKEN123/",
     )
     _, _, data = n._render(_alert())
+    assert data["url"] == "/api/hassio_ingress/TOKEN123/alert/abc123"
+    assert data["clickAction"] == "/api/hassio_ingress/TOKEN123/alert/abc123"
+
+
+def test_render_emits_ios_action_buttons():
+    """Epic 10.8.1: three iOS Companion actions — Dismiss (lock-screen
+    quick action, doesn't open the app), Open (default tap), and FP
+    (deep-links to the alert page's FP form via #fp anchor)."""
+    n, _ = _make_notifier(
+        ["notify.mobile_app_x"],
+        sentihome_ingress_base="/api/hassio_ingress/T/",
+    )
+    _, _, data = n._render(_alert())
+    actions = data["actions"]
+    assert [a["action"] for a in actions] == [
+        "SENTIHOME_DISMISS",
+        "SENTIHOME_OPEN",
+        "SENTIHOME_FP",
+    ]
+    # Dismiss is destructive + background (no app open).
+    dismiss = actions[0]
+    assert dismiss["destructive"] is True
+    assert dismiss["activationMode"] == "background"
+    # FP deep-links to the page with #fp anchor so the form's in view.
+    fp = actions[2]
+    assert fp["uri"].endswith("/alert/abc123#fp")
+
+
+def test_render_omits_url_and_actions_when_no_alert_id():
+    """Synthetic test pings with no alert_id can't link to a per-alert
+    page — fall through silently rather than emitting a broken URL."""
+    n, _ = _make_notifier([])
+    alert = _alert()
+    alert.pop("alert_id")
+    _, _, data = n._render(alert)
     assert "url" not in data
-    assert "clickAction" not in data
+    assert "actions" not in data
 
 
 def test_render_omits_image_when_no_camera_entity():

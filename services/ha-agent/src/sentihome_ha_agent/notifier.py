@@ -215,30 +215,14 @@ class AlertNotifier:
             message_bits.append(f"at {time_str}")
         message = " ".join(message_bits)
 
-        # ─── data: image, tag (NO url — see below) ───────────────
-        # v0.3.19 — we tried two URL strategies for the tap-action and
-        # both broke:
-        #   v0.3.15: /api/hassio_ingress/<addon_token>/ → 401 on phone
-        #     (token is bound to browser ingress sessions, not the
-        #      mobile Companion's auth session)
-        #   v0.3.17: /hassio/ingress/sentihome → 404 on phone
-        #     (HA 2026.5+ serves nothing on /hassio/* server-side;
-        #      probed live + every path 404s without auth)
-        #
-        # Until we work out the right deep-link form, we OMIT the
-        # tap-action. Tapping the notification just opens the HA
-        # Companion app to wherever it was — boring but doesn't
-        # 401/404. From there the user navigates to SentiHome
-        # manually (the panel's in the sidebar).
-        #
-        # data.image stays — HA's /api/camera_proxy/<entity> is its
-        # own image endpoint served with the mobile app's session
-        # auth, so it just works.
-        #
-        # Trade-off on image: it's the CURRENT camera frame, not the
-        # at-alert-time snapshot. For security alerts this is arguably
-        # MORE useful — "what's happening right now". The historical
-        # snapshot is still on disk + visible in the SentiHome UI.
+        # ─── data: image, tag, url, actions ──────────────────────
+        # Image: HA's /api/camera_proxy/<entity> is its own image
+        # endpoint served with the mobile app's session auth, so it
+        # just works. Trade-off: it's the CURRENT camera frame, not
+        # the at-alert-time snapshot. For security alerts this is
+        # arguably MORE useful ("what's happening right now"); the
+        # historical snapshot is still on disk + linked from the
+        # per-alert page.
         camera_entity = alert.get("camera_entity") or ""
         image_url = f"/api/camera_proxy/{camera_entity}" if camera_entity else ""
 
@@ -251,6 +235,80 @@ class AlertNotifier:
         # alert config UI (when that ships).
         if camera_id:
             data["tag"] = f"sentihome_{camera_id}"
+
+        # Tap-action URL: deep-link to the per-alert page in our add-on
+        # served through HA Ingress. Epic 10.8.1.
+        #
+        # History (so we don't repeat the same mistakes):
+        # * v0.3.15: tried /api/hassio_ingress/<token>/ → 401, the
+        #   ingress token is browser-session-bound and the Companion
+        #   app doesn't have it.
+        # * v0.3.17: tried /hassio/ingress/sentihome → 404, HA
+        #   2026.5+ doesn't serve /hassio/* server-side.
+        # * v0.3.19: dropped data.url entirely → blank-page UX.
+        #
+        # Current strategy: relative `alert/<id>` under the resolved
+        # ingress URL prefix when we have one. The Companion app's
+        # in-app webview inherits the panel's session for ingress
+        # paths, so this should work. If it doesn't, the alert page
+        # is also reachable via the sidebar panel manually; the
+        # notification's url is best-effort.
+        alert_id = alert.get("alert_id") or alert.get("event_id")
+        if alert_id and self.sentihome_ingress_base:
+            base = self.sentihome_ingress_base.rstrip("/")
+            data["url"] = f"{base}/alert/{alert_id}"
+            data["clickAction"] = data["url"]  # iOS Companion field
+        elif alert_id:
+            # No known ingress base: pass a relative path. Companion
+            # may or may not resolve this against an HA host base;
+            # the in-app panel does. This is the fallback.
+            data["url"] = f"/alert/{alert_id}"
+
+        # iOS Companion app supports up to 4 action buttons on a
+        # notification (lock-screen long-press or notification expand).
+        # We surface three: Dismiss (no app open — fires a webhook
+        # that marks the alert read), Open (deep-link to the alert
+        # page, same target as the default tap), and False positive
+        # (deep-link to the page with #fp anchor so the FP form is
+        # in view).
+        #
+        # Action `uri` is what fires on tap. `activationMode=
+        # background` means the dismiss action doesn't open the app —
+        # iOS fires the webhook and the notification disappears.
+        # destructive=true tints the button red (correct affordance
+        # for "dismiss").
+        if alert_id:
+            actions: list[dict[str, Any]] = []
+            # Dismiss: fire the webhook, don't open the app. The
+            # webhook hits /api/webhook/<id> registered on the HA
+            # side; ha-agent listens for it via the integration.
+            # When the integration isn't wired (dev), the action
+            # falls back to opening the alert page (the dismiss
+            # button on the page does the same thing).
+            actions.append(
+                {
+                    "action": "SENTIHOME_DISMISS",
+                    "title": "Dismiss",
+                    "destructive": True,
+                    "activationMode": "background",
+                    "uri": data.get("url", ""),
+                }
+            )
+            actions.append(
+                {
+                    "action": "SENTIHOME_OPEN",
+                    "title": "Open",
+                    "uri": data.get("url", ""),
+                }
+            )
+            actions.append(
+                {
+                    "action": "SENTIHOME_FP",
+                    "title": "False positive",
+                    "uri": (f"{data['url']}#fp" if data.get("url") else ""),
+                }
+            )
+            data["actions"] = actions
 
         # v0.3.18 — high-priority delivery flags. SentiHome's portion
         # of notify latency is ~300ms (LAN → HA → return); the user-

@@ -13,6 +13,7 @@ diagnosable from the Web UI without needing the add-on Log tab.
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import logging
 import os
@@ -43,6 +44,7 @@ from sentihome_ha_agent.camera_loop import (
 from sentihome_ha_agent.client import HAClient, HAClientSettings
 from sentihome_ha_agent.config import HAAgentSettings
 from sentihome_ha_agent.discovery import DiscoveryDecision, build_decisions
+from sentihome_ha_agent.event_store import EventStore
 from sentihome_ha_agent.http_api import AlertLog, HAAgentAPI
 from sentihome_ha_agent.mcp_tools import HATools
 from sentihome_ha_agent.notifier import AlertNotifier
@@ -355,6 +357,247 @@ async def _render_notifications_card(boot: BootState) -> str:
 
     parts.append("</div>")
     return "".join(parts)
+
+
+def _render_alert_404(event_id: str) -> str:
+    """The notification deep-link landed on an unknown event_id —
+    common when an alert was purged before the user got around to
+    tapping. Show a brief, friendly page (not a stack trace) and a
+    link back to recent alerts."""
+    safe = html.escape(event_id, quote=True)
+    return (
+        "<!doctype html><html><head><title>Alert not found</title>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<style>body{font-family:system-ui;padding:24px;max-width:600px;"
+        "margin:0 auto;color:#333}h1{font-size:1.3em}a{color:#06c}</style>"
+        "</head><body>"
+        f"<h1>Alert not found</h1>"
+        f"<p>No alert with id <code>{safe}</code>.</p>"
+        f"<p>It may have been purged, or the link may be from an older "
+        f"version of the SentiHome notification.</p>"
+        f"<p><a href='../'>See recent alerts</a></p>"
+        "</body></html>"
+    )
+
+
+def _render_alert_page(event: dict[str, Any], event_id: str) -> str:
+    """Render the per-alert page the notification tap opens to.
+
+    Three zones (per the design discussion):
+      1. Hero — annotated frame (falls back to raw if no markup yet)
+         + caption.
+      2. Detail — identity strip, detection list, VLM analysis when
+         present, link to historical context.
+      3. Action row — Dismiss / Live view / False positive. The FP
+         button reveals an inline form; submitting POSTs to
+         /alert/<id>/feedback.
+
+    The page uses relative URLs throughout so it works the same
+    under HA Ingress (/api/hassio_ingress/<token>/alert/<id>) and
+    direct port-8765 access.
+    """
+    safe_id = html.escape(event_id, quote=True)
+    headline = html.escape(event.get("headline") or "Alert", quote=True)
+    camera_label = html.escape(
+        event.get("camera_name") or event.get("camera_id") or "camera",
+        quote=True,
+    )
+    recorded_at = event.get("recorded_at") or ""
+    when = recorded_at[11:19] if recorded_at else ""
+    triage = event.get("triage_decision") or "alert_fired"
+    dismissed = event.get("dismissed") is True
+    feedback = event.get("feedback") or {}
+    vlm = event.get("vlm_response")
+
+    # Identity strip from identified_entities (preferred) or
+    # actor_matches as a fallback.
+    identities = event.get("identified_entities") or []
+    if not identities:
+        identities = [
+            {
+                "actor_name": m.get("actor_id"),
+                "identity_method": m.get("match_method"),
+                "identity_confidence": m.get("confidence"),
+            }
+            for m in event.get("actor_matches") or []
+        ]
+    identity_html = _render_identity_strip(identities)
+
+    detections = event.get("detections") or []
+    detection_html = _render_detection_list(detections)
+
+    # Flash messages from the redirect-back-with-query-param flow.
+    # ?dismissed=1 means the user just hit Dismiss; ?fp=1 means
+    # they just submitted the FP form. Plain banners, no JS.
+    flash_html = ""
+    # Note: aiohttp parses query into request.rel_url.query; the
+    # render function doesn't get the request, so we rely on the
+    # caller-side info already in `event` (dismissed flag, feedback).
+    if dismissed:
+        flash_html = "<div class='flash ok'>Marked dismissed.</div>"
+    if feedback:
+        reason = html.escape(feedback.get("reason") or "", quote=True)
+        flash_html += f"<div class='flash ok'>Feedback recorded: {reason}.</div>"
+
+    vlm_html = ""
+    if vlm:
+        # Compact rendering of whatever VLM response shape Phase 11
+        # eventually settles on. Show the text content if it has
+        # a `.text` key (common); else dump as JSON.
+        if isinstance(vlm, dict) and "text" in vlm:
+            vlm_html = (
+                "<section class='card'><h2>VLM analysis</h2>"
+                f"<p>{html.escape(str(vlm['text']), quote=True)}</p>"
+                "</section>"
+            )
+        else:
+            vlm_html = (
+                "<section class='card'><h2>VLM analysis</h2>"
+                f"<pre>{html.escape(json.dumps(vlm, indent=2), quote=True)}</pre>"
+                "</section>"
+            )
+    else:
+        vlm_html = (
+            "<section class='card muted-card'>"
+            "<h2>VLM analysis</h2>"
+            "<p class='muted'>Not yet analyzed.</p>"
+            "</section>"
+        )
+
+    return (
+        "<!doctype html><html><head>"
+        f"<title>{headline}</title>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        + _ALERT_PAGE_CSS
+        + "</head><body>"
+        # Hero
+        f"<div class='hero'>"
+        f"<img src='alert/{safe_id}/annotated.jpg' alt='alert frame' "
+        f"onerror=\"this.style.display='none'\"/>"
+        f"<div class='hero-caption'>"
+        f"<h1>{headline}</h1>"
+        f"<div class='meta'>{camera_label} · {when} · "
+        f"<span class='triage {triage}'>{triage.replace('_', ' ')}</span>"
+        "</div>"
+        "</div></div>"
+        # Flash banners.
+        + flash_html
+        # Identities + detections.
+        + "<section class='card'><h2>Identities</h2>"
+        + identity_html
+        + "</section>"
+        + "<section class='card'><h2>Detections</h2>"
+        + detection_html
+        + "</section>"
+        + vlm_html
+        # Action row — sticky bottom.
+        + "<div class='actions'>"
+        + (
+            "<button disabled class='btn'>Dismissed</button>"
+            if dismissed
+            else (
+                f"<form method='post' action='alert/{safe_id}/dismiss' "
+                "style='display:inline'>"
+                "<button type='submit' class='btn btn-secondary'>"
+                "Dismiss</button></form>"
+            )
+        )
+        + "<a href='#fp' class='btn btn-warn'>False positive</a>"
+        + "</div>"
+        # FP form, in-page (sticky button anchors here).
+        + ("" if feedback else _render_fp_form(safe_id))
+        + "</body></html>"
+    )
+
+
+def _render_identity_strip(identities: list[dict[str, Any]]) -> str:
+    if not identities:
+        return "<p class='muted'>No confirmed identities in this frame.</p>"
+    rows = []
+    for i in identities:
+        name = html.escape(str(i.get("actor_name") or "?"), quote=True)
+        method = html.escape(str(i.get("identity_method") or "?"), quote=True)
+        conf = i.get("identity_confidence")
+        conf_str = f"{conf:.2f}" if isinstance(conf, (int, float)) else "?"
+        rows.append(
+            f"<li><strong>{name}</strong> <span class='muted'>({method} · {conf_str})</span></li>"
+        )
+    return "<ul class='identity-list'>" + "".join(rows) + "</ul>"
+
+
+def _render_detection_list(detections: list[dict[str, Any]]) -> str:
+    if not detections:
+        return "<p class='muted'>No detections recorded.</p>"
+    # Collapse by kind for brevity — most frames have multiples of
+    # the same class.
+    by_kind: dict[str, int] = {}
+    for d in detections:
+        kind = str(d.get("kind") or "?")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+    rows = [f"<li>{html.escape(k, quote=True)} x {n}</li>" for k, n in sorted(by_kind.items())]
+    return "<ul>" + "".join(rows) + "</ul>"
+
+
+def _render_fp_form(event_id: str) -> str:
+    """The structured FP capture form. Inline on the page (anchored
+    at #fp). Five preset categories + free text + (eventually) an
+    actor picker when reason=wrong_identity."""
+    return (
+        f"<form id='fp' class='fp-form' method='post' "
+        f"action='alert/{event_id}/feedback'>"
+        "<h2>Report false positive</h2>"
+        "<p>What was wrong with this alert?</p>"
+        "<label><input type='radio' name='reason' value='empty_frame' required> "
+        "Nothing was actually happening (empty frame)</label>"
+        "<label><input type='radio' name='reason' value='wrong_identity'> "
+        "Wrong identity — this isn't who SentiHome said</label>"
+        "<label>If wrong identity, who was it actually? "
+        "<input type='text' name='actual_actor_id' "
+        "placeholder='actor id or name (optional)'></label>"
+        "<label><input type='radio' name='reason' value='known_event'> "
+        "Right detection, but I don't need to be alerted "
+        "(e.g., I came home)</label>"
+        "<label><input type='radio' name='reason' value='camera_glitch'> "
+        "Camera glitch (weather, lighting, false motion)</label>"
+        "<label><input type='radio' name='reason' value='other'> Other</label>"
+        "<label>Anything else? (optional)"
+        "<textarea name='notes' rows='3' "
+        "placeholder='Free text — helps tune the system'></textarea></label>"
+        "<button type='submit' class='btn'>Submit feedback</button>"
+        "</form>"
+    )
+
+
+_ALERT_PAGE_CSS = """<style>
+:root{color-scheme:light dark}
+body{font-family:system-ui;margin:0;padding:0 0 96px;color:#222;background:#f7f7f8}
+.hero{background:#000;display:flex;flex-direction:column;align-items:center}
+.hero img{max-width:100%;max-height:60vh;display:block}
+.hero-caption{padding:12px 16px;background:rgba(0,0,0,.7);color:#fff;width:100%;box-sizing:border-box}
+.hero-caption h1{margin:0 0 4px 0;font-size:1.2em}
+.meta{font-size:.9em;opacity:.8}
+.triage{padding:2px 6px;border-radius:3px;font-size:.85em;background:#e35;color:#fff}
+.triage.alert_fired{background:#e35}
+.triage.near_miss{background:#fc3;color:#333}
+.triage.alert_suppressed{background:#888}
+.card{background:#fff;margin:12px;padding:14px;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.card h2{margin:0 0 8px;font-size:1em;color:#555}
+.muted-card{opacity:.7}
+.muted{color:#888}
+.identity-list{margin:0;padding-left:18px}
+.identity-list li{margin:4px 0}
+.flash{margin:12px;padding:10px 14px;border-radius:6px;background:#dfd;color:#252}
+.actions{position:fixed;bottom:0;left:0;right:0;padding:10px;background:#fff;border-top:1px solid #ddd;display:flex;gap:8px;justify-content:space-around}
+.btn{display:inline-block;padding:10px 16px;border:none;border-radius:6px;background:#06c;color:#fff;text-decoration:none;font-size:1em;cursor:pointer}
+.btn:disabled{background:#aaa;cursor:default}
+.btn-secondary{background:#666}
+.btn-warn{background:#fc3;color:#333}
+.fp-form{background:#fff;margin:12px;padding:14px;border-radius:8px}
+.fp-form label{display:block;margin:8px 0}
+.fp-form input[type='text'],.fp-form textarea{width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;font-family:inherit;font-size:1em}
+.fp-form button{margin-top:12px;width:100%}
+@media (prefers-color-scheme:dark){body{background:#1a1a1c;color:#eee}.card,.fp-form{background:#2a2a2d;color:#eee}.actions{background:#222;border-top-color:#333}.muted{color:#888}.flash{background:#243;color:#9d9}}
+</style>"""
 
 
 def _render_notify_test_result(result: dict[str, Any]) -> str:
@@ -957,7 +1200,7 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
     )
 
 
-def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
+def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore) -> web.Application:
     api = HAAgentAPI(tools=None, alert_log=alert_log)  # tools rebound below
 
     async def status_page(_request: web.Request) -> web.Response:
@@ -1015,6 +1258,107 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
         if alert is None:
             return web.json_response({"error": "not found"}, status=404)
         return web.json_response(alert)
+
+    # ─── Epic 10.8.1: per-alert page + actions ───────────────────────
+    #
+    # These are the routes the notification tap UX hits:
+    #   GET  /alert/<id>           → HTML page (the tap target)
+    #   GET  /alert/<id>/frame.jpg → raw snapshot at alert time
+    #   POST /alert/<id>/dismiss   → mark dismissed (no UI)
+    #   POST /alert/<id>/feedback  → structured FP form submission
+    #
+    # All four go through EventStore (not the lightweight AlertLog).
+    # Unknown event_ids return 404 with a brief HTML message rather
+    # than blank pages.
+
+    async def alert_page(request: web.Request) -> web.Response:
+        event_id = request.match_info["event_id"]
+        event = event_store.get(event_id)
+        if event is None:
+            return web.Response(
+                status=404,
+                text=_render_alert_404(event_id),
+                content_type="text/html",
+            )
+        return web.Response(
+            text=_render_alert_page(event, event_id),
+            content_type="text/html",
+        )
+
+    async def alert_frame(request: web.Request) -> web.Response:
+        path = event_store.frame_path(request.match_info["event_id"])
+        if path is None:
+            return web.Response(status=404, text="no frame for this alert")
+        return web.FileResponse(path)
+
+    async def alert_annotated_frame(request: web.Request) -> web.Response:
+        """The preprocessor's marked-up version of the frame. Falls
+        back to the raw frame when no annotated artifact exists
+        (Phase 10.3.3 wired markup but the HA-agent doesn't yet
+        receive annotated bytes — that's a future Phase 11+ hop)."""
+        event_id = request.match_info["event_id"]
+        path = event_store.frame_path(event_id, annotated=True)
+        if path is None:
+            path = event_store.frame_path(event_id)
+        if path is None:
+            return web.Response(status=404, text="no frame for this alert")
+        return web.FileResponse(path)
+
+    async def alert_dismiss(request: web.Request) -> web.Response:
+        """Mark the event dismissed. No UI response — the iOS action
+        button fires this in the background, and the FP-form page POSTs
+        here on success. Returns 303 to the alert page for browser
+        callers; JSON {ok: True} for programmatic ones."""
+        event_id = request.match_info["event_id"]
+        ok = event_store.mark_dismissed(event_id)
+        # Also propagate to AlertLog so /recent_alerts polling reflects it.
+        alert_log.acknowledge(event_id, feedback="dismissed")
+        if request.headers.get("Accept", "").startswith("application/json"):
+            return web.json_response({"ok": ok}, status=(200 if ok else 404))
+        # Browser POST → redirect back to the alert page with a flash.
+        target = f"../alert/{event_id}?dismissed=1" if ok else f"../alert/{event_id}"
+        raise web.HTTPSeeOther(location=target)
+
+    async def alert_feedback(request: web.Request) -> web.Response:
+        """Record structured FP feedback from the form.
+
+        Form fields (all optional except reason):
+          reason: empty_frame | wrong_identity | known_event | camera_glitch | other
+          actual_actor_id: only when reason=wrong_identity
+          notes: free text
+        """
+        event_id = request.match_info["event_id"]
+        try:
+            form = await request.post()
+        except Exception:
+            return web.Response(status=400, text="malformed form")
+        reason = form.get("reason") or ""
+        if reason not in (
+            "empty_frame",
+            "wrong_identity",
+            "known_event",
+            "camera_glitch",
+            "other",
+        ):
+            return web.Response(status=400, text=f"unknown reason: {reason}")
+
+        from datetime import UTC, datetime
+
+        feedback = {
+            "reason": reason,
+            "actual_actor_id": form.get("actual_actor_id") or None,
+            "notes": form.get("notes") or "",
+            "submitted_at": datetime.now(UTC).isoformat(),
+            "kind": "false_positive",
+        }
+        ok = event_store.record_feedback(event_id, feedback=feedback)
+        if not ok:
+            return web.Response(status=404, text=f"no event {event_id}")
+        # Also drop a hint into the legacy AlertLog so the recent-
+        # alerts table can show "FP reported".
+        alert_log.acknowledge(event_id, feedback=f"fp:{reason}")
+        target = f"../alert/{event_id}?fp=1"
+        raise web.HTTPSeeOther(location=target)
 
     async def debug_test_snapshot(request: web.Request) -> web.Response:
         """Force a snapshot fetch on demand. Reports which path won + the
@@ -1449,6 +1793,12 @@ def _build_app(*, boot: BootState, alert_log: AlertLog) -> web.Application:
     app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
     app.router.add_get("/alerts/{alert_id}/snapshot", snapshot_for_alert)
     app.router.add_get("/alerts/{alert_id}", debug_alert)
+    # Epic 10.8.1: notification tap UX — per-alert page + actions.
+    app.router.add_get("/alert/{event_id}", alert_page)
+    app.router.add_get("/alert/{event_id}/frame.jpg", alert_frame)
+    app.router.add_get("/alert/{event_id}/annotated.jpg", alert_annotated_frame)
+    app.router.add_post("/alert/{event_id}/dismiss", alert_dismiss)
+    app.router.add_post("/alert/{event_id}/feedback", alert_feedback)
     app.router.add_get("/logs", logs_handler)
     app.router.add_get("/debug/topology", debug_topology)
     app.router.add_get("/debug/test_snapshot", debug_test_snapshot)
@@ -1712,10 +2062,19 @@ async def _run() -> None:
     # volume, so alerts survive add-on restarts + updates.
     alert_log = AlertLog(persist_path="/data/sentihome/alerts.json")
 
+    # Epic 10.8.1: per-event persistent store. Lives next to
+    # alerts.json in the Supervisor's /data volume. Subscribed to
+    # AlertLog so every alert recorded also gets a durable per-event
+    # directory with frame copy + structured meta + room for VLM
+    # response / user feedback. Failure to write to the event store
+    # is non-fatal — alerts still record into AlertLog.
+    event_store = EventStore(root=Path("/data/sentihome/events"))
+    alert_log.add_on_record(event_store.record_from_alert)
+
     # Bring the HTTP server up FIRST. If this fails, there's a real
     # network-level problem (port in use, no interface, etc.) and there's
     # nothing the status page can do about it.
-    app = _build_app(boot=boot, alert_log=alert_log)
+    app = _build_app(boot=boot, alert_log=alert_log, event_store=event_store)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, LISTEN_HOST, LISTEN_PORT)
