@@ -8,6 +8,7 @@ by integration tests against a media-server testcontainer).
 from __future__ import annotations
 
 import pytest
+from sentihome_preprocessor.pipelines.identity import FacePipeline, IdentityRouter
 from sentihome_preprocessor.pipelines.rolling_buffer import (
     BufferedFrame,
     RollingBuffer,
@@ -468,7 +469,7 @@ async def test_get_window_runs_face_recognizer_for_person_frames(
         node_id="t",
         external_base_url="http://example:8090",
         detector=_PersonDetector(),
-        face_recognizer=face_recognizer,
+        identity_router=IdentityRouter([FacePipeline(face_recognizer)]),
     )
     await rolling.write("cam_a", _real_jpeg(100.0))
 
@@ -540,7 +541,7 @@ async def test_get_window_skips_face_recognition_without_person_detections(
         node_id="t",
         external_base_url="http://example:8090",
         detector=_CarDetector(),
-        face_recognizer=face_recognizer,
+        identity_router=IdentityRouter([FacePipeline(face_recognizer)]),
     )
     await rolling.write("cam_a", _real_jpeg(100.0))
 
@@ -583,7 +584,7 @@ async def test_get_window_no_face_recognition_when_actor_cache_empty(
         node_id="t",
         external_base_url="http://example:8090",
         detector=_PersonDetector(),
-        face_recognizer=face_recognizer,
+        identity_router=IdentityRouter([FacePipeline(face_recognizer)]),
     )
     await rolling.write("cam_a", _real_jpeg(100.0))
 

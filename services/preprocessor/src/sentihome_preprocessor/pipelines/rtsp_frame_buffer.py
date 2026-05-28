@@ -39,7 +39,7 @@ from sentihome_preprocessor.state import ActorCache
 
 if TYPE_CHECKING:
     from sentihome_preprocessor.pipelines.detection import YOLODetector
-    from sentihome_preprocessor.pipelines.face import FaceRecognizer
+    from sentihome_preprocessor.pipelines.identity import IdentityRouter
 
 
 # Min identity confidence below which we don't emit IdentifiedEntity.
@@ -68,7 +68,7 @@ class RTSPFrameBuffer:
         node_id: str,
         external_base_url: str,
         detector: YOLODetector | None = None,
-        face_recognizer: FaceRecognizer | None = None,
+        identity_router: IdentityRouter | None = None,
         enrich_motion_only: bool = True,
         annotation_cache: AnnotationCache | None = None,
         configured_cameras: list[str] | None = None,  # deprecated, ignored
@@ -94,16 +94,15 @@ class RTSPFrameBuffer:
         it and populates ``FrameWindow.detections``. When None
         (skeleton / unit tests / Phase 10.1.5 era), detections stay
         empty — the wire shape is the same."""
-        self._face_recognizer = face_recognizer
-        """Optional ArcFace face recognizer. When provided AND
-        ``enrich=True``, get_window runs face detection+matching on
-        every frame that produced at least one ``person`` YOLO
-        detection, and emits ActorMatches with ``match_method=
-        'face_arcface'`` for matched faces. Track-id is inherited
-        from the spatially-containing person detection via IoU
-        overlap (see :func:`associate_face_to_person`). ``None``
-        (default / unit tests / synthetic backend): no face recognition;
-        actor_matches stays empty."""
+        self._identity_router = identity_router
+        """Optional :class:`IdentityRouter` carrying the registered
+        identity pipelines (face today; body-ID/pet/plate as they
+        land). When provided AND ``enrich=True``, get_window calls
+        ``identity_router.identify(...)`` once per request and
+        populates ``FrameWindow.actor_matches`` from the merged
+        per-pipeline results. ``None`` (default / unit tests /
+        synthetic backend): no identity inference; actor_matches
+        stays empty."""
         self._enrich_motion_only = enrich_motion_only
         """When True (default for RTSP backend), only frames marked
         by the upstream MOG2 motion detector (``BufferedFrame.has_motion``)
@@ -198,16 +197,15 @@ class RTSPFrameBuffer:
                     [(f.jpeg_bytes, f.ts) for f in candidates]
                 )
 
-        # Phase 10.4 — face recognition. Run ArcFace on every frame
-        # that carried at least one YOLO ``person`` detection; match
-        # against the enrolled embeddings in the ActorCache; inherit
-        # the spatially-containing person's track_id so the
-        # correlation pipeline can join them downstream. Pet + plate
-        # pipelines (Phase 10.5+) will append into the same list.
+        # Phase 10.4 — identity pipelines (face today; body-ID / pet
+        # / plate as they land). The router gates per-pipeline by
+        # detection-kind triggers + corpus enrollments, dispatches
+        # in parallel across disjoint branches, and merges the
+        # ActorMatches into one tuple. See
+        # :class:`IdentityRouter` for the dispatch design.
         actor_matches: tuple[ActorMatch, ...] = ()
-        if enrich and self._face_recognizer is not None and detections:
-            actor_matches = await _run_face_recognition(
-                recognizer=self._face_recognizer,
+        if enrich and self._identity_router is not None and detections:
+            actor_matches = await self._identity_router.identify(
                 buffered=buffered,
                 detections=detections,
                 cache=cache,
@@ -337,75 +335,6 @@ async def _correlate_identities(
                 track_id=det.track_id,
             )
         )
-    return tuple(out)
-
-
-async def _run_face_recognition(
-    *,
-    recognizer: FaceRecognizer,
-    buffered,  # type: ignore[no-untyped-def]  # Sequence[BufferedFrame]
-    detections: tuple[DetectionTag, ...],
-    cache: ActorCache,
-) -> tuple[ActorMatch, ...]:
-    """Per-frame: decode JPEG, find every face, embed each, match
-    against enrolled actors, inherit track_id from the YOLO person
-    detection that contains it.
-
-    Only frames carrying ``person`` detections are processed — running
-    ArcFace on a frame with no people in it is pure waste, and even
-    if there's a face in a non-person frame (sideways glimpse) we
-    can't correlate it to a track_id and so can't surface it to the
-    markup pipeline. The pipeline drops unmatched faces.
-    """
-    # Build enrolled embeddings dict from ActorCache. Pets/vehicles
-    # have None face_embedding -> filtered out.
-    enrolled: dict[str, np.ndarray] = {}
-    for actor in await cache.snapshot():
-        emb = actor.face_embedding
-        if emb is None or not emb:
-            continue
-        enrolled[actor.actor_id] = np.asarray(emb, dtype=np.float32)
-    if not enrolled:
-        return ()
-
-    # Group person bboxes by frame_ts for face-to-person association.
-    persons_by_ts: dict[float, list[tuple[str, tuple[float, float, float, float]]]] = defaultdict(
-        list
-    )
-    for det in detections:
-        if det.kind != "person" or det.track_id is None:
-            continue
-        persons_by_ts[det.frame_ts].append((det.track_id, det.bbox))
-    if not persons_by_ts:
-        return ()
-
-    jpeg_by_ts = {f.ts: f.jpeg_bytes for f in buffered}
-
-    # Local import keeps face module optional at preprocessor import
-    # time (no onnxruntime cost when face recognizer isn't wired).
-    from sentihome_preprocessor.pipelines.face import (
-        associate_face_to_person,
-        detected_face_to_actor_match,
-        jpeg_to_bgr,
-    )
-
-    out: list[ActorMatch] = []
-    for frame_ts, person_bboxes in persons_by_ts.items():
-        raw = jpeg_by_ts.get(frame_ts)
-        if raw is None:
-            continue
-        bgr = jpeg_to_bgr(raw)
-        if bgr is None:
-            continue
-        faces = await recognizer.detect_and_match(bgr, enrolled)
-        for face in faces:
-            if face.matched_actor_id is None:
-                continue
-            track_id = associate_face_to_person(face.bbox, person_bboxes)
-            match = detected_face_to_actor_match(face, frame_ts=frame_ts, track_id=track_id)
-            if match is None:
-                continue
-            out.append(match)
     return tuple(out)
 
 

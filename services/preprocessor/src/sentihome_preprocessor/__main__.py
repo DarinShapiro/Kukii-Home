@@ -91,7 +91,10 @@ def _build_backend(
         )
         supervisor = RTSPCaptureSupervisor(buffer=rolling)
 
-        face_recognizer = None
+        # Build identity pipelines + router. Face is the only one
+        # today; body-ID / pet / plate slot in by registering more
+        # IdentityPipeline implementations here.
+        identity_pipelines = []
         if config.face_recognition_enabled:
             # Lazy import: insightface + onnxruntime are heavyweight.
             # Pay the cost only when face recognition is on.
@@ -99,6 +102,7 @@ def _build_backend(
                 FaceConfig,
                 FaceRecognizer,
             )
+            from sentihome_preprocessor.pipelines.identity import FacePipeline
 
             face_recognizer = FaceRecognizer(
                 FaceConfig(
@@ -109,6 +113,14 @@ def _build_backend(
                     providers=tuple(config.face_providers),
                 )
             )
+            identity_pipelines.append(FacePipeline(face_recognizer))
+
+        identity_router = None
+        if identity_pipelines:
+            from sentihome_preprocessor.pipelines.identity import IdentityRouter
+
+            identity_router = IdentityRouter(identity_pipelines)
+            logger.info("identity_router.built", pipelines=identity_router.pipeline_names)
 
         detector = None
         if config.detection_enabled:
@@ -136,7 +148,7 @@ def _build_backend(
             node_id=config.node_id,
             external_base_url=config.external_base_url,
             detector=detector,
-            face_recognizer=face_recognizer,
+            identity_router=identity_router,
             annotation_cache=annotation_cache,
         )
         return frame_buffer, supervisor, SupervisorApplier(supervisor)
