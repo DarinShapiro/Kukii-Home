@@ -211,6 +211,35 @@ def test_detection_config_defaults_are_sane():
     assert c.image_size in (320, 416, 512, 640, 768, 1024, 1280)
 
 
+# ─── device resolution (openvino ↔ ultralytics 'intel:*') ───────────
+
+
+@pytest.mark.parametrize(
+    ("backend", "device", "expected"),
+    [
+        # pytorch: pass through verbatim (torch device strings).
+        ("pytorch", None, None),
+        ("pytorch", "cpu", "cpu"),
+        ("pytorch", "cuda:0", "cuda:0"),
+        # openvino: bare OpenVINO names → ultralytics 'intel:<dev>'.
+        # A bare "GPU"/"AUTO" would otherwise hit ultralytics' CUDA
+        # parser and raise ValueError, silently denying the iGPU.
+        ("openvino", "GPU", "intel:gpu"),
+        ("openvino", "GPU.0", "intel:gpu"),
+        ("openvino", "CPU", "intel:cpu"),
+        ("openvino", "NPU", "intel:npu"),
+        ("openvino", "AUTO", "intel:gpu"),
+        ("openvino", None, "intel:gpu"),
+        # Already-correct ultralytics form is accepted verbatim.
+        ("openvino", "intel:gpu", "intel:gpu"),
+        ("openvino", "intel:cpu", "intel:cpu"),
+    ],
+)
+def test_resolve_device_maps_openvino_names(backend, device, expected):
+    det = YOLODetector(DetectionConfig(backend=backend, device=device))
+    assert det._resolve_device() == expected
+
+
 # ─── End-to-end via patched model ───────────────────────────────────
 
 

@@ -121,8 +121,12 @@ class DetectionConfig:
 
     device: str | None = None
     """For pytorch backend: ``"cuda:0"`` / ``"cpu"`` / ``None`` (auto).
-    For openvino backend: ``"CPU"`` / ``"GPU"`` / ``"GPU.0"`` /
-    ``"AUTO"`` (OpenVINO device names). ``None`` means auto-pick."""
+    For openvino backend: ``"GPU"`` / ``"GPU.0"`` / ``"CPU"`` /
+    ``"NPU"`` / ``"AUTO"`` — OpenVINO device names, which
+    :meth:`YOLODetector._resolve_device` maps onto ultralytics'
+    ``"intel:<dev>"`` form (a bare ``"GPU"`` would otherwise hit
+    ultralytics' CUDA parser and raise). ``"intel:gpu"`` etc. are also
+    accepted verbatim. ``None`` / ``"AUTO"`` default to the iGPU."""
 
     backend: InferenceBackend = "pytorch"
     """Which inference runtime to use. See :data:`InferenceBackend`
@@ -219,6 +223,34 @@ class YOLODetector:
         logger.info("yolo.loaded")
         return self._model
 
+    def _resolve_device(self) -> str | None:
+        """Translate the configured device into what ultralytics expects.
+
+        The pytorch backend takes torch device strings as-is
+        (``None`` / ``"cpu"`` / ``"cuda:0"``). The openvino backend is
+        different: ultralytics routes a bare ``"GPU"`` / ``"AUTO"``
+        through its *CUDA* device parser, which raises
+        ``ValueError: Invalid CUDA 'device=gpu'``. The OpenVINO runtime
+        is reached via ultralytics' own ``"intel:<dev>"`` convention
+        (``intel:cpu`` / ``intel:gpu`` / ``intel:npu``). Map the
+        OpenVINO device names onto it so the iGPU is actually used.
+        """
+        dev = self._config.device
+        if self._config.backend != "openvino":
+            return dev
+        # openvino backend → ultralytics 'intel:<dev>' form.
+        if not dev or dev.upper() == "AUTO":
+            # The openvino backend exists to use Intel acceleration;
+            # default to the iGPU (this project's target hardware).
+            return "intel:gpu"
+        low = dev.lower()
+        if low.startswith("intel:"):
+            return low
+        base = low.split(".", 1)[0]  # "gpu.0" → "gpu"
+        if base in ("gpu", "cpu", "npu"):
+            return f"intel:{base}"
+        return dev
+
     def _detect_sync(self, jpeg_bytes: bytes, frame_ts: float) -> tuple[DetectionTag, ...]:
         img = _jpeg_to_bgr(jpeg_bytes)
         if img is None:
@@ -229,7 +261,7 @@ class YOLODetector:
             conf=self._config.confidence_min,
             iou=self._config.iou_min,
             imgsz=self._config.image_size,
-            device=self._config.device,
+            device=self._resolve_device(),
             verbose=False,
         )
         return _results_to_tags(results, img.shape, frame_ts)
@@ -257,7 +289,7 @@ class YOLODetector:
             conf=self._config.confidence_min,
             iou=self._config.iou_min,
             imgsz=self._config.image_size,
-            device=self._config.device,
+            device=self._resolve_device(),
             persist=False,
             verbose=False,
         )
