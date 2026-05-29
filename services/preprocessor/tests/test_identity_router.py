@@ -152,6 +152,33 @@ async def test_corpus_skips_actors_without_face_embedding():
     assert corpus.actor_names == {"rex": "Rex"}
 
 
+def test_corpus_slice_supports_arbitrary_new_modality():
+    """Pluggability keystone (10.11.1): a NEW modality plugs in via the
+    generic templates map + slice() with zero edits to EnrolledCorpus.
+    An unknown modality returns an empty slice, not KeyError."""
+    corpus = EnrolledCorpus(
+        templates={"gait": {"darin": np.array([0.1, 0.2], dtype=np.float32)}},
+        actor_names={"darin": "Darin"},
+    )
+    assert set(corpus.slice("gait").keys()) == {"darin"}
+    assert corpus.slice("shape3d") == {}  # unknown modality → empty, no raise
+    assert corpus.actor_names == {"darin": "Darin"}
+
+
+def test_corpus_legacy_kwargs_and_slice_are_equivalent():
+    """The legacy faces=/bodies=/pets= kwargs and the per-modality
+    accessors are thin views over the same generic store."""
+    corpus = EnrolledCorpus(
+        faces={"a": np.array([1.0])},
+        bodies={"b": np.array([2.0])},
+        pets={"c": np.array([3.0])},
+    )
+    assert set(corpus.slice("face").keys()) == {"a"}
+    assert set(corpus.slice("body").keys()) == {"b"}
+    assert "c" in corpus.pets
+    assert corpus.slice("plate") == {} == corpus.plates
+
+
 # ─── IdentityRouter dispatch ─────────────────────────────────────────
 
 

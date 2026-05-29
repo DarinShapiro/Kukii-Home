@@ -49,6 +49,7 @@ class FacePipeline:
     """
 
     name = "face_arcface"
+    modality = "face"
     triggers_on = frozenset({"person"})
     depends_on: tuple[str, ...] = ()
     """Face has no upstream — runs first in any chain that
@@ -64,7 +65,7 @@ class FacePipeline:
         self._recognizer = recognizer
 
     def has_enrollments(self, corpus: EnrolledCorpus) -> bool:
-        return bool(corpus.faces)
+        return bool(corpus.slice(self.modality))
 
     async def run(
         self,
@@ -97,7 +98,7 @@ class FacePipeline:
             head = _head_region(bgr, d.bbox, w, h)
             if head is None:
                 continue
-            faces = await self._recognizer.detect_and_match(head, corpus.faces)
+            faces = await self._recognizer.detect_and_match(head, corpus.slice(self.modality))
             matched = [f for f in faces if f.matched_actor_id is not None]
             if not matched:
                 continue

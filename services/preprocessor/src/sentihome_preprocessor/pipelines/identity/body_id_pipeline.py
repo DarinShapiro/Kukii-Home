@@ -41,6 +41,7 @@ class BodyIdPipeline:
     """
 
     name = "body_id_osnet"
+    modality = "body"
     triggers_on = frozenset({"person"})
     depends_on: tuple[str, ...] = ("face_arcface",)
     """Force-sequence after face so the router can apply the
@@ -55,7 +56,7 @@ class BodyIdPipeline:
         self._recognizer = recognizer
 
     def has_enrollments(self, corpus: EnrolledCorpus) -> bool:
-        return bool(corpus.bodies)
+        return bool(corpus.slice(self.modality))
 
     async def run(
         self,
@@ -80,7 +81,7 @@ class BodyIdPipeline:
         if not persons:
             return ()
 
-        bodies = await self._recognizer.identify_persons(bgr, persons, corpus.bodies)
+        bodies = await self._recognizer.identify_persons(bgr, persons, corpus.slice(self.modality))
 
         out: list[ActorMatch] = []
         for body in bodies:

@@ -36,7 +36,6 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Sequence
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
@@ -51,57 +50,104 @@ if TYPE_CHECKING:
 # ─── EnrolledCorpus: projected snapshot of the ActorCache ───────────
 
 
-@dataclass(frozen=True)
+# Declarative projection: identity-modality key -> the
+# ActorEnrollmentEvent attribute carrying that template. Adding a
+# modality is ONE line here (until 10.10.1 makes events carry a
+# generic per-modality template map and even this disappears). Tuple
+# embeddings become float32 arrays; str fields (plate) store verbatim.
+_MODALITY_SOURCE: dict[str, str] = {
+    "face": "face_embedding",
+    "body": "body_embedding",
+    "pet": "pet_dinov2_centroid",
+    "plate": "plate_text",
+}
+
+
 class EnrolledCorpus:
     """Snapshot of :class:`ActorCache` projected by identity modality.
 
-    The router builds one per ``identify()`` call so the N
-    pipelines don't each re-walk the cache and rebuild numpy arrays.
-    Each modality's slice is a dict ``actor_id -> typed embedding``;
-    pipelines read only their own slice.
+    The router builds one per ``identify()`` call so the N pipelines
+    don't each re-walk the cache and rebuild numpy arrays.
 
-    Future modalities (pet DINOv2, plate text, body re-ID embedding)
-    slot in as additional fields. ``actor_names`` is shared across
-    all pipelines for the downstream IdentifiedEntity construction.
+    Storage is a generic ``templates`` map (``modality -> {actor_id ->
+    template}``), so a NEW modality (gait, body-shape, height, …) plugs
+    in via :meth:`slice` with zero edits to this class — the whole point
+    of the pluggable DAG (Epic 10.11.1). The legacy per-modality
+    accessors (:attr:`faces`, :attr:`bodies`, :attr:`pets`,
+    :attr:`plates`) remain as thin views so existing pipelines + tests
+    keep working unchanged. ``actor_names`` is shared across all
+    pipelines for downstream IdentifiedEntity rendering.
     """
 
-    faces: dict[str, np.ndarray] = field(default_factory=dict)
-    """``actor_id -> 512-d L2-normalized ArcFace embedding``."""
+    __slots__ = ("actor_names", "templates")
 
-    bodies: dict[str, np.ndarray] = field(default_factory=dict)
-    """``actor_id -> 512-d L2-normalized OSNet body embedding``.
-    Powers Phase 10.5 body re-ID — the fallback when face isn't
-    visible."""
+    def __init__(
+        self,
+        *,
+        templates: dict[str, dict[str, object]] | None = None,
+        actor_names: dict[str, str] | None = None,
+        faces: dict[str, np.ndarray] | None = None,
+        bodies: dict[str, np.ndarray] | None = None,
+        pets: dict[str, np.ndarray] | None = None,
+        plates: dict[str, str] | None = None,
+    ) -> None:
+        self.templates: dict[str, dict[str, object]] = {
+            k: dict(v) for k, v in (templates or {}).items()
+        }
+        # Fold legacy per-modality kwargs into the generic store so
+        # ``EnrolledCorpus(faces=...)`` etc. still construct.
+        for modality, value in (
+            ("face", faces),
+            ("body", bodies),
+            ("pet", pets),
+            ("plate", plates),
+        ):
+            if value:
+                self.templates.setdefault(modality, {}).update(value)
+        self.actor_names: dict[str, str] = dict(actor_names or {})
 
-    pets: dict[str, np.ndarray] = field(default_factory=dict)
-    """``actor_id -> DINOv2 centroid`` (Phase 10.5)."""
+    def slice(self, modality: str) -> dict[str, object]:
+        """The ``{actor_id -> template}`` view for one modality —
+        empty dict if nothing is enrolled for it. Pipelines read only
+        their own slice (``corpus.slice(self.modality)``)."""
+        return self.templates.get(modality, {})
 
-    plates: dict[str, str] = field(default_factory=dict)
-    """``actor_id -> canonical plate text`` (Phase 10.6)."""
+    # ── Legacy per-modality views (thin shims over ``templates``) ──
+    @property
+    def faces(self) -> dict[str, np.ndarray]:
+        """``actor_id -> 512-d L2-normalized ArcFace embedding``."""
+        return self.slice("face")
 
-    actor_names: dict[str, str] = field(default_factory=dict)
-    """``actor_id -> friendly name`` for downstream IdentifiedEntity
-    rendering. Populated for any actor with a non-None ``name``."""
+    @property
+    def bodies(self) -> dict[str, np.ndarray]:
+        """``actor_id -> 512-d L2-normalized OSNet body embedding``."""
+        return self.slice("body")
+
+    @property
+    def pets(self) -> dict[str, np.ndarray]:
+        """``actor_id -> DINOv2 centroid``."""
+        return self.slice("pet")
+
+    @property
+    def plates(self) -> dict[str, str]:
+        """``actor_id -> canonical plate text``."""
+        return self.slice("plate")
 
     @classmethod
     async def from_cache(cls, cache: ActorCache) -> EnrolledCorpus:
-        faces: dict[str, np.ndarray] = {}
-        bodies: dict[str, np.ndarray] = {}
-        pets: dict[str, np.ndarray] = {}
-        plates: dict[str, str] = {}
+        templates: dict[str, dict[str, object]] = {}
         names: dict[str, str] = {}
         for actor in await cache.snapshot():
-            if actor.face_embedding:
-                faces[actor.actor_id] = np.asarray(actor.face_embedding, dtype=np.float32)
-            if actor.body_embedding:
-                bodies[actor.actor_id] = np.asarray(actor.body_embedding, dtype=np.float32)
-            if actor.pet_dinov2_centroid:
-                pets[actor.actor_id] = np.asarray(actor.pet_dinov2_centroid, dtype=np.float32)
-            if actor.plate_text:
-                plates[actor.actor_id] = actor.plate_text
+            for modality, attr in _MODALITY_SOURCE.items():
+                value = getattr(actor, attr, None)
+                if not value:
+                    continue
+                templates.setdefault(modality, {})[actor.actor_id] = (
+                    value if isinstance(value, str) else np.asarray(value, dtype=np.float32)
+                )
             if actor.name:
                 names[actor.actor_id] = actor.name
-        return cls(faces=faces, bodies=bodies, pets=pets, plates=plates, actor_names=names)
+        return cls(templates=templates, actor_names=names)
 
 
 # ─── The Pipeline Protocol ──────────────────────────────────────────
@@ -120,6 +166,14 @@ class IdentityPipeline(Protocol):
     (``face_arcface``, ``body_id_osnet``, ``pet_dinov2``,
     ``plate_alpr``). Used for telemetry + skip-chain bookkeeping
     when the full router lands."""
+
+    modality: str
+    """Enrollment-template key this pipeline matches against — the
+    slice of :class:`EnrolledCorpus` it reads via
+    ``corpus.slice(self.modality)`` (``face`` / ``body`` / ``pet`` /
+    ``plate`` / future ``gait`` / ``shape`` / ``height``). Decouples a
+    pipeline from hardcoded corpus fields so new modalities register
+    without editing the corpus or router."""
 
     triggers_on: frozenset[str]
     """YOLO detection kinds that activate this pipeline. Face fires

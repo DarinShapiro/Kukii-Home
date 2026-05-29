@@ -34,6 +34,7 @@ class PetPipeline:
     """
 
     name = "pet_dinov2"
+    modality = "pet"
     triggers_on = frozenset({"dog", "cat"})
     depends_on: tuple[str, ...] = ()
     """Independent — pets don't depend on person/face matching."""
@@ -44,7 +45,7 @@ class PetPipeline:
         self._recognizer = recognizer
 
     def has_enrollments(self, corpus: EnrolledCorpus) -> bool:
-        return bool(corpus.pets)
+        return bool(corpus.slice(self.modality))
 
     async def run(
         self,
@@ -67,7 +68,7 @@ class PetPipeline:
         if not pets:
             return ()
 
-        detected = await self._recognizer.identify_pets(bgr, pets, corpus.pets)
+        detected = await self._recognizer.identify_pets(bgr, pets, corpus.slice(self.modality))
 
         out: list[ActorMatch] = []
         for pet in detected:
