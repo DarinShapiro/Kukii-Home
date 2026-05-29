@@ -41,6 +41,13 @@ class PetPipeline:
 
     skip_when_upstream_matched_above: float | None = None
 
+    # Capability descriptors (Epic 10.11.2) — scheduling/placement hints.
+    resource_class = "gpu"
+    batchable = True  # DINOv2 stacks N animal crops into one inference call
+    temporal = False
+    est_cost_ms = 80  # DINOv2 CLS embed, amortized per animal in a batch
+    placement_hint: str | None = None
+
     def __init__(self, recognizer: PetRecognizer) -> None:
         self._recognizer = recognizer
 

@@ -52,6 +52,13 @@ class BodyIdPipeline:
 
     skip_when_upstream_matched_above: float | None = _DEFAULT_SKIP_THRESHOLD
 
+    # Capability descriptors (Epic 10.11.2) — scheduling/placement hints.
+    resource_class = "gpu"
+    batchable = True  # OSNet stacks N person crops into one inference call
+    temporal = False
+    est_cost_ms = 60  # OSNet embed, amortized per person in a batch
+    placement_hint: str | None = None
+
     def __init__(self, recognizer: BodyIdRecognizer) -> None:
         self._recognizer = recognizer
 

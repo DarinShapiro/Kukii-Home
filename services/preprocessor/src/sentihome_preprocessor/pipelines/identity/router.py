@@ -34,6 +34,7 @@ the whole point of body-ID-as-fallback.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import defaultdict
 from collections.abc import Awaitable, Sequence
 from typing import TYPE_CHECKING, Protocol
@@ -42,6 +43,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from sentihome_shared.preprocessor import ActorMatch, DetectionTag
+    from sentihome_shared.timing import StepTimings
 
     from sentihome_preprocessor.pipelines.rolling_buffer import BufferedFrame
     from sentihome_preprocessor.state import ActorCache
@@ -196,6 +198,34 @@ class IdentityPipeline(Protocol):
     0.91, don't pay body-ID cost for that same person. ``None``
     means 'always run for every triggered track'."""
 
+    # ── Capability descriptors (declarative scheduling/placement
+    #    inputs; consumed by the ResourcePool + DAG simulator in
+    #    10.11.3/.3b). Read via getattr-with-default so a minimal
+    #    pipeline that omits them still loads. ──
+    resource_class: str
+    """Hardware class this pipeline's inference wants: ``"gpu"`` /
+    ``"cpu"`` / ``"npu"``. The scheduler maps it to a concrete device
+    pool (a 2-GPU node → pool size 2). Default ``"cpu"``."""
+
+    batchable: bool
+    """Whether ``run`` can process N crops in one inference call
+    (OSNet/DINOv2 stack a batch; per-head face detect does not). Lets
+    the scheduler coalesce a window's crops into one dispatch."""
+
+    temporal: bool
+    """Whether this pipeline needs a frame *sequence* (gait, video
+    SMPL) rather than a single frame — gets the future
+    ``run_sequence`` entry. Default ``False``."""
+
+    est_cost_ms: int
+    """Rough per-call latency, the simulator's primary cost input;
+    refined by measured ``step_timings``. Default ``0`` (unknown)."""
+
+    placement_hint: str | None
+    """Logical node/pool name this pipeline prefers, resolved by the
+    topology placement map. ``None`` → run locally. The seam for
+    distributing a model to another host / GPU."""
+
     def has_enrollments(self, corpus: EnrolledCorpus) -> bool:
         """``True`` if the corpus has at least one enrolled target
         for this modality. Returning ``False`` lets the router skip
@@ -267,6 +297,7 @@ class IdentityRouter:
         buffered: Sequence[BufferedFrame],
         detections: tuple[DetectionTag, ...],
         cache: ActorCache,
+        timings: StepTimings | None = None,
     ) -> tuple[ActorMatch, ...]:
         """Run every triggered pipeline against every frame in the
         window; merge the results.
@@ -276,6 +307,13 @@ class IdentityRouter:
         getting detections pre-filtered to drop track_ids upstream
         already matched above their ``skip_when_upstream_matched_above``
         threshold.
+
+        When ``timings`` is given, accumulates per-pipeline wall-clock
+        into it under ``id.<pipeline.name>`` keys (summed across frames;
+        concurrent branches overlap, so these attribute time per model
+        rather than form a strict wall-clock total). Merged once after
+        the gather barrier, so the shared instance is only mutated from
+        the single event-loop coroutine — no concurrent-write race.
 
         Skips silently when there are no pipelines registered, no
         detections, or no enrolled actors across any modality.
@@ -289,7 +327,7 @@ class IdentityRouter:
         for d in detections:
             dets_by_ts[d.frame_ts].append(d)
 
-        tasks: list[Awaitable[tuple[ActorMatch, ...]]] = []
+        tasks: list[Awaitable[tuple[tuple[ActorMatch, ...], dict[str, float]]]] = []
         for ts, frame_dets in dets_by_ts.items():
             frame = frames_by_ts.get(ts)
             if frame is None:
@@ -306,7 +344,11 @@ class IdentityRouter:
             return ()
 
         per_branch_results = await asyncio.gather(*tasks)
-        return tuple(m for batch in per_branch_results for m in batch)
+        if timings is not None:
+            for _matches, branch_timings in per_branch_results:
+                for name, ms in branch_timings.items():
+                    timings.record(f"id.{name}", ms)
+        return tuple(m for matches, _t in per_branch_results for m in matches)
 
 
 # ─── branch building + per-branch execution ─────────────────────────
@@ -373,7 +415,7 @@ async def _run_branch(
     frame: BufferedFrame,
     detections: tuple[DetectionTag, ...],
     corpus: EnrolledCorpus,
-) -> tuple[ActorMatch, ...]:
+) -> tuple[tuple[ActorMatch, ...], dict[str, float]]:
     """Execute one branch on one frame, sequentially.
 
     Threads the cumulative matches through each pipeline so
@@ -384,8 +426,12 @@ async def _run_branch(
     2. By ``has_enrollments`` (no enrolled corpus -> skip)
     3. By ``skip_when_upstream_matched_above`` (drop track_ids the
        upstream already matched confidently)
+
+    Returns the branch's matches plus a ``{pipeline.name -> ms}`` map
+    of each pipeline's ``run`` wall-clock, for per-pipeline telemetry.
     """
     branch_matches: list[ActorMatch] = []
+    branch_timings: dict[str, float] = {}
     for pipeline in branch:
         kinds_present = {d.kind for d in detections}
         triggered_kinds = pipeline.triggers_on & kinds_present
@@ -415,7 +461,10 @@ async def _run_branch(
         if not relevant:
             continue
 
+        t0 = time.perf_counter()
         matches = await pipeline.run(frame=frame, detections=relevant, corpus=corpus)
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        branch_timings[pipeline.name] = branch_timings.get(pipeline.name, 0.0) + elapsed_ms
         branch_matches.extend(matches)
 
-    return tuple(branch_matches)
+    return tuple(branch_matches), branch_timings

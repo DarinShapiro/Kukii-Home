@@ -61,6 +61,13 @@ class FacePipeline:
     forward-compat (e.g. if a future pipeline detects "person not in
     frame" cheaply and we want face to skip)."""
 
+    # Capability descriptors (Epic 10.11.2) — scheduling/placement hints.
+    resource_class = "gpu"
+    batchable = False  # detect+align run per head region, not one batched call
+    temporal = False
+    est_cost_ms = 200  # SCRFD detect + ArcFace embed per head crop
+    placement_hint: str | None = None
+
     def __init__(self, recognizer: FaceRecognizer) -> None:
         self._recognizer = recognizer
 
