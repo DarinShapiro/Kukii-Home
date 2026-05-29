@@ -68,9 +68,29 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+class _ImageOnly(torch.nn.Module):
+    """Single-input wrapper around the DINOv2 backbone.
+
+    DINOv2's ``forward(self, x, masks=None)`` signature leaks a second
+    required ``masks`` input into the exported ONNX graph (so the
+    runtime, which only feeds the image, fails with "Required inputs
+    (['masks']) are missing"). Calling the backbone with ``x`` only
+    keeps ``masks`` a constant ``None``, so the graph has exactly one
+    input — the image — and one output, the CLS-token embedding.
+    """
+
+    def __init__(self, backbone: torch.nn.Module) -> None:
+        super().__init__()
+        self.backbone = backbone
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.backbone(x)
+
+
 def _build_model(model_name: str):
-    """Load the DINOv2 backbone from torch.hub. forward(x) returns
-    the CLS-token embedding (B, embed_dim)."""
+    """Load the DINOv2 backbone from torch.hub, wrapped so export sees
+    a single image input. forward(x) returns the CLS-token embedding
+    (B, embed_dim)."""
     try:
         model = torch.hub.load(
             "facebookresearch/dinov2", model_name, pretrained=True, verbose=False
@@ -82,7 +102,7 @@ def _build_model(model_name: str):
             "Install deps: pip install torch onnx onnxscript"
         )
     model.eval()
-    return model
+    return _ImageOnly(model).eval()
 
 
 def _export_onnx(model, output_path: Path, size: int, opset: int) -> None:
