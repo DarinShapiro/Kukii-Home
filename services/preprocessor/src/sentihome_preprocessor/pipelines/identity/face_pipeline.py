@@ -18,8 +18,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from sentihome_preprocessor.pipelines.face import (
-    associate_face_to_person,
     detected_face_to_actor_match,
     jpeg_to_bgr,
 )
@@ -35,11 +36,13 @@ if TYPE_CHECKING:
 class FacePipeline:
     """Face-recognition branch of the identity router.
 
-    Reads the ``faces`` slice of :class:`EnrolledCorpus`, runs
-    :meth:`FaceRecognizer.detect_and_match` on the frame, joins each
-    matched face to the spatially-containing person detection via
-    IoU overlap, and emits ActorMatches stamped with
-    ``match_method="face_arcface"`` and the inherited ``track_id``.
+    Reads the ``faces`` slice of :class:`EnrolledCorpus`. For each
+    tracked person detection, runs the face detector on that person's
+    head region (top slice of the box, native resolution) so distant
+    faces survive InsightFace's det_size downscale, then matches the
+    aligned face against the enrolled embeddings. Emits ActorMatches
+    stamped with ``match_method="face_arcface"`` and the person's
+    ``track_id`` (the region IS the person — no IoU association).
 
     Unmatched faces (no enrolled embedding within threshold) are
     dropped — the wire contract has no concept of a 'phantom' face.
@@ -75,25 +78,61 @@ class FacePipeline:
         if bgr is None:
             return ()
 
-        # Build the person-bbox list for face-to-person association.
-        # Untracked person dets are dropped: without a track_id we
-        # can't correlate identity to detection downstream.
-        person_bboxes = [
-            (d.track_id, d.bbox)
-            for d in detections
-            if d.kind == "person" and d.track_id is not None
-        ]
-        if not person_bboxes:
-            return ()
-
-        faces = await self._recognizer.detect_and_match(bgr, corpus.faces)
-
+        # Run the face detector on the HEAD REGION of each tracked
+        # person (the top slice of the YOLO person box) at native
+        # resolution — not the whole frame, not the whole body. Why:
+        # InsightFace resizes its input to det_size (640) before
+        # detecting, so a small face in a big frame is downscaled into
+        # oblivion. Scoping to the head region keeps a distant face a
+        # large fraction of a small image, so it survives the resize.
+        # InsightFace then aligns + crops the actual face to 112x112 —
+        # the body never reaches the ArcFace recognizer. The region IS
+        # this person, so the match inherits their track_id directly
+        # (no IoU face->person association needed).
+        h, w = bgr.shape[:2]
         out: list[ActorMatch] = []
-        for face in faces:
-            if face.matched_actor_id is None:
+        for d in detections:
+            if d.kind != "person" or d.track_id is None:
                 continue
-            track_id = associate_face_to_person(face.bbox, person_bboxes)
-            match = detected_face_to_actor_match(face, frame_ts=frame.ts, track_id=track_id)
+            head = _head_region(bgr, d.bbox, w, h)
+            if head is None:
+                continue
+            faces = await self._recognizer.detect_and_match(head, corpus.faces)
+            matched = [f for f in faces if f.matched_actor_id is not None]
+            if not matched:
+                continue
+            # One identity per person — take the highest-confidence
+            # matched face in the head region.
+            best = max(matched, key=lambda f: f.match_confidence)
+            match = detected_face_to_actor_match(best, frame_ts=frame.ts, track_id=d.track_id)
             if match is not None:
                 out.append(match)
         return tuple(out)
+
+
+def _head_region(
+    bgr: np.ndarray,
+    person_bbox: tuple[float, float, float, float],
+    w: int,
+    h: int,
+    *,
+    top_fraction: float = 0.4,
+    pad: float = 0.04,
+) -> np.ndarray | None:
+    """Crop the top slice of a (normalized) person bbox — where the
+    face is — at native resolution.
+
+    Takes the top ``top_fraction`` of the person box (head + shoulders)
+    with a little padding, so the face detector gets a tight,
+    high-resolution region rather than the whole body. Returns a
+    contiguous BGR array, or None if the region is degenerate.
+    """
+    x1n, y1n, x2n, y2n = person_bbox
+    box_h = y2n - y1n
+    x1 = max(0, int((x1n - pad) * w))
+    y1 = max(0, int((y1n - pad) * h))
+    x2 = min(w, int((x2n + pad) * w))
+    y2 = min(h, int((y1n + box_h * top_fraction + pad) * h))
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return np.ascontiguousarray(bgr[y1:y2, x1:x2])

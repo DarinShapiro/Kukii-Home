@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -142,6 +143,13 @@ class FaceRecognizer:
         self._config = config or FaceConfig()
         self._app: FaceAnalysis | None = None
         self._load_lock = asyncio.Lock()
+        # Guards the lazy load in _ensure_app, which runs in asyncio's
+        # executor THREADS (not the loop) — a burst of frames fires
+        # many concurrent first-calls, and without this each would load
+        # its own heavy FaceAnalysis → memory blowup / OOM. A threading
+        # lock (not the asyncio _load_lock, which only covers warmup)
+        # is the right primitive for the executor path.
+        self._app_lock = threading.Lock()
 
     async def warmup(self) -> None:
         """Eagerly load the model. Optional — first inference call
@@ -169,28 +177,35 @@ class FaceRecognizer:
     def _ensure_app(self) -> FaceAnalysis:
         if self._app is not None:
             return self._app
-        # Lazy import — keeps the preprocessor importable in
-        # environments without onnxruntime / insightface (CI, unit
-        # tests against synthetic backend).
-        from insightface.app import FaceAnalysis  # type: ignore[import-not-found]
+        # Double-checked locking: under a burst of frames, many
+        # executor threads reach here at once. Serialize so the heavy
+        # FaceAnalysis loads exactly once instead of N times (the
+        # concurrent-load OOM that crashed the preprocessor).
+        with self._app_lock:
+            if self._app is not None:
+                return self._app
+            # Lazy import — keeps the preprocessor importable in
+            # environments without onnxruntime / insightface (CI, unit
+            # tests against synthetic backend).
+            from insightface.app import FaceAnalysis  # type: ignore[import-not-found]
 
-        logger.info(
-            "face.loading model_pack=%s providers=%s",
-            self._config.model_pack,
-            self._config.providers,
-        )
-        app = FaceAnalysis(
-            name=self._config.model_pack,
-            providers=list(self._config.providers),
-        )
-        app.prepare(
-            ctx_id=0,
-            det_size=(self._config.det_size, self._config.det_size),
-            det_thresh=self._config.det_confidence_min,
-        )
-        self._app = app
-        logger.info("face.loaded")
-        return app
+            logger.info(
+                "face.loading model_pack=%s providers=%s",
+                self._config.model_pack,
+                self._config.providers,
+            )
+            app = FaceAnalysis(
+                name=self._config.model_pack,
+                providers=list(self._config.providers),
+            )
+            app.prepare(
+                ctx_id=0,
+                det_size=(self._config.det_size, self._config.det_size),
+                det_thresh=self._config.det_confidence_min,
+            )
+            self._app = app
+            logger.info("face.loaded")
+            return app
 
     def _detect_and_match_sync(
         self,
@@ -201,6 +216,10 @@ class FaceRecognizer:
         # InsightFace expects BGR (matching OpenCV convention).
         faces = app.get(bgr)
         if not faces:
+            # Diagnostic: no face found in this (head-crop) input. Lets
+            # us tell "no detectable face" apart from "face found but
+            # didn't match" when tuning a distant/wide camera.
+            logger.info("face.no_face_in_input shape=%s", bgr.shape[:2])
             return ()
 
         h, w = bgr.shape[:2]
@@ -224,6 +243,18 @@ class FaceRecognizer:
             # otherwise normalize f.embedding ourselves.
             emb = _normalized_embedding(f)
             actor_id, conf = _match(emb, enrolled, self._config.match_threshold)
+
+            # Diagnostic: surface the best cosine even when it's below
+            # the match threshold, so we can see near-misses on hard
+            # cameras (distant / off-angle faces).
+            if enrolled:
+                best_cos = max(float(np.dot(emb, e)) for e in enrolled.values())
+                logger.info(
+                    "face.candidate det_score=%.2f best_cosine=%.3f matched=%s",
+                    det_conf,
+                    best_cos,
+                    actor_id,
+                )
 
             results.append(
                 DetectedFace(
