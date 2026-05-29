@@ -40,6 +40,9 @@ from collections.abc import Awaitable, Sequence
 from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
+import structlog
+
+from sentihome_preprocessor.pipelines.identity.scheduling import ResourcePool
 
 if TYPE_CHECKING:
     from sentihome_shared.preprocessor import ActorMatch, DetectionTag
@@ -47,6 +50,8 @@ if TYPE_CHECKING:
 
     from sentihome_preprocessor.pipelines.rolling_buffer import BufferedFrame
     from sentihome_preprocessor.state import ActorCache
+
+logger = structlog.get_logger(__name__)
 
 
 # ─── EnrolledCorpus: projected snapshot of the ActorCache ───────────
@@ -275,9 +280,21 @@ class IdentityRouter:
     above ``skip_when_upstream_matched_above``.
     """
 
-    def __init__(self, pipelines: Sequence[IdentityPipeline]) -> None:
+    def __init__(
+        self,
+        pipelines: Sequence[IdentityPipeline],
+        *,
+        resource_pool: ResourcePool | None = None,
+        budget_ms: float | None = None,
+    ) -> None:
         self._pipelines = list(pipelines)
         self._branches = _build_branches(self._pipelines)
+        # One pool shared across all branch coroutines bounds per-device
+        # concurrency (default: single iGPU). ``budget_ms`` caps the
+        # window's identity wall-clock — not-yet-started pipelines past
+        # the deadline are dropped + logged rather than blowing latency.
+        self._pool = resource_pool if resource_pool is not None else ResourcePool()
+        self._budget_ms = budget_ms
 
     @property
     def pipeline_names(self) -> tuple[str, ...]:
@@ -298,6 +315,7 @@ class IdentityRouter:
         detections: tuple[DetectionTag, ...],
         cache: ActorCache,
         timings: StepTimings | None = None,
+        budget_ms: float | None = None,
     ) -> tuple[ActorMatch, ...]:
         """Run every triggered pipeline against every frame in the
         window; merge the results.
@@ -322,6 +340,15 @@ class IdentityRouter:
             return ()
         corpus = await EnrolledCorpus.from_cache(cache)
 
+        # Window deadline: a pipeline that hasn't started by the
+        # deadline is dropped (graceful degradation under contention).
+        effective_budget = budget_ms if budget_ms is not None else self._budget_ms
+        deadline = (
+            time.perf_counter() + effective_budget / 1000.0
+            if effective_budget is not None
+            else None
+        )
+
         frames_by_ts: dict[float, BufferedFrame] = {f.ts: f for f in buffered}
         dets_by_ts: dict[float, list[DetectionTag]] = defaultdict(list)
         for d in detections:
@@ -338,7 +365,11 @@ class IdentityRouter:
                 # any kind in this frame.
                 if not any(p.triggers_on & kinds for p in branch):
                     continue
-                tasks.append(_run_branch(branch, frame, tuple(frame_dets), corpus))
+                tasks.append(
+                    _run_branch(
+                        branch, frame, tuple(frame_dets), corpus, self._pool, deadline
+                    )
+                )
 
         if not tasks:
             return ()
@@ -415,6 +446,8 @@ async def _run_branch(
     frame: BufferedFrame,
     detections: tuple[DetectionTag, ...],
     corpus: EnrolledCorpus,
+    pool: ResourcePool,
+    deadline: float | None,
 ) -> tuple[tuple[ActorMatch, ...], dict[str, float]]:
     """Execute one branch on one frame, sequentially.
 
@@ -461,8 +494,26 @@ async def _run_branch(
         if not relevant:
             continue
 
+        # Budget: if the window deadline has passed, drop this (and the
+        # rest of the branch — downstream depends on it) rather than
+        # blowing the alert-latency target. Work already running
+        # finishes; only not-yet-started inference is shed.
+        if deadline is not None and time.perf_counter() > deadline:
+            logger.info(
+                "identity.budget_drop",
+                pipeline=pipeline.name,
+                frame_ts=frame.ts,
+                tracks=len(relevant),
+            )
+            break
+
+        # Acquire the per-resource concurrency slot for the duration of
+        # inference — bounds device oversubscription across all the
+        # concurrently-gathered branches.
+        resource_class = getattr(pipeline, "resource_class", "cpu")
         t0 = time.perf_counter()
-        matches = await pipeline.run(frame=frame, detections=relevant, corpus=corpus)
+        async with pool.slot(resource_class):
+            matches = await pipeline.run(frame=frame, detections=relevant, corpus=corpus)
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         branch_timings[pipeline.name] = branch_timings.get(pipeline.name, 0.0) + elapsed_ms
         branch_matches.extend(matches)
