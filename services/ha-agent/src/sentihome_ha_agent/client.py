@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import json
 import random
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -259,7 +260,19 @@ class HAClient:
         payload: dict[str, Any] = dict(data or {})
         if entity_id is not None:
             payload["entity_id"] = entity_id
+        # Time every HA action (light on, lock, siren, notify, ...) so
+        # the observability layer can see how long the home responds.
+        t0 = time.perf_counter()
         resp = await self._http.post(f"/api/services/{domain}/{service}", json=payload)
+        action_ms = round((time.perf_counter() - t0) * 1000.0, 1)
+        logger.info(
+            "ha.action",
+            domain=domain,
+            service=service,
+            entity_id=entity_id,
+            status=resp.status_code,
+            action_ms=action_ms,
+        )
         if resp.status_code >= 400:
             raise HAClientError(
                 f"service {domain}.{service} failed: HTTP {resp.status_code} {resp.text}"

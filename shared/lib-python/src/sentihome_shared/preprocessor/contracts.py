@@ -223,6 +223,15 @@ class FrameWindow(_Strict):
     """How long the preprocessor spent on the request, end-to-end.
     Useful for the latency-capture / observability layer."""
 
+    step_timings_ms: dict[str, float] = Field(default_factory=dict)
+    """Per-step breakdown of where ``enrichment_latency_ms`` went —
+    e.g. ``{"buffer_read": 12.0, "detect": 180.4, "identify": 1320.7,
+    "correlate": 0.3, "annotate": 45.1}``. Populated via
+    :class:`sentihome_shared.timing.StepTimings`. Empty for
+    ``frames_only`` requests and the synthetic backend. The consumer
+    (tuning loop, dashboard) reads this to see which stage dominates
+    a slow window."""
+
 
 # ─── Status + tuning RPCs ────────────────────────────────────────────
 

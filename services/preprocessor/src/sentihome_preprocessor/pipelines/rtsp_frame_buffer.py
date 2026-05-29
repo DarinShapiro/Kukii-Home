@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
+import structlog
 from sentihome_shared.preprocessor import (
     ActorMatch,
     DetectionTag,
@@ -29,6 +30,7 @@ from sentihome_shared.preprocessor import (
     FrameWindow,
     IdentifiedEntity,
 )
+from sentihome_shared.timing import StepTimings
 
 from sentihome_preprocessor.pipelines.markup import annotate_frame, encode_jpeg
 from sentihome_preprocessor.pipelines.rolling_buffer import (
@@ -40,6 +42,8 @@ from sentihome_preprocessor.state import ActorCache
 if TYPE_CHECKING:
     from sentihome_preprocessor.pipelines.detection import YOLODetector
     from sentihome_preprocessor.pipelines.identity import IdentityRouter
+
+logger = structlog.get_logger(__name__)
 
 
 # Min identity confidence below which we don't emit IdentifiedEntity.
@@ -176,7 +180,9 @@ class RTSPFrameBuffer:
         # the rolling buffer is queryable. Unknown cameras simply
         # produce empty buffer reads -> empty FrameWindow, no error.
 
-        buffered = await self._buffer.get_window(camera_id, ts_start=ts_start, ts_end=ts_end)
+        timings = StepTimings()
+        with timings.span("buffer_read"):
+            buffered = await self._buffer.get_window(camera_id, ts_start=ts_start, ts_end=ts_end)
 
         detections: tuple[DetectionTag, ...] = ()
         if enrich and self._detector is not None and buffered:
@@ -193,9 +199,10 @@ class RTSPFrameBuffer:
                 else list(buffered)
             )
             if candidates:
-                detections = await self._detector.detect_batch(
-                    [(f.jpeg_bytes, f.ts) for f in candidates]
-                )
+                with timings.span("detect"):
+                    detections = await self._detector.detect_batch(
+                        [(f.jpeg_bytes, f.ts) for f in candidates]
+                    )
 
         # Phase 10.4 — identity pipelines (face today; body-ID / pet
         # / plate as they land). The router gates per-pipeline by
@@ -205,15 +212,17 @@ class RTSPFrameBuffer:
         # :class:`IdentityRouter` for the dispatch design.
         actor_matches: tuple[ActorMatch, ...] = ()
         if enrich and self._identity_router is not None and detections:
-            actor_matches = await self._identity_router.identify(
-                buffered=buffered,
-                detections=detections,
-                cache=cache,
-            )
+            with timings.span("identify"):
+                actor_matches = await self._identity_router.identify(
+                    buffered=buffered,
+                    detections=detections,
+                    cache=cache,
+                )
 
         # Build identified_entities by correlating detections +
         # actor_matches via track_id and resolving names from cache.
-        identified_entities = await _correlate_identities(detections, actor_matches, cache)
+        with timings.span("correlate"):
+            identified_entities = await _correlate_identities(detections, actor_matches, cache)
 
         # Render annotated JPEGs for any frames that have identities
         # — write into the annotation cache so the /annotated.jpg
@@ -221,19 +230,20 @@ class RTSPFrameBuffer:
         # so the caller knows the annotated version exists.
         annotated_ts: set[float] = set()
         if self._annotation_cache is not None and identified_entities:
-            entities_by_ts: dict[float, list[IdentifiedEntity]] = defaultdict(list)
-            for ent in identified_entities:
-                entities_by_ts[ent.frame_ts].append(ent)
+            with timings.span("annotate"):
+                entities_by_ts: dict[float, list[IdentifiedEntity]] = defaultdict(list)
+                for ent in identified_entities:
+                    entities_by_ts[ent.frame_ts].append(ent)
 
-            jpeg_by_ts = {f.ts: f.jpeg_bytes for f in buffered}
-            for frame_ts, ents in entities_by_ts.items():
-                raw = jpeg_by_ts.get(frame_ts)
-                if raw is None:
-                    continue
-                rendered = await _render_annotated_jpeg(raw, tuple(ents))
-                if rendered is not None:
-                    await self._annotation_cache.put(camera_id, frame_ts, rendered)
-                    annotated_ts.add(frame_ts)
+                jpeg_by_ts = {f.ts: f.jpeg_bytes for f in buffered}
+                for frame_ts, ents in entities_by_ts.items():
+                    raw = jpeg_by_ts.get(frame_ts)
+                    if raw is None:
+                        continue
+                    rendered = await _render_annotated_jpeg(raw, tuple(ents))
+                    if rendered is not None:
+                        await self._annotation_cache.put(camera_id, frame_ts, rendered)
+                        annotated_ts.add(frame_ts)
 
         # Build FrameRefs last so annotated_uri reflects what
         # actually got rendered.
@@ -257,6 +267,17 @@ class RTSPFrameBuffer:
         )
 
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        step_timings = timings.as_dict()
+        if enrich:
+            logger.info(
+                "frame_window.timings",
+                camera_id=camera_id,
+                latency_ms=latency_ms,
+                frames=len(frames),
+                detections=len(detections),
+                identities=len(identified_entities),
+                step_timings_ms=step_timings,
+            )
         return FrameWindow(
             camera_id=camera_id,
             ts_start=ts_start,
@@ -268,6 +289,7 @@ class RTSPFrameBuffer:
             identified_entities=identified_entities,
             enrichment_mode="enriched" if enrich else "frames_only",
             enrichment_latency_ms=latency_ms,
+            step_timings_ms=step_timings,
         )
 
 
