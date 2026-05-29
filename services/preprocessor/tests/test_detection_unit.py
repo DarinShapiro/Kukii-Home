@@ -51,10 +51,14 @@ class _FakeBoxes:
         xyxy: list[list[float]],
         conf: list[float],
         cls: list[int],
+        track_ids: list[int] | None = None,
     ) -> None:
         self.xyxy = np.array(xyxy, dtype=np.float32)
         self.conf = np.array(conf, dtype=np.float32)
         self.cls = np.array(cls, dtype=np.float32)
+        # ultralytics exposes track ids as boxes.id in track mode;
+        # None in predict mode / for unconfirmed tracks.
+        self.id = np.array(track_ids, dtype=np.float32) if track_ids is not None else None
 
 
 class _FakeResult:
@@ -87,6 +91,7 @@ def test_results_to_tags_maps_known_coco_classes():
             xyxy=[[100, 50, 300, 200], [150, 100, 250, 220]],
             conf=[0.92, 0.78],
             cls=[0, 16],  # person, dog
+            track_ids=[7, 12],  # YOLO track-mode ids
         ),
     )
     tags = _results_to_tags([result], frame_shape=(480, 640, 3), frame_ts=1234.5)
@@ -98,10 +103,27 @@ def test_results_to_tags_maps_known_coco_classes():
     # (0.1562, 0.1042, 0.4688, 0.4167).
     assert person.bbox == (0.1562, 0.1042, 0.4688, 0.4167)
     assert person.frame_ts == 1234.5
-    assert person.track_id is None
+    # Track mode → boxes.id carried through as a string track_id.
+    assert person.track_id == "7"
 
     dog = next(t for t in tags if t.kind == "dog")
     assert dog.confidence == 0.78
+    assert dog.track_id == "12"
+
+
+def test_results_to_tags_synthesizes_track_id_without_tracker():
+    """Predict mode (or an unconfirmed track) leaves ``boxes.id`` None.
+    We synthesize a per-frame track_id so identity pipelines never
+    receive a None track_id — which silently disabled face/body
+    recognition in the RTSP path (the bug this guards against)."""
+    result = _FakeResult(
+        names=_FAKE_NAMES,
+        boxes=_FakeBoxes(xyxy=[[0, 0, 100, 100]], conf=[0.8], cls=[0]),  # no track_ids
+    )
+    tags = _results_to_tags([result], frame_shape=(480, 640, 3), frame_ts=12.345)
+    assert len(tags) == 1
+    assert tags[0].track_id is not None
+    assert tags[0].track_id == "12345-0"  # int(round(12.345*1000))-<index>
 
 
 def test_results_to_tags_filters_uninteresting_classes():
@@ -230,10 +252,10 @@ async def test_detect_invokes_model_with_decoded_frame(monkeypatch):
 @pytest.mark.asyncio
 async def test_detect_batch_returns_tags_for_each_frame_in_batch(monkeypatch):
     class _StubModel:
-        def predict(self, images, **kwargs):
-            # One result per image.
+        def track(self, images, **kwargs):
+            # detect_batch uses track mode (persistent track_ids).
             results = []
-            for _ in images:
+            for i, _ in enumerate(images):
                 results.append(
                     _FakeResult(
                         names=_FAKE_NAMES,
@@ -241,6 +263,7 @@ async def test_detect_batch_returns_tags_for_each_frame_in_batch(monkeypatch):
                             xyxy=[[0, 0, 100, 100]],
                             conf=[0.8],
                             cls=[0],
+                            track_ids=[i + 1],
                         ),
                     )
                 )

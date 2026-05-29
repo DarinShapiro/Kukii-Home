@@ -245,12 +245,20 @@ class YOLODetector:
         if not images:
             return ()
         model = self._ensure_model()
-        results = model.predict(
+        # Track mode (not predict) so detections carry persistent
+        # track_ids — the identity router/correlation key. Without
+        # them the face/body pipelines drop every detection
+        # ("no track_id → can't correlate") and never run. The frames
+        # are passed in chronological order so ByteTrack maintains
+        # consistent ids across the window; persist=False gives each
+        # window a fresh tracker (windows are independent queries).
+        results = model.track(
             images,
             conf=self._config.confidence_min,
             iou=self._config.iou_min,
             imgsz=self._config.image_size,
             device=self._config.device,
+            persist=False,
             verbose=False,
         )
         out: list[DetectionTag] = []
@@ -310,6 +318,9 @@ def _results_to_tags(
         xyxy = _to_numpy(boxes.xyxy)
         confs = _to_numpy(boxes.conf)
         clses = _to_numpy(boxes.cls).astype(int)
+        # boxes.id is present in track mode; None in predict mode or for
+        # tracks the tracker hasn't confirmed yet.
+        ids = _to_numpy(boxes.id) if getattr(boxes, "id", None) is not None else None
         for i in range(len(clses)):
             class_idx = int(clses[i])
             class_name = names.get(class_idx) if isinstance(names, dict) else names[class_idx]
@@ -317,6 +328,15 @@ def _results_to_tags(
             if mapped is None:
                 continue
             x1, y1, x2, y2 = xyxy[i].tolist()
+            if ids is not None:
+                track_id = str(int(ids[i]))
+            else:
+                # Tracker assigned no id (predict mode / unconfirmed
+                # track). Synthesize a per-frame id so identity
+                # pipelines can still associate within the frame —
+                # identity must never be silently blocked by a missing
+                # track_id (the bug this guards against).
+                track_id = f"{round(frame_ts * 1000)}-{i}"
             out.append(
                 DetectionTag(
                     kind=mapped,
@@ -328,10 +348,7 @@ def _results_to_tags(
                         round(y2 / h, 4),
                     ),
                     frame_ts=frame_ts,
-                    # Track-id requires YOLO track mode (not predict).
-                    # Add in Phase 10.3.1 when we wire .track() in
-                    # the capture loop.
-                    track_id=None,
+                    track_id=track_id,
                 )
             )
     return tuple(out)
