@@ -41,6 +41,7 @@ class BodyIdPipeline:
     """
 
     name = "body_id_osnet"
+    modality = "body"
     triggers_on = frozenset({"person"})
     depends_on: tuple[str, ...] = ("face_arcface",)
     """Force-sequence after face so the router can apply the
@@ -51,11 +52,18 @@ class BodyIdPipeline:
 
     skip_when_upstream_matched_above: float | None = _DEFAULT_SKIP_THRESHOLD
 
+    # Capability descriptors (Epic 10.11.2) — scheduling/placement hints.
+    resource_class = "gpu"
+    batchable = True  # OSNet stacks N person crops into one inference call
+    temporal = False
+    est_cost_ms = 60  # OSNet embed, amortized per person in a batch
+    placement_hint: str | None = None
+
     def __init__(self, recognizer: BodyIdRecognizer) -> None:
         self._recognizer = recognizer
 
     def has_enrollments(self, corpus: EnrolledCorpus) -> bool:
-        return bool(corpus.bodies)
+        return bool(corpus.slice(self.modality))
 
     async def run(
         self,
@@ -80,7 +88,7 @@ class BodyIdPipeline:
         if not persons:
             return ()
 
-        bodies = await self._recognizer.identify_persons(bgr, persons, corpus.bodies)
+        bodies = await self._recognizer.identify_persons(bgr, persons, corpus.slice(self.modality))
 
         out: list[ActorMatch] = []
         for body in bodies:

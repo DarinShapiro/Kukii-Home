@@ -158,6 +158,17 @@ def test_label_contains_actor_name_and_method():
     )
 
 
+def test_method_label_covers_all_active_modalities():
+    """The label text is VLM-facing grounding, so every active identity
+    method must map to a clean human name — a missing entry would leak
+    the raw pipeline id (e.g. "body_id_osnet") onto the frame."""
+    from sentihome_preprocessor.pipelines.markup import _METHOD_LABEL
+
+    for method in ("face_arcface", "body_id_osnet", "pet_dinov2"):
+        assert method in _METHOD_LABEL, f"no pretty label for {method}"
+    assert _METHOD_LABEL["body_id_osnet"] == "body"
+
+
 # ─── encode_jpeg ────────────────────────────────────────────────────
 
 

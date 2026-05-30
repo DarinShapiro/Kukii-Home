@@ -49,9 +49,12 @@ _LABEL_FONT_SCALE = 0.5
 _LABEL_FONT_THICKNESS = 1
 _LABEL_PAD_PX = 3
 
-# Pretty names for the methods that appear in labels.
+# Pretty names for the methods that appear in labels — this text is
+# VLM-facing grounding, so keep it short + human-readable rather than
+# the raw pipeline id (e.g. "body", not "body_id_osnet").
 _METHOD_LABEL = {
     "face_arcface": "face",
+    "body_id_osnet": "body",
     "pet_dinov2": "pet",
     "plate_lpr": "plate",
 }

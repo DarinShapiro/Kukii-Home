@@ -34,74 +34,127 @@ the whole point of body-ID-as-fallback.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import defaultdict
 from collections.abc import Awaitable, Sequence
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
+import structlog
+
+from sentihome_preprocessor.pipelines.identity.scheduling import ResourcePool
 
 if TYPE_CHECKING:
     from sentihome_shared.preprocessor import ActorMatch, DetectionTag
+    from sentihome_shared.timing import StepTimings
 
     from sentihome_preprocessor.pipelines.rolling_buffer import BufferedFrame
     from sentihome_preprocessor.state import ActorCache
+
+logger = structlog.get_logger(__name__)
 
 
 # ─── EnrolledCorpus: projected snapshot of the ActorCache ───────────
 
 
-@dataclass(frozen=True)
+# Declarative projection: identity-modality key -> the
+# ActorEnrollmentEvent attribute carrying that template. Adding a
+# modality is ONE line here (until 10.10.1 makes events carry a
+# generic per-modality template map and even this disappears). Tuple
+# embeddings become float32 arrays; str fields (plate) store verbatim.
+_MODALITY_SOURCE: dict[str, str] = {
+    "face": "face_embedding",
+    "body": "body_embedding",
+    "pet": "pet_dinov2_centroid",
+    "plate": "plate_text",
+}
+
+
 class EnrolledCorpus:
     """Snapshot of :class:`ActorCache` projected by identity modality.
 
-    The router builds one per ``identify()`` call so the N
-    pipelines don't each re-walk the cache and rebuild numpy arrays.
-    Each modality's slice is a dict ``actor_id -> typed embedding``;
-    pipelines read only their own slice.
+    The router builds one per ``identify()`` call so the N pipelines
+    don't each re-walk the cache and rebuild numpy arrays.
 
-    Future modalities (pet DINOv2, plate text, body re-ID embedding)
-    slot in as additional fields. ``actor_names`` is shared across
-    all pipelines for the downstream IdentifiedEntity construction.
+    Storage is a generic ``templates`` map (``modality -> {actor_id ->
+    template}``), so a NEW modality (gait, body-shape, height, …) plugs
+    in via :meth:`slice` with zero edits to this class — the whole point
+    of the pluggable DAG (Epic 10.11.1). The legacy per-modality
+    accessors (:attr:`faces`, :attr:`bodies`, :attr:`pets`,
+    :attr:`plates`) remain as thin views so existing pipelines + tests
+    keep working unchanged. ``actor_names`` is shared across all
+    pipelines for downstream IdentifiedEntity rendering.
     """
 
-    faces: dict[str, np.ndarray] = field(default_factory=dict)
-    """``actor_id -> 512-d L2-normalized ArcFace embedding``."""
+    __slots__ = ("actor_names", "templates")
 
-    bodies: dict[str, np.ndarray] = field(default_factory=dict)
-    """``actor_id -> 512-d L2-normalized OSNet body embedding``.
-    Powers Phase 10.5 body re-ID — the fallback when face isn't
-    visible."""
+    def __init__(
+        self,
+        *,
+        templates: dict[str, dict[str, object]] | None = None,
+        actor_names: dict[str, str] | None = None,
+        faces: dict[str, np.ndarray] | None = None,
+        bodies: dict[str, np.ndarray] | None = None,
+        pets: dict[str, np.ndarray] | None = None,
+        plates: dict[str, str] | None = None,
+    ) -> None:
+        self.templates: dict[str, dict[str, object]] = {
+            k: dict(v) for k, v in (templates or {}).items()
+        }
+        # Fold legacy per-modality kwargs into the generic store so
+        # ``EnrolledCorpus(faces=...)`` etc. still construct.
+        for modality, value in (
+            ("face", faces),
+            ("body", bodies),
+            ("pet", pets),
+            ("plate", plates),
+        ):
+            if value:
+                self.templates.setdefault(modality, {}).update(value)
+        self.actor_names: dict[str, str] = dict(actor_names or {})
 
-    pets: dict[str, np.ndarray] = field(default_factory=dict)
-    """``actor_id -> DINOv2 centroid`` (Phase 10.5)."""
+    def slice(self, modality: str) -> dict[str, object]:
+        """The ``{actor_id -> template}`` view for one modality —
+        empty dict if nothing is enrolled for it. Pipelines read only
+        their own slice (``corpus.slice(self.modality)``)."""
+        return self.templates.get(modality, {})
 
-    plates: dict[str, str] = field(default_factory=dict)
-    """``actor_id -> canonical plate text`` (Phase 10.6)."""
+    # ── Legacy per-modality views (thin shims over ``templates``) ──
+    @property
+    def faces(self) -> dict[str, np.ndarray]:
+        """``actor_id -> 512-d L2-normalized ArcFace embedding``."""
+        return self.slice("face")
 
-    actor_names: dict[str, str] = field(default_factory=dict)
-    """``actor_id -> friendly name`` for downstream IdentifiedEntity
-    rendering. Populated for any actor with a non-None ``name``."""
+    @property
+    def bodies(self) -> dict[str, np.ndarray]:
+        """``actor_id -> 512-d L2-normalized OSNet body embedding``."""
+        return self.slice("body")
+
+    @property
+    def pets(self) -> dict[str, np.ndarray]:
+        """``actor_id -> DINOv2 centroid``."""
+        return self.slice("pet")
+
+    @property
+    def plates(self) -> dict[str, str]:
+        """``actor_id -> canonical plate text``."""
+        return self.slice("plate")
 
     @classmethod
     async def from_cache(cls, cache: ActorCache) -> EnrolledCorpus:
-        faces: dict[str, np.ndarray] = {}
-        bodies: dict[str, np.ndarray] = {}
-        pets: dict[str, np.ndarray] = {}
-        plates: dict[str, str] = {}
+        templates: dict[str, dict[str, object]] = {}
         names: dict[str, str] = {}
         for actor in await cache.snapshot():
-            if actor.face_embedding:
-                faces[actor.actor_id] = np.asarray(actor.face_embedding, dtype=np.float32)
-            if actor.body_embedding:
-                bodies[actor.actor_id] = np.asarray(actor.body_embedding, dtype=np.float32)
-            if actor.pet_dinov2_centroid:
-                pets[actor.actor_id] = np.asarray(actor.pet_dinov2_centroid, dtype=np.float32)
-            if actor.plate_text:
-                plates[actor.actor_id] = actor.plate_text
+            for modality, attr in _MODALITY_SOURCE.items():
+                value = getattr(actor, attr, None)
+                if not value:
+                    continue
+                templates.setdefault(modality, {})[actor.actor_id] = (
+                    value if isinstance(value, str) else np.asarray(value, dtype=np.float32)
+                )
             if actor.name:
                 names[actor.actor_id] = actor.name
-        return cls(faces=faces, bodies=bodies, pets=pets, plates=plates, actor_names=names)
+        return cls(templates=templates, actor_names=names)
 
 
 # ─── The Pipeline Protocol ──────────────────────────────────────────
@@ -120,6 +173,14 @@ class IdentityPipeline(Protocol):
     (``face_arcface``, ``body_id_osnet``, ``pet_dinov2``,
     ``plate_alpr``). Used for telemetry + skip-chain bookkeeping
     when the full router lands."""
+
+    modality: str
+    """Enrollment-template key this pipeline matches against — the
+    slice of :class:`EnrolledCorpus` it reads via
+    ``corpus.slice(self.modality)`` (``face`` / ``body`` / ``pet`` /
+    ``plate`` / future ``gait`` / ``shape`` / ``height``). Decouples a
+    pipeline from hardcoded corpus fields so new modalities register
+    without editing the corpus or router."""
 
     triggers_on: frozenset[str]
     """YOLO detection kinds that activate this pipeline. Face fires
@@ -141,6 +202,34 @@ class IdentityPipeline(Protocol):
     that makes face → body-ID worthwhile — if face nailed Alice at
     0.91, don't pay body-ID cost for that same person. ``None``
     means 'always run for every triggered track'."""
+
+    # ── Capability descriptors (declarative scheduling/placement
+    #    inputs; consumed by the ResourcePool + DAG simulator in
+    #    10.11.3/.3b). Read via getattr-with-default so a minimal
+    #    pipeline that omits them still loads. ──
+    resource_class: str
+    """Hardware class this pipeline's inference wants: ``"gpu"`` /
+    ``"cpu"`` / ``"npu"``. The scheduler maps it to a concrete device
+    pool (a 2-GPU node → pool size 2). Default ``"cpu"``."""
+
+    batchable: bool
+    """Whether ``run`` can process N crops in one inference call
+    (OSNet/DINOv2 stack a batch; per-head face detect does not). Lets
+    the scheduler coalesce a window's crops into one dispatch."""
+
+    temporal: bool
+    """Whether this pipeline needs a frame *sequence* (gait, video
+    SMPL) rather than a single frame — gets the future
+    ``run_sequence`` entry. Default ``False``."""
+
+    est_cost_ms: int
+    """Rough per-call latency, the simulator's primary cost input;
+    refined by measured ``step_timings``. Default ``0`` (unknown)."""
+
+    placement_hint: str | None
+    """Logical node/pool name this pipeline prefers, resolved by the
+    topology placement map. ``None`` → run locally. The seam for
+    distributing a model to another host / GPU."""
 
     def has_enrollments(self, corpus: EnrolledCorpus) -> bool:
         """``True`` if the corpus has at least one enrolled target
@@ -191,9 +280,21 @@ class IdentityRouter:
     above ``skip_when_upstream_matched_above``.
     """
 
-    def __init__(self, pipelines: Sequence[IdentityPipeline]) -> None:
+    def __init__(
+        self,
+        pipelines: Sequence[IdentityPipeline],
+        *,
+        resource_pool: ResourcePool | None = None,
+        budget_ms: float | None = None,
+    ) -> None:
         self._pipelines = list(pipelines)
         self._branches = _build_branches(self._pipelines)
+        # One pool shared across all branch coroutines bounds per-device
+        # concurrency (default: single iGPU). ``budget_ms`` caps the
+        # window's identity wall-clock — not-yet-started pipelines past
+        # the deadline are dropped + logged rather than blowing latency.
+        self._pool = resource_pool if resource_pool is not None else ResourcePool()
+        self._budget_ms = budget_ms
 
     @property
     def pipeline_names(self) -> tuple[str, ...]:
@@ -213,6 +314,8 @@ class IdentityRouter:
         buffered: Sequence[BufferedFrame],
         detections: tuple[DetectionTag, ...],
         cache: ActorCache,
+        timings: StepTimings | None = None,
+        budget_ms: float | None = None,
     ) -> tuple[ActorMatch, ...]:
         """Run every triggered pipeline against every frame in the
         window; merge the results.
@@ -223,6 +326,13 @@ class IdentityRouter:
         already matched above their ``skip_when_upstream_matched_above``
         threshold.
 
+        When ``timings`` is given, accumulates per-pipeline wall-clock
+        into it under ``id.<pipeline.name>`` keys (summed across frames;
+        concurrent branches overlap, so these attribute time per model
+        rather than form a strict wall-clock total). Merged once after
+        the gather barrier, so the shared instance is only mutated from
+        the single event-loop coroutine — no concurrent-write race.
+
         Skips silently when there are no pipelines registered, no
         detections, or no enrolled actors across any modality.
         """
@@ -230,12 +340,21 @@ class IdentityRouter:
             return ()
         corpus = await EnrolledCorpus.from_cache(cache)
 
+        # Window deadline: a pipeline that hasn't started by the
+        # deadline is dropped (graceful degradation under contention).
+        effective_budget = budget_ms if budget_ms is not None else self._budget_ms
+        deadline = (
+            time.perf_counter() + effective_budget / 1000.0
+            if effective_budget is not None
+            else None
+        )
+
         frames_by_ts: dict[float, BufferedFrame] = {f.ts: f for f in buffered}
         dets_by_ts: dict[float, list[DetectionTag]] = defaultdict(list)
         for d in detections:
             dets_by_ts[d.frame_ts].append(d)
 
-        tasks: list[Awaitable[tuple[ActorMatch, ...]]] = []
+        tasks: list[Awaitable[tuple[tuple[ActorMatch, ...], dict[str, float]]]] = []
         for ts, frame_dets in dets_by_ts.items():
             frame = frames_by_ts.get(ts)
             if frame is None:
@@ -246,13 +365,19 @@ class IdentityRouter:
                 # any kind in this frame.
                 if not any(p.triggers_on & kinds for p in branch):
                     continue
-                tasks.append(_run_branch(branch, frame, tuple(frame_dets), corpus))
+                tasks.append(
+                    _run_branch(branch, frame, tuple(frame_dets), corpus, self._pool, deadline)
+                )
 
         if not tasks:
             return ()
 
         per_branch_results = await asyncio.gather(*tasks)
-        return tuple(m for batch in per_branch_results for m in batch)
+        if timings is not None:
+            for _matches, branch_timings in per_branch_results:
+                for name, ms in branch_timings.items():
+                    timings.record(f"id.{name}", ms)
+        return tuple(m for matches, _t in per_branch_results for m in matches)
 
 
 # ─── branch building + per-branch execution ─────────────────────────
@@ -319,7 +444,9 @@ async def _run_branch(
     frame: BufferedFrame,
     detections: tuple[DetectionTag, ...],
     corpus: EnrolledCorpus,
-) -> tuple[ActorMatch, ...]:
+    pool: ResourcePool,
+    deadline: float | None,
+) -> tuple[tuple[ActorMatch, ...], dict[str, float]]:
     """Execute one branch on one frame, sequentially.
 
     Threads the cumulative matches through each pipeline so
@@ -330,8 +457,12 @@ async def _run_branch(
     2. By ``has_enrollments`` (no enrolled corpus -> skip)
     3. By ``skip_when_upstream_matched_above`` (drop track_ids the
        upstream already matched confidently)
+
+    Returns the branch's matches plus a ``{pipeline.name -> ms}`` map
+    of each pipeline's ``run`` wall-clock, for per-pipeline telemetry.
     """
     branch_matches: list[ActorMatch] = []
+    branch_timings: dict[str, float] = {}
     for pipeline in branch:
         kinds_present = {d.kind for d in detections}
         triggered_kinds = pipeline.triggers_on & kinds_present
@@ -361,7 +492,28 @@ async def _run_branch(
         if not relevant:
             continue
 
-        matches = await pipeline.run(frame=frame, detections=relevant, corpus=corpus)
+        # Budget: if the window deadline has passed, drop this (and the
+        # rest of the branch — downstream depends on it) rather than
+        # blowing the alert-latency target. Work already running
+        # finishes; only not-yet-started inference is shed.
+        if deadline is not None and time.perf_counter() > deadline:
+            logger.info(
+                "identity.budget_drop",
+                pipeline=pipeline.name,
+                frame_ts=frame.ts,
+                tracks=len(relevant),
+            )
+            break
+
+        # Acquire the per-resource concurrency slot for the duration of
+        # inference — bounds device oversubscription across all the
+        # concurrently-gathered branches.
+        resource_class = getattr(pipeline, "resource_class", "cpu")
+        t0 = time.perf_counter()
+        async with pool.slot(resource_class):
+            matches = await pipeline.run(frame=frame, detections=relevant, corpus=corpus)
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        branch_timings[pipeline.name] = branch_timings.get(pipeline.name, 0.0) + elapsed_ms
         branch_matches.extend(matches)
 
-    return tuple(branch_matches)
+    return tuple(branch_matches), branch_timings

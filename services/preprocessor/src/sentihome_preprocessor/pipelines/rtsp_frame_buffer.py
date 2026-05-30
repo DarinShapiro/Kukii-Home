@@ -217,6 +217,7 @@ class RTSPFrameBuffer:
                     buffered=buffered,
                     detections=detections,
                     cache=cache,
+                    timings=timings,
                 )
 
         # Build identified_entities by correlating detections +

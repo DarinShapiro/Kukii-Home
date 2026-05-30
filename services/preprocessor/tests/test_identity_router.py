@@ -8,6 +8,7 @@ that record what they were invoked with.
 from __future__ import annotations
 
 import asyncio
+import time
 
 import numpy as np
 import pytest
@@ -57,11 +58,13 @@ class _StubPipeline:
         skip_when_upstream_matched_above: float | None = None,
         match_confidence: float = 0.9,
         match_actor_id: str | None = None,
+        resource_class: str = "cpu",
     ) -> None:
         self.name = name
         self.triggers_on = triggers_on
         self.depends_on = depends_on
         self.skip_when_upstream_matched_above = skip_when_upstream_matched_above
+        self.resource_class = resource_class
         self._has_enroll = has_enroll
         self._delay = delay_seconds
         self._match_confidence = match_confidence
@@ -150,6 +153,33 @@ async def test_corpus_skips_actors_without_face_embedding():
     assert corpus.faces == {}
     assert "rex" in corpus.pets
     assert corpus.actor_names == {"rex": "Rex"}
+
+
+def test_corpus_slice_supports_arbitrary_new_modality():
+    """Pluggability keystone (10.11.1): a NEW modality plugs in via the
+    generic templates map + slice() with zero edits to EnrolledCorpus.
+    An unknown modality returns an empty slice, not KeyError."""
+    corpus = EnrolledCorpus(
+        templates={"gait": {"darin": np.array([0.1, 0.2], dtype=np.float32)}},
+        actor_names={"darin": "Darin"},
+    )
+    assert set(corpus.slice("gait").keys()) == {"darin"}
+    assert corpus.slice("shape3d") == {}  # unknown modality → empty, no raise
+    assert corpus.actor_names == {"darin": "Darin"}
+
+
+def test_corpus_legacy_kwargs_and_slice_are_equivalent():
+    """The legacy faces=/bodies=/pets= kwargs and the per-modality
+    accessors are thin views over the same generic store."""
+    corpus = EnrolledCorpus(
+        faces={"a": np.array([1.0])},
+        bodies={"b": np.array([2.0])},
+        pets={"c": np.array([3.0])},
+    )
+    assert set(corpus.slice("face").keys()) == {"a"}
+    assert set(corpus.slice("body").keys()) == {"b"}
+    assert "c" in corpus.pets
+    assert corpus.slice("plate") == {} == corpus.plates
 
 
 # ─── IdentityRouter dispatch ─────────────────────────────────────────
@@ -535,3 +565,120 @@ async def test_chain_skip_does_not_affect_other_frames():
     frame_ts, _kinds, track_ids = body.calls[0]
     assert frame_ts == 2.0
     assert track_ids == ("t1",)
+
+
+# ─── per-pipeline telemetry (10.11.2) ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_identify_records_per_pipeline_timings():
+    """When a StepTimings is passed, identify accumulates per-pipeline
+    wall-clock under ``id.<name>`` keys (Epic 10.11.2)."""
+    from sentihome_shared.timing import StepTimings
+
+    face = _StubPipeline("face_arcface", frozenset({"person"}), delay_seconds=0.01)
+    pet = _StubPipeline("pet_dinov2", frozenset({"dog"}), delay_seconds=0.01)
+    router = IdentityRouter([face, pet])
+    timings = StepTimings()
+
+    await router.identify(
+        buffered=[_frame(1.0)],
+        detections=(_det("person", 1.0, "t1"), _det("dog", 1.0, "t2")),
+        cache=ActorCache(),
+        timings=timings,
+    )
+
+    d = timings.as_dict()
+    assert "id.face_arcface" in d
+    assert "id.pet_dinov2" in d
+    assert d["id.face_arcface"] >= 9.0  # ~10ms delay, scheduler slop
+    assert d["id.pet_dinov2"] >= 9.0
+
+
+@pytest.mark.asyncio
+async def test_identify_without_timings_still_returns_matches():
+    """Telemetry is optional — omitting timings doesn't change results."""
+    face = _StubPipeline("face_arcface", frozenset({"person"}))
+    router = IdentityRouter([face])
+    matches = await router.identify(
+        buffered=[_frame(1.0)],
+        detections=(_det("person", 1.0, "t1"),),
+        cache=ActorCache(),
+    )
+    assert len(matches) == 1
+
+
+def test_concrete_pipelines_declare_capability_descriptors():
+    """Each real pipeline declares the scheduling/placement descriptors
+    (Epic 10.11.2) the ResourcePool + simulator will consume."""
+    from sentihome_preprocessor.pipelines.identity.body_id_pipeline import BodyIdPipeline
+    from sentihome_preprocessor.pipelines.identity.face_pipeline import FacePipeline
+    from sentihome_preprocessor.pipelines.identity.pet_pipeline import PetPipeline
+
+    for cls, modality, batchable in (
+        (FacePipeline, "face", False),
+        (BodyIdPipeline, "body", True),
+        (PetPipeline, "pet", True),
+    ):
+        assert cls.modality == modality
+        assert cls.resource_class in ("gpu", "cpu", "npu")
+        assert cls.batchable is batchable
+        assert cls.temporal is False
+        assert isinstance(cls.est_cost_ms, int) and cls.est_cost_ms > 0
+        assert cls.placement_hint is None
+
+
+# ─── ResourcePool + budget (10.11.3a) ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_router_gpu_pool_serializes_inference():
+    """With a gpu pool of size 1, two gpu pipelines on one frame run
+    one-at-a-time → wall-clock ~= sum, not max."""
+    from sentihome_preprocessor.pipelines.identity.scheduling import ResourcePool
+
+    face = _StubPipeline(
+        "face_arcface", frozenset({"person"}), delay_seconds=0.03, resource_class="gpu"
+    )
+    pet = _StubPipeline("pet_dinov2", frozenset({"dog"}), delay_seconds=0.03, resource_class="gpu")
+    router = IdentityRouter([face, pet], resource_pool=ResourcePool({"gpu": 1}))
+
+    t0 = time.perf_counter()
+    matches = await router.identify(
+        buffered=[_frame(1.0)],
+        detections=(_det("person", 1.0, "t1"), _det("dog", 1.0, "t2")),
+        cache=ActorCache(),
+    )
+    elapsed = time.perf_counter() - t0
+    assert len(matches) == 2  # both still produced
+    assert elapsed >= 0.055  # serialized (~0.06s), not overlapped (~0.03s)
+
+
+@pytest.mark.asyncio
+async def test_router_budget_drops_late_work():
+    """A zero budget means the deadline is already past when branches
+    run → pipelines are dropped, no matches, no crash."""
+    face = _StubPipeline("face_arcface", frozenset({"person"}), delay_seconds=0.01)
+    router = IdentityRouter([face])
+    matches = await router.identify(
+        buffered=[_frame(1.0)],
+        detections=(_det("person", 1.0, "t1"),),
+        cache=ActorCache(),
+        budget_ms=0.0,
+    )
+    assert matches == ()
+    assert face.calls == []  # never ran — shed by the budget
+
+
+@pytest.mark.asyncio
+async def test_router_generous_budget_runs_normally():
+    """A large budget doesn't interfere."""
+    face = _StubPipeline("face_arcface", frozenset({"person"}))
+    router = IdentityRouter([face])
+    matches = await router.identify(
+        buffered=[_frame(1.0)],
+        detections=(_det("person", 1.0, "t1"),),
+        cache=ActorCache(),
+        budget_ms=10_000.0,
+    )
+    assert len(matches) == 1
