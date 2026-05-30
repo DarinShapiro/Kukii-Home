@@ -39,11 +39,10 @@ from ultralytics import YOLO
 OV_MODEL = "C:/Users/darin_jwxgczt/SentiHome/yolo11x_openvino_model"
 OSNET = "C:/Users/darin_jwxgczt/SentiHome/models/osnet_x1_0.onnx"
 OUT = Path("C:/Users/darin_jwxgczt/SentiHome/face_debug")
-H, W = 256, 128
 
 
-def embed(session, crops_bgr: list[np.ndarray]) -> np.ndarray:
-    batch = np.stack([_preprocess(c, H, W) for c in crops_bgr], axis=0).astype(np.float32)
+def embed(session, crops_bgr: list[np.ndarray], h: int, w: int) -> np.ndarray:
+    batch = np.stack([_preprocess(c, h, w) for c in crops_bgr], axis=0).astype(np.float32)
     name = session.get_inputs()[0].name
     raw = session.run(None, {name: batch})[0]
     return _l2_normalize_rows(raw)
@@ -52,14 +51,17 @@ def embed(session, crops_bgr: list[np.ndarray]) -> np.ndarray:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus", default="face_debug/corpus/stand1")
+    ap.add_argument("--model", default=OSNET, help="Body ONNX (OSNet or CC-ReID)")
+    ap.add_argument("--height", type=int, default=256, help="OSNet 256 / CC-ReID 384")
+    ap.add_argument("--width", type=int, default=128, help="OSNet 128 / CC-ReID 192")
     args = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
 
     paths = sorted(Path(args.corpus).glob("frame_*.jpg"))
-    print(f"corpus frames: {len(paths)}")
+    print(f"corpus frames: {len(paths)} | model={Path(args.model).name} {args.height}x{args.width}")
 
     yolo = YOLO(OV_MODEL, task="detect")
-    session = ort.InferenceSession(OSNET, providers=["CPUExecutionProvider"])
+    session = ort.InferenceSession(args.model, providers=["CPUExecutionProvider"])
 
     crops: list[np.ndarray] = []
     for p in paths:
@@ -89,7 +91,7 @@ def main() -> None:
         print("not enough person crops for a split eval")
         return
 
-    embs = embed(session, crops)  # (n, 512)
+    embs = embed(session, crops, args.height, args.width)  # (n, feature_dim)
     half = n // 2
     centroid = _l2_normalize_rows(embs[:half].mean(axis=0, keepdims=True))[0]
     holdout = embs[half:]
@@ -111,7 +113,7 @@ def main() -> None:
 
     # save a few person crops for visual
     for i, c in enumerate(crops[:8]):
-        cv2.imwrite(str(OUT / f"body_{i:02d}.png"), cv2.resize(c, (W, H)))
+        cv2.imwrite(str(OUT / f"body_{i:02d}.png"), cv2.resize(c, (args.width, args.height)))
     print(f"wrote sample body crops to {OUT}")
 
 
