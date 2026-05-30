@@ -9,8 +9,10 @@ Payload shape — what each notify service sees:
   - ``title``  — the alert headline ("Person at Pool Cam")
   - ``message`` — sensor classification + timestamp + camera friendly
     name + area (when known)
-  - ``data.url`` — link to the SentiHome status page (so tapping the
-    notification opens the Web UI in the HA app)
+  - ``data.url`` — deep-link to the tapped alert: the HA panel route
+    with the alert id as a hash fragment (``/app/<slug>#alert=<id>``).
+    Tapping opens the SentiHome panel in-app (authenticated), and the
+    panel's in-panel reader navigates to that alert's detail page.
   - ``data.image`` — link to the alert's snapshot (when one was
     captured). The HA Companion app fetches this via the SentiHome
     Ingress URL — reachable from inside HA's network.
@@ -262,20 +264,29 @@ class AlertNotifier:
         # authenticates for us) shows the recent-alerts list; the
         # user taps the specific alert there.
         #
-        # Tap URL = the BARE panel route, exactly the form confirmed
-        # (via a Developer Tools → notify test) to open in-app and
-        # authenticated on the phone. We deliberately do NOT append a
-        # ``#alert=<id>`` hash yet: it would have no reader today, and
-        # shipping anything other than the proven URL is how this
-        # feature failed six times. Deep-link to the specific alert
-        # lands later as its own step — hash + an in-panel reader,
-        # tested together.
+        # Tap URL = the panel route with the alert id as a hash
+        # fragment: ``/app/<slug>#alert=<id>`` (Epic 10.8.7 deep-link).
         #
-        # When panel_url_base is empty (not under Supervisor / dev),
-        # omit the tap URL entirely rather than emit a broken one.
+        # The fragment is the key insight that makes deep-linking safe
+        # after six failures (v0.3.15-27): HA's frontend router only
+        # sees ``/app/<slug>`` — the bare, proven panel route that opens
+        # in-app + authenticated — and ignores the fragment entirely.
+        # So the hash CANNOT reintroduce the 401s that every backend
+        # path (/api/..., ingress-token URLs) hit, because we never tap
+        # a backend path. The fragment just rides along to the page,
+        # where the status-page in-panel reader (see ``_STATUS_PAGE``)
+        # picks it up and navigates the already-authenticated ingress
+        # iframe to the per-alert detail page ``alert/<id>``.
+        #
+        # When alert_id is absent (shouldn't happen for a recorded
+        # alert), fall back to the bare panel route. When panel_url_base
+        # is empty (not under Supervisor / dev), omit the tap URL
+        # entirely rather than emit a broken one.
         if self.panel_url_base:
-            data["url"] = self.panel_url_base
-            data["clickAction"] = self.panel_url_base  # iOS field name
+            alert_id = alert.get("alert_id")
+            tap_url = f"{self.panel_url_base}#alert={alert_id}" if alert_id else self.panel_url_base
+            data["url"] = tap_url
+            data["clickAction"] = tap_url  # iOS field name
 
         # v0.3.18 — high-priority delivery flags. SentiHome's portion
         # of notify latency is ~300ms (LAN → HA → return); the user-

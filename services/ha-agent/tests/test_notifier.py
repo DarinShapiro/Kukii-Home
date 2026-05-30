@@ -67,14 +67,17 @@ def test_render_basic_alert():
     assert data["image"] == "/api/camera_proxy/camera.dahuapoolcam_sub"
     # Per-camera dedup tag is always present.
     assert data["tag"] == "sentihome_dahuapoolcam"
-    # Epic 10.8.6: tap URL is the BARE frontend panel route — exactly
-    # the form proven to open in-app on the phone. No /api/ path
-    # (external browser → 401), no ingress token (session-bound →
-    # 401), no hash (no reader yet).
-    assert data["url"] == "/app/a58a7de9_sentihome"
-    assert data["clickAction"] == "/app/a58a7de9_sentihome"
+    # Epic 10.8.7: tap URL is the frontend panel route with the alert
+    # id as a hash fragment — deep-links to the per-alert detail page.
+    # HA's router only sees /app/<slug> (the proven in-app route), so
+    # the fragment can't reintroduce a 401. No /api/ path (external
+    # browser → 401), no ingress token (session-bound → 401).
+    assert data["url"] == "/app/a58a7de9_sentihome#alert=abc123"
+    assert data["clickAction"] == "/app/a58a7de9_sentihome#alert=abc123"
     assert "/api/" not in data["url"]
-    assert "#" not in data["url"]
+    # The frontend-route portion (before the fragment) is the bare,
+    # proven panel route.
+    assert data["url"].split("#", 1)[0] == "/app/a58a7de9_sentihome"
 
 
 def test_render_tap_url_is_panel_route_not_ingress():
@@ -99,13 +102,30 @@ def test_render_omits_url_when_no_panel_base():
     assert "clickAction" not in data
 
 
-def test_render_tap_url_is_bare_panel_route():
-    """The tap URL is the bare panel route regardless of alert_id —
-    no query, no hash. Exactly the URL proven to open in-app."""
+def test_render_tap_url_deep_links_to_alert():
+    """Epic 10.8.7: the tap URL appends the alert id as a hash
+    fragment so the in-panel reader can deep-link to the detail page.
+    The frontend-route portion stays the bare, proven /app/<slug>."""
     n, _ = _make_notifier([], panel_url_base="/app/x_sentihome")
-    _, _, data = n._render(_alert())
+    _, _, data = n._render(_alert(alert_id="motion_poolcam_deadbeef"))
+    assert data["url"] == "/app/x_sentihome#alert=motion_poolcam_deadbeef"
+    # The route HA's frontend actually navigates to (sans fragment) is
+    # the bare panel route — the fragment is invisible to HA's router.
+    assert data["url"].split("#", 1)[0] == "/app/x_sentihome"
+    # No query string (fragment, not query — HA must not strip it).
+    assert "?" not in data["url"]
+
+
+def test_render_tap_url_falls_back_to_bare_route_without_alert_id():
+    """Defensive: an alert with no id (shouldn't happen once recorded)
+    falls back to the bare panel route rather than emitting
+    '#alert=None'."""
+    n, _ = _make_notifier([], panel_url_base="/app/x_sentihome")
+    alert = _alert()
+    del alert["alert_id"]
+    _, _, data = n._render(alert)
     assert data["url"] == "/app/x_sentihome"
-    assert "#" not in data["url"] and "?" not in data["url"]
+    assert "#" not in data["url"]
 
 
 def test_render_omits_image_when_no_camera_entity():
@@ -292,8 +312,9 @@ async def test_dispatch_sends_panel_url_to_ha():
     reaches HA carries the /app/<slug> tap URL — no signing, no
     /api/ path, no async round-trip."""
     n, client = _make_notifier(["notify.mobile_app_x"], panel_url_base="/app/a58a7de9_sentihome")
-    results = await n.test_send(_alert())
+    results = await n.test_send(_alert(alert_id="abc123"))
     assert results == [{"service": "notify.mobile_app_x", "ok": True, "error": None}]
     data = client.call_service.call_args.kwargs["data"]["data"]
-    assert data["url"] == "/app/a58a7de9_sentihome"
+    assert data["url"] == "/app/a58a7de9_sentihome#alert=abc123"
+    assert data["url"].split("#", 1)[0] == "/app/a58a7de9_sentihome"
     assert "/api/" not in data["url"]

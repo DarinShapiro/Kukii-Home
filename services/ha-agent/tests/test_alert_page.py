@@ -66,6 +66,26 @@ async def setup(tmp_path: Path):
         await client.close()
 
 
+# ─── in-panel deep-link reader (Epic 10.8.7) ────────────────────────
+
+
+def test_status_page_has_deep_link_reader():
+    """The status page (the ingress panel content) carries the JS that
+    reads an #alert=<id> fragment and redirects the iframe to the
+    per-alert detail page. This is the consumer half of the
+    notification deep-link the notifier emits."""
+    from sentihome_ha_agent.__main__ import _STATUS_PAGE
+
+    # Reads the alert id from a fragment...
+    assert "alert=" in _STATUS_PAGE
+    # ...checking the parent frame too (HA renders us in an iframe)...
+    assert "window.top" in _STATUS_PAGE
+    # ...and navigates to the detail page via a RELATIVE url so it
+    # stays under the ingress prefix (no leading slash → no 401).
+    assert 'replace("alert/"' in _STATUS_PAGE
+    assert '"/alert/"' not in _STATUS_PAGE  # absolute would break ingress
+
+
 # ─── GET /alert/<id> ────────────────────────────────────────────────
 
 

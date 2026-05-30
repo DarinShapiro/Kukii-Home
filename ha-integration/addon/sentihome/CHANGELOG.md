@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.31 — 2026-05-30
+
+**Tapping a notification opens that alert (Epic 10.8.7 deep-link).**
+
+Until now, tapping an alert notification on your phone dropped you on
+the generic SentiHome status page — you then had to find the alert in
+the Recent alerts list yourself. The per-alert detail page existed
+(headline, snapshot, identity, why-it-fired, dismiss / feedback), but
+nothing carried you straight to it.
+
+The catch was authentication. The HA Companion app only opens
+**frontend routes** (`/app/<slug>`) in-app with your session; every
+backend path we tried (signed `/api/...`, ingress-token URLs) opened
+in an external browser with no session and 401'd. So the tap had to
+land on the bare panel route.
+
+This release threads the alert id through as a URL **fragment**:
+`/app/<slug>#alert=<id>`. HA's frontend router only sees `/app/<slug>`
+— the proven, in-app, authenticated route — and ignores the fragment,
+so it can't reintroduce a 401. The fragment rides along to the panel,
+where a small in-panel reader picks it up and navigates the
+(already-authenticated) SentiHome iframe straight to that alert's
+detail page.
+
+Also: each row in the Recent alerts list now links to its detail page,
+so the manual path works too.
+
+Tap an alert → land on that alert. No YAML, no hunting.
+
 ## 0.3.30 — 2026-05-28
 
 **Alerts get enriched with recognition (Epic 10.9).**

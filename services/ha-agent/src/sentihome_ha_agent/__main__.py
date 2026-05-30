@@ -196,6 +196,43 @@ _STATUS_PAGE = """<!doctype html>
      document's directory. Belt-and-suspenders for HA Ingress, which
      may or may not preserve the trailing slash on the page URL. -->
 <base href="./">
+<!-- ── Notification deep-link reader (Epic 10.8.7) ─────────────────
+     A tapped alert notification opens /app/<slug>#alert=<id> — the HA
+     ingress panel, authenticated in-app. HA renders THIS page in a
+     same-origin iframe. Depending on how HA forwards the fragment it
+     may land on our own URL or only on the parent /app/<slug> URL, so
+     we check both (the parent read is try/caught for the cross-origin
+     case) plus a ?alert= query fallback. When an id is found we send
+     the iframe to the per-alert detail page via a RELATIVE url, so it
+     stays under the ingress prefix and keeps the session (no 401).
+     Runs in <head>, after <base>, so it redirects before the status
+     body paints — no flash of the generic page. No id → no-op, page
+     renders normally. -->
+<script>
+  (function () {
+    function findAlertId() {
+      var candidates = [];
+      try { candidates.push(window.location.hash); } catch (e) {}
+      try { candidates.push(window.location.search); } catch (e) {}
+      try {
+        if (window.top && window.top !== window) {
+          candidates.push(window.top.location.hash);
+        }
+      } catch (e) { /* cross-origin parent — ignore */ }
+      for (var i = 0; i < candidates.length; i++) {
+        var m = /[#&?]alert=([^&]+)/.exec(candidates[i] || "");
+        if (m && m[1]) {
+          try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+        }
+      }
+      return null;
+    }
+    var id = findAlertId();
+    if (id) {
+      window.location.replace("alert/" + encodeURIComponent(id));
+    }
+  })();
+</script>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
          max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
@@ -1033,6 +1070,11 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
         for a in reversed(alerts):
             alert_id = a.get("alert_id", "?")
             headline = a.get("headline", "")
+            # Link the headline to the per-alert detail page (the same
+            # page a notification tap deep-links to). Relative URL so it
+            # resolves under the ingress prefix. Unknown id → plain text.
+            if alert_id and alert_id != "?":
+                headline = f"<a href='alert/{_escape(alert_id)}'>{headline or 'View alert'}</a>"
             tier = a.get("tier", "")
             status = "ack" if a.get("acknowledged") else "open"
 
