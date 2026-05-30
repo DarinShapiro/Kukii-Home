@@ -32,6 +32,7 @@ from sentihome_shared.preprocessor import (
 )
 from sentihome_shared.timing import StepTimings
 
+from sentihome_preprocessor.pipelines.identity.fusion import fuse_matches
 from sentihome_preprocessor.pipelines.markup import annotate_frame, encode_jpeg
 from sentihome_preprocessor.pipelines.rolling_buffer import (
     AnnotationCache,
@@ -306,39 +307,41 @@ async def _correlate_identities(
     handle the YOLO tracker and the identity pipelines both set) and
     resolve ``actor_id`` to a friendly name via the actor cache.
 
-    Match requires both:
-    * Non-None ``track_id`` on both sides (untracked detections can't
-      be correlated with identity claims; we drop them rather than
-      guessing).
-    * Detection kind in ``_MARKUPABLE_KINDS`` — animal-other /
-      package / etc. don't have identity pipelines yet.
-    * Identity confidence >= ``_IDENTITY_MIN_CONFIDENCE`` — below
-      this we don't trust the identity enough to put it in front
-      of the VLM as a labeled fact.
+    Identity FUSION (Epic 10.10.3): each track's per-modality matches
+    (face / body / pet / ...) are combined into ONE decision via
+    :func:`fuse_matches` (weighted noisy-OR) BEFORE correlation —
+    rather than the old last-write-wins where face vs body silently
+    clobbered each other per frame. The fused confidence is what gates
+    + labels the entity; ``identity_method="fused"`` and the per-modality
+    provenance is carried for the VLM / per-alert page.
 
-    Frames with no satisfying correlation produce zero entities.
-    That's the correct quiet behavior — the VLM still receives the
-    raw frame.
+    Match requires:
+    * Non-None ``track_id`` on both sides (untracked detections can't
+      be correlated; dropped rather than guessed).
+    * Detection kind in ``_MARKUPABLE_KINDS``.
+    * Fused confidence >= ``_IDENTITY_MIN_CONFIDENCE``.
+
+    A fused decision applies to EVERY markupable detection of that
+    track in the window (the track is one identity), so the annotated
+    frame + entities are labeled consistently across frames.
     """
     if not detections or not actor_matches:
         return ()
 
-    # Index actor_matches by (track_id, frame_ts) — track_id alone
-    # could collide across frames in long windows.
-    matches_by_key: dict[tuple[str, float], ActorMatch] = {}
-    for m in actor_matches:
-        if m.track_id is None or m.confidence < _IDENTITY_MIN_CONFIDENCE:
-            continue
-        matches_by_key[(m.track_id, m.frame_ts)] = m
+    # Fuse per track, keep only tracks clearing the confidence gate.
+    fused_by_track: dict[str, "object"] = {}
+    for fm in fuse_matches(actor_matches):
+        if fm.confidence >= _IDENTITY_MIN_CONFIDENCE:
+            fused_by_track[fm.track_id] = fm
 
     out: list[IdentifiedEntity] = []
     for det in detections:
         if det.track_id is None or det.kind not in _MARKUPABLE_KINDS:
             continue
-        match = matches_by_key.get((det.track_id, det.frame_ts))
-        if match is None:
+        fm = fused_by_track.get(det.track_id)
+        if fm is None:
             continue
-        actor = await cache.get(match.actor_id)
+        actor = await cache.get(fm.actor_id)
         if actor is None or actor.name is None:
             # Identity pipeline matched an actor the cache doesn't
             # know — possible during a race between deactivation and
@@ -349,12 +352,12 @@ async def _correlate_identities(
             IdentifiedEntity(
                 frame_ts=det.frame_ts,
                 kind=det.kind,  # type: ignore[arg-type]  # narrowed by _MARKUPABLE_KINDS
-                actor_id=match.actor_id,
+                actor_id=fm.actor_id,
                 actor_name=actor.name,
                 bbox=det.bbox,
                 detection_confidence=det.confidence,
-                identity_confidence=match.confidence,
-                identity_method=match.match_method,
+                identity_confidence=fm.confidence,
+                identity_method="fused",
                 track_id=det.track_id,
             )
         )
