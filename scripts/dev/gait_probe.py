@@ -33,8 +33,8 @@ import onnxruntime as ort
 from ultralytics import YOLO
 
 sys.path.insert(0, str(Path(__file__).parent))
-from eval_corpus import discover_manifests  # noqa: E402
-from extract_silhouettes import _center_silhouette  # noqa: E402
+from eval_corpus import discover_manifests
+from extract_silhouettes import _center_silhouette
 
 GAIT_MODEL = "C:/Users/darin_jwxgczt/SentiHome/models/gaitbase_grew.onnx"
 
