@@ -32,7 +32,7 @@ from sentihome_shared.preprocessor import (
 )
 from sentihome_shared.timing import StepTimings
 
-from sentihome_preprocessor.pipelines.identity.fusion import fuse_matches
+from sentihome_preprocessor.pipelines.identity.fusion import FusedMatch, fuse_matches
 from sentihome_preprocessor.pipelines.markup import annotate_frame, encode_jpeg
 from sentihome_preprocessor.pipelines.rolling_buffer import (
     AnnotationCache,
@@ -329,7 +329,7 @@ async def _correlate_identities(
         return ()
 
     # Fuse per track, keep only tracks clearing the confidence gate.
-    fused_by_track: dict[str, "object"] = {}
+    fused_by_track: dict[str, FusedMatch] = {}
     for fm in fuse_matches(actor_matches):
         if fm.confidence >= _IDENTITY_MIN_CONFIDENCE:
             fused_by_track[fm.track_id] = fm
