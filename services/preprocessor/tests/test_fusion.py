@@ -59,8 +59,15 @@ def test_weights_are_respected():
     assert abs(fm.confidence - 0.9) < 1e-3
 
 
-def test_unknown_modality_uses_default_alpha():
-    fm = fuse_track([_m("darin", "gait_opengait", 1.0)], weights={})  # empty -> default
+def test_modality_absent_from_weights_uses_default_alpha():
+    # A valid modality that is ABSENT from the supplied weights map
+    # falls back to DEFAULT_ALPHA. (Passing weights={} would instead
+    # fall back to DEFAULT_WEIGHTS via `weights or DEFAULT_WEIGHTS`,
+    # supplying gait's own 0.8 — so we pass a non-empty map lacking it.)
+    fm = fuse_track(
+        [_m("darin", "gait_opengait", 1.0)],
+        weights={"face_arcface": 1.0},
+    )
     assert abs(fm.confidence - DEFAULT_ALPHA) < 1e-3
 
 
