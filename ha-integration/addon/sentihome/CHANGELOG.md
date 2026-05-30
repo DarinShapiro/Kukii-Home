@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.33 — 2026-05-30
+
+**Fix: disabling a camera didn't stop its alerts (the alert flood).**
+
+Each camera ran a loop that subscribed to its motion sensor by
+registering a handler on the shared HA connection — but stopping the
+loop (on Disable or any config change) never **un**registered that
+handler. So a disabled camera's motion kept firing alerts forever, and
+toggling a camera on/off stacked multiple live handlers, multiplying
+alerts per motion event. A camera watching rippling pool water could
+push notifications non-stop.
+
+Three-part fix:
+
+- The HA client now supports **removing** a state-change handler, and
+  the camera loop unregisters itself on stop. Disable now actually
+  silences a camera.
+- Re-subscribing is idempotent, so a restart can't double-deliver.
+- Belt-and-suspenders: a stopped loop's handler refuses to fire even
+  if a stale registration somehow lingers.
+
+Two notes if you hit this:
+
+- **Disable from the SentiHome panel**, not just the HA UI. SentiHome
+  keys off the camera's _motion sensor_, not the camera entity —
+  disabling only the camera in HA leaves the motion sensor firing.
+  Use the **Disable** button on the device card (now effective), or
+  uncheck its motion sensor.
+- Rippling water / blowing foliage still trip the camera's own motion
+  AI. The reasoning layer that learns to dismiss "boring" motion
+  (known scene, no person) is the next epic and not wired into this
+  path yet; for now, raise that camera's cooldown or point it at a
+  person-only sensor.
+
 ## 0.3.32 — 2026-05-30
 
 **Fix: "Send test alert" sent the notification twice per service.**

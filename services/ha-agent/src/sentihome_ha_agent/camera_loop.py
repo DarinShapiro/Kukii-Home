@@ -300,9 +300,20 @@ class HACameraLoop:
         self._status.state = "stopped"
 
     async def stop(self) -> None:
+        # Unregister our state-change handler FIRST so no further motion
+        # events reach this (now-stopping) loop. Without this the bound
+        # handler leaks on the shared HAClient and keeps recording alerts
+        # for a camera the user has disabled — the "alerts won't stop"
+        # bug. Then signal run() to return.
+        self._client.remove_state_change_handler(self._on_state_change)
         self._stop_event.set()
 
     async def _on_state_change(self, new: HAState, old: HAState | None) -> None:
+        # Defense in depth: if we've been stopped, never fire — even if a
+        # stale registration or an in-flight dispatch slips through, a
+        # disabled camera must not produce alerts.
+        if self._stop_event.is_set():
+            return
         if new.entity_id not in self._motion_entities:
             return
         # Only care about off → on (or unknown → on) transitions.

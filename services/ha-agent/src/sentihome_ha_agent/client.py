@@ -304,8 +304,28 @@ class HAClient:
     # ─── subscriptions ─────────────────────────────────────────────
 
     def on_state_change(self, handler: StateChangeHandler) -> None:
-        """Register a coroutine ``handler(new, old)`` for state-changed events."""
+        """Register a coroutine ``handler(new, old)`` for state-changed events.
+
+        Idempotent: registering the same handler twice is a no-op, so a
+        re-subscribe (e.g. a camera loop restart) can't silently double
+        the events delivered to it.
+        """
+        if handler in self._handlers:
+            return
         self._handlers.append(handler)
+
+    def remove_state_change_handler(self, handler: StateChangeHandler) -> None:
+        """Unregister a handler previously added via :meth:`on_state_change`.
+
+        Must be called when a subscriber goes away (e.g. a camera loop
+        is stopped on disable/reconcile) — otherwise the bound handler
+        leaks and keeps firing on every state change forever, producing
+        alerts for cameras the user has already disabled.
+        """
+        try:
+            self._handlers.remove(handler)
+        except ValueError:
+            pass  # already gone — tolerate double-removal
 
     async def iter_state_changes(self) -> AsyncIterator[tuple[HAState, HAState | None]]:
         """Async iterator alternative to :meth:`on_state_change`."""
