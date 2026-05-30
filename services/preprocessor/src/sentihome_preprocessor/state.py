@@ -75,11 +75,7 @@ class ActorCache:
             if existing is None:
                 self._by_id[event.actor_id] = event
                 return
-            updates = {
-                f: getattr(event, f)
-                for f in _MERGE_FIELDS
-                if getattr(event, f) is not None
-            }
+            updates = {f: getattr(event, f) for f in _MERGE_FIELDS if getattr(event, f) is not None}
             updates["action"] = event.action
             self._by_id[event.actor_id] = existing.model_copy(update=updates)
 

@@ -366,9 +366,7 @@ class IdentityRouter:
                 if not any(p.triggers_on & kinds for p in branch):
                     continue
                 tasks.append(
-                    _run_branch(
-                        branch, frame, tuple(frame_dets), corpus, self._pool, deadline
-                    )
+                    _run_branch(branch, frame, tuple(frame_dets), corpus, self._pool, deadline)
                 )
 
         if not tasks:
