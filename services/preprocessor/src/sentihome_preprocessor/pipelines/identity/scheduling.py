@@ -1,6 +1,6 @@
 """Resource-aware scheduling for the identity DAG (Epic 10.11.3).
 
-The router dispatches every (frame × branch) concurrently via
+The router dispatches every (frame x branch) concurrently via
 ``asyncio.gather``. With a handful of models on one box that's fine,
 but as the pipeline set grows (CC-ReID, gait, 3D-shape, …) and as work
 is placed on shared or multi-GPU resources, unbounded concurrency
