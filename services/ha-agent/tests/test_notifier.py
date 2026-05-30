@@ -20,8 +20,9 @@ def _alert(
     evidence_ref: str | None = "/data/sentihome/snapshots/x.jpg",
     area: str = "",
     source: str = "ha_camera_event",
+    **extra,
 ) -> dict:
-    return {
+    base = {
         "alert_id": alert_id,
         "headline": headline,
         "camera_id": camera_id,
@@ -33,6 +34,8 @@ def _alert(
         "area": area,
         "source": source,
     }
+    base.update(extra)
+    return base
 
 
 def _make_notifier(services: list[str], **kw) -> tuple[AlertNotifier, AsyncMock]:
@@ -197,6 +200,28 @@ async def test_on_alert_calls_each_service():
         ("notify", "mobile_app_pixel_8"),
         ("notify", "alexa_media_kitchen"),
     }
+
+
+async def test_on_alert_skips_suppressed_alerts():
+    """Alerts flagged suppress_auto_notify are dispatched explicitly via
+    test_send (camera 'Send test alert' diagnostic); the auto-notify
+    path must skip them so the user doesn't get two notifications per
+    service for one click."""
+    n, mock = _make_notifier(["notify.mobile_app_x"])
+    n.on_alert(_alert(suppress_auto_notify=True))
+    # No task scheduled — the suppressed alert short-circuits.
+    assert len(n._pending_tasks) == 0
+    await _drain(n)
+    mock.call_service.assert_not_called()
+
+
+async def test_test_send_ignores_suppress_flag():
+    """test_send is the EXPLICIT dispatch path — it sends regardless of
+    suppress_auto_notify (that flag only gates the auto path)."""
+    n, mock = _make_notifier(["notify.mobile_app_x"])
+    results = await n.test_send(_alert(suppress_auto_notify=True))
+    assert results == [{"service": "notify.mobile_app_x", "ok": True, "error": None}]
+    mock.call_service.assert_called_once()
 
 
 async def test_on_alert_noop_when_no_services():

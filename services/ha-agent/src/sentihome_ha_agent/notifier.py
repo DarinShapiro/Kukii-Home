@@ -89,6 +89,15 @@ class AlertNotifier:
         """
         if not self.notify_services:
             return
+        # Alerts dispatched explicitly via :meth:`test_send` (the camera
+        # "Send test alert" diagnostic, which records the alert AND wants
+        # per-service results) flag themselves so this auto-notify path
+        # skips them — otherwise the user gets two notifications per
+        # service for a single click (record→on_alert here, plus the
+        # explicit test_send). Real motion alerts never set this, so they
+        # still notify exactly once via this path.
+        if alert.get("suppress_auto_notify"):
+            return
         task = asyncio.create_task(self._dispatch(alert))
         self._pending_tasks.add(task)
         task.add_done_callback(self._pending_tasks.discard)

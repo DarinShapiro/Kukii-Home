@@ -164,7 +164,13 @@ class AlertLog:
 
         Exceptions in callbacks are caught + logged — a broken
         notifier should never block alert recording.
+
+        Idempotent: registering the same callback twice is a no-op, so
+        an accidental double-wire (e.g. a re-bind on reconnect) can't
+        silently multiply notifications per alert.
         """
+        if callback in self._on_record:
+            return
         self._on_record.append(callback)
 
     def record(self, alert: dict[str, Any]) -> None:

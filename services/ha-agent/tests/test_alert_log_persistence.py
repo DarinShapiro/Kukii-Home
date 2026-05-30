@@ -88,6 +88,18 @@ def test_on_record_callback_fires(tmp_path: Path):
     assert seen[0]["alert_id"] == "z"
 
 
+def test_add_on_record_is_idempotent(tmp_path: Path):
+    """Registering the same callback twice must not fire it twice — an
+    accidental double-wire (e.g. a re-bind on reconnect) can't be
+    allowed to multiply notifications per alert."""
+    log = AlertLog(persist_path=str(tmp_path / "x.json"))
+    seen: list[dict] = []
+    log.add_on_record(seen.append)
+    log.add_on_record(seen.append)  # duplicate registration
+    log.record({"alert_id": "z"})
+    assert len(seen) == 1  # fired once, not twice
+
+
 def test_on_record_callback_exception_doesnt_break_record(tmp_path: Path):
     log = AlertLog(persist_path=str(tmp_path / "x.json"))
 

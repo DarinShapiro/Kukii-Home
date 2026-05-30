@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.32 — 2026-05-30
+
+**Fix: "Send test alert" sent the notification twice per service.**
+
+The per-camera **Send test alert** button recorded the alert (which
+auto-fires the notifier) _and_ dispatched it again explicitly to
+collect per-service results for the UI — so every selected notify
+service got the notification twice. With three services selected that
+was six notifications from one click.
+
+Now the recorded test alert is flagged so the auto-notify path skips
+it; the single explicit dispatch does the sending (and still reports
+per-service results inline). One click → one notification per service.
+
+Real motion alerts were never affected — they only ever notify once.
+
+As cheap insurance against the whole class of bug, registering the
+same alert callback twice is now a no-op, so an accidental double-wire
+can't silently multiply notifications.
+
+(If you saw alerts for a _different_ camera than the one you tested,
+those were almost certainly real motion events that happened to fire
+while you were testing — check the **Recent alerts** list: each row
+links to its detail page showing the source and camera.)
+
 ## 0.3.31 — 2026-05-30
 
 **Tapping a notification opens that alert (Epic 10.8.7 deep-link).**

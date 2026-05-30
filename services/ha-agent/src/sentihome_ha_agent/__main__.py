@@ -1838,12 +1838,19 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             "triggering_sensor": "(test trigger)",
             "evidence_ref": snapshot_path,
             "source": "camera_test_alert",
+            # We dispatch this alert's notification explicitly via
+            # test_send() below (so the UI gets per-service results).
+            # Flag it so AlertLog.record's auto-notify path (the
+            # notifier's on_alert callback) skips it — otherwise the
+            # user gets the notification TWICE per service.
+            "suppress_auto_notify": True,
         }
-        # AlertLog.record fires the notifier (fire-and-forget). For
-        # the diagnostic we ALSO call test_send synchronously so the
-        # user sees per-service results. The fire-and-forget path
-        # exists too because some downstreams (future MQTT bridge,
-        # NATS bus) hook AlertLog directly.
+        # AlertLog.record persists the alert + fires its callbacks
+        # (EventStore record, enricher, notifier). The notifier callback
+        # no-ops here thanks to suppress_auto_notify; we send once,
+        # below, via test_send so the user sees per-service results. The
+        # record() call still makes the alert tappable (deep-link target)
+        # and lets other downstreams (EventStore, enricher) see it.
         alert_log.record(alert)
         result["alert_id"] = alert_id
         if boot.notifier is not None and boot.notifier.notify_services:
