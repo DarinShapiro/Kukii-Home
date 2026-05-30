@@ -55,8 +55,12 @@ _LABEL_PAD_PX = 3
 _METHOD_LABEL = {
     "face_arcface": "face",
     "body_id_osnet": "body",
+    "ccreid_cal": "body",
     "pet_dinov2": "pet",
     "plate_lpr": "plate",
+    "gait_opengait": "gait",
+    "height_calib": "height",
+    "fused": "id",
 }
 
 

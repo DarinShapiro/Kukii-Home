@@ -92,8 +92,10 @@ async def test_matched_person_produces_identified_entity():
     assert ent.kind == "person"
     assert ent.actor_id == "actor_alice"
     assert ent.actor_name == "Alice"
-    assert ent.identity_method == "face_arcface"
-    assert ent.identity_confidence == 0.92
+    # Fusion (Epic 10.10.3): method is "fused"; face alpha=1.0 so a
+    # single face match's fused confidence equals its raw sim.
+    assert ent.identity_method == "fused"
+    assert abs(ent.identity_confidence - 0.92) < 1e-3
     assert ent.detection_confidence == 0.92
 
 
@@ -125,7 +127,9 @@ async def test_pet_dog_correlation():
     assert len(ents) == 1
     assert ents[0].kind == "dog"
     assert ents[0].actor_name == "Rex"
-    assert ents[0].identity_method == "pet_dinov2"
+    # Fused: pet alpha=0.9, sim 0.92 -> 0.828 (still clears 0.6 gate).
+    assert ents[0].identity_method == "fused"
+    assert abs(ents[0].identity_confidence - 0.828) < 1e-3
 
 
 @pytest.mark.asyncio
@@ -139,7 +143,9 @@ async def test_vehicle_plate_correlation():
     assert len(ents) == 1
     assert ents[0].kind == "vehicle"
     assert ents[0].actor_name == "Bob's truck"
-    assert ents[0].identity_method == "plate_lpr"
+    # Fused: plate alpha=1.0, sim 0.88 -> 0.88.
+    assert ents[0].identity_method == "fused"
+    assert abs(ents[0].identity_confidence - 0.88) < 1e-3
 
 
 # ─── _correlate_identities: negative paths ──────────────────────────

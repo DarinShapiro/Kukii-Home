@@ -78,7 +78,15 @@ class ActorMatch(_Strict):
 
     actor_id: str
     confidence: float = Field(ge=0.0, le=1.0)
-    match_method: Literal["face_arcface", "body_id_osnet", "pet_dinov2", "plate_lpr"]
+    match_method: Literal[
+        "face_arcface",
+        "body_id_osnet",
+        "ccreid_cal",
+        "pet_dinov2",
+        "plate_lpr",
+        "gait_opengait",
+        "height_calib",
+    ]
 
     frame_ts: float
     """Frame the match was observed on."""
@@ -158,7 +166,18 @@ class IdentifiedEntity(_Strict):
     on this: solid green box at >= 0.85, dashed yellow 0.6-0.85,
     not annotated < 0.6."""
 
-    identity_method: Literal["face_arcface", "body_id_osnet", "pet_dinov2", "plate_lpr"]
+    identity_method: Literal[
+        "face_arcface",
+        "body_id_osnet",
+        "ccreid_cal",
+        "pet_dinov2",
+        "plate_lpr",
+        "gait_opengait",
+        "height_calib",
+        "fused",
+    ]
+    """Which pipeline produced the match, or ``"fused"`` when the
+    confidence is the multi-modal fusion (Epic 10.10.3) of several."""
 
     track_id: str | None = None
 
