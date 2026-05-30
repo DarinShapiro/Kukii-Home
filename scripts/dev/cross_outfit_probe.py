@@ -1,16 +1,24 @@
 #!/usr/bin/env python
 """Cross-outfit body re-ID: enroll on corpus A, match corpus B.
 
-The decisive clothing-robustness test (Epic 10.11.5). Enroll a body
-centroid from corpus A (outfit 1), then score every person crop in
-corpus B (outfit 2) against it. Runs BOTH models side by side:
+A clothing-robustness probe (Epic 10.11.5). Enroll a body centroid
+from corpus A (outfit 1), then score every person crop in corpus B
+(outfit 2) against it. Runs BOTH models side by side:
 
   * OSNet  (256x128, clothing-dependent appearance re-ID)
   * CC-ReID (384x192, CAL clothes-adversarial — body shape)
 
-Expected: OSNet cross-outfit cosine craters (clothes changed); CC-ReID
-holds (body shape unchanged). Also reports a same-outfit A->A control
-so the cross-outfit drop is interpretable.
+CAVEAT — this is NOT a clean controlled experiment. A->B mixes THREE
+changes at once: clothing, AND pose/distance/viewpoint, AND session.
+On the pool cam (steep top-down, ~150x300px foreshortened crops) the
+2026-05-30 run showed BOTH models drop a lot, CC-ReID more (it's
+out-of-domain vs its LTCC upright-pedestrian training). A near-
+duplicate control (adjacent frames) confirmed BOTH integrate
+correctly (~0.91 cosine), so the drop is real — but it cannot be
+attributed to clothing alone, and there is NO imposter/separability
+baseline here (recall only, not precision). A clean test changes ONLY
+the shirt (same session/spot) + adds a different-person negative.
+Treat results as directional, not conclusive.
 
 Usage:
     python scripts/dev/cross_outfit_probe.py \\
