@@ -110,5 +110,5 @@ datasets/
 
 # Local face-rec debug artifacts + frame corpus (contains real faces — never commit)
 face_debug/
-fw_walk.json
+fw_*.json
 kernel.errors.txt
