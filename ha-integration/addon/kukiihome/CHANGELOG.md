@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.0 — 2026-05-31
+
+**Rebrand: SentiHome → Kukii-Home.**
+
+The whole project is renamed. The add-on slug, the integration domain,
+the Python packages, NATS subjects, the npm scope, and the zeroconf
+service are now `kukiihome`; the display name is **Kukii-Home**. New
+icon and logo ship with this release.
+
+**Breaking — you must reinstall, not update:**
+
+The Home Assistant integration domain changed from `sentihome` to
+`kukiihome`. Config entries do not migrate across a domain change, so:
+
+1. **Remove** the old SentiHome integration (Settings → Devices &
+   Services) and **uninstall** the old add-on.
+2. Delete the stale integration dir if present:
+   `/config/custom_components/sentihome/`.
+3. Install this 0.4.0 add-on; on boot it installs the new
+   `kukiihome` integration, then prompts you to restart HA.
+4. Add the Kukii-Home integration fresh and reconfigure.
+
 ## 0.3.34 — 2026-05-30
 
 **Notifications are now reasoning-gated (Epic 10.6 — the real pipeline).**
