@@ -14,19 +14,25 @@ shape.
 from kukiihome_preprocessor.pipelines.identity.body_id_pipeline import (
     BodyIdPipeline,
 )
+from kukiihome_preprocessor.pipelines.identity.ccreid_pipeline import CCReIDPipeline
 from kukiihome_preprocessor.pipelines.identity.face_pipeline import FacePipeline
+from kukiihome_preprocessor.pipelines.identity.gait_pipeline import GaitPipeline
 from kukiihome_preprocessor.pipelines.identity.pet_pipeline import PetPipeline
 from kukiihome_preprocessor.pipelines.identity.router import (
     EnrolledCorpus,
     IdentityPipeline,
     IdentityRouter,
+    TemporalIdentityPipeline,
 )
 
 __all__ = [
     "BodyIdPipeline",
+    "CCReIDPipeline",
     "EnrolledCorpus",
     "FacePipeline",
+    "GaitPipeline",
     "IdentityPipeline",
     "IdentityRouter",
     "PetPipeline",
+    "TemporalIdentityPipeline",
 ]

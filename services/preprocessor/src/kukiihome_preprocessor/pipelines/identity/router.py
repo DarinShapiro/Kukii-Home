@@ -65,6 +65,8 @@ logger = structlog.get_logger(__name__)
 _MODALITY_SOURCE: dict[str, str] = {
     "face": "face_embedding",
     "body": "body_embedding",
+    "body_shape": "body_shape_embedding",  # CC-ReID, durable (10.11.5)
+    "gait": "gait_embedding",  # GaitBase, durable (10.11.6)
     "pet": "pet_dinov2_centroid",
     "plate": "plate_text",
 }
@@ -251,6 +253,47 @@ class IdentityPipeline(Protocol):
         relevance. Returns ActorMatches keyed back to track_ids
         when correlation is possible; unmatched candidates are
         dropped (the contract has no concept of a 'phantom' match).
+
+        Temporal pipelines (``temporal=True``, e.g. gait) ignore this
+        per-frame entry — the router routes them through
+        :meth:`TemporalIdentityPipeline.run_sequence` instead. They may
+        implement ``run`` as a no-op returning ``()``.
+        """
+        ...
+
+
+# A per-track frame sequence: ``(BufferedFrame, normalized_bbox)`` pairs
+# in chronological order. The unit a temporal pipeline reasons over.
+TrackSequence = tuple[tuple["BufferedFrame", tuple[float, float, float, float]], ...]
+
+
+class TemporalIdentityPipeline(IdentityPipeline, Protocol):
+    """A pipeline whose signal lives in a frame *sequence*, not a single
+    frame — gait (walking dynamics), video-SMPL (3D shape over time).
+
+    These declare ``temporal=True`` and are dispatched once per window
+    over a track→sequence index built by the router, rather than per
+    frame. The per-frame :meth:`run` is unused (return ``()``); the
+    router calls :meth:`run_sequence`. Cost gating still applies: the
+    router drops tracks an upstream per-frame pipeline already matched
+    above ``skip_when_upstream_matched_above`` before building the
+    sequences — so gait only pays its (heavy) cost on the tracks face
+    couldn't nail, which is exactly where it earns its keep.
+    """
+
+    async def run_sequence(
+        self,
+        *,
+        tracks: dict[str, TrackSequence],
+        corpus: EnrolledCorpus,
+    ) -> tuple[ActorMatch, ...]:
+        """Match each track in ``tracks`` from its frame sequence.
+
+        ``tracks`` maps ``track_id -> ((frame, bbox), ...)`` in
+        chronological order, already filtered to this pipeline's
+        ``triggers_on`` kinds and to tracks not short-circuited by an
+        upstream match. Returns one ActorMatch per confidently-matched
+        track, stamped with the track_id and a representative frame_ts.
         """
         ...
 
@@ -288,7 +331,14 @@ class IdentityRouter:
         budget_ms: float | None = None,
     ) -> None:
         self._pipelines = list(pipelines)
-        self._branches = _build_branches(self._pipelines)
+        # Temporal pipelines (gait, video-SMPL) don't fit the per-frame
+        # branch model — they run once per window over a track→sequence
+        # index. Split them out so branch-building + per-frame dispatch
+        # see ONLY the per-frame pipelines (keeps that path byte-for-byte
+        # what it was before temporal landed).
+        self._frame_pipelines = [p for p in self._pipelines if not getattr(p, "temporal", False)]
+        self._temporal_pipelines = [p for p in self._pipelines if getattr(p, "temporal", False)]
+        self._branches = _build_branches(self._frame_pipelines)
         # One pool shared across all branch coroutines bounds per-device
         # concurrency (default: single iGPU). ``budget_ms`` caps the
         # window's identity wall-clock — not-yet-started pipelines past
@@ -354,6 +404,7 @@ class IdentityRouter:
         for d in detections:
             dets_by_ts[d.frame_ts].append(d)
 
+        # ── Per-frame branches (face / body / pet / ...) ──
         tasks: list[Awaitable[tuple[tuple[ActorMatch, ...], dict[str, float]]]] = []
         for ts, frame_dets in dets_by_ts.items():
             frame = frames_by_ts.get(ts)
@@ -369,15 +420,97 @@ class IdentityRouter:
                     _run_branch(branch, frame, tuple(frame_dets), corpus, self._pool, deadline)
                 )
 
-        if not tasks:
-            return ()
+        frame_matches: list[ActorMatch] = []
+        if tasks:
+            per_branch_results = await asyncio.gather(*tasks)
+            if timings is not None:
+                for _matches, branch_timings in per_branch_results:
+                    for name, ms in branch_timings.items():
+                        timings.record(f"id.{name}", ms)
+            frame_matches = [m for matches, _t in per_branch_results for m in matches]
 
-        per_branch_results = await asyncio.gather(*tasks)
-        if timings is not None:
-            for _matches, branch_timings in per_branch_results:
-                for name, ms in branch_timings.items():
-                    timings.record(f"id.{name}", ms)
-        return tuple(m for matches, _t in per_branch_results for m in matches)
+        # ── Temporal pipelines (gait, video-SMPL) ──
+        # Run once per window over a per-track frame sequence, AFTER the
+        # per-frame barrier so they can short-circuit on tracks an
+        # upstream (face) already nailed. Heaviest models, gated hardest.
+        temporal_matches: list[ActorMatch] = []
+        if self._temporal_pipelines:
+            temporal_matches = await self._run_temporal(
+                buffered=buffered,
+                detections=detections,
+                corpus=corpus,
+                frame_matches=frame_matches,
+                deadline=deadline,
+                timings=timings,
+            )
+
+        return tuple(frame_matches) + tuple(temporal_matches)
+
+    async def _run_temporal(
+        self,
+        *,
+        buffered: Sequence[BufferedFrame],
+        detections: tuple[DetectionTag, ...],
+        corpus: EnrolledCorpus,
+        frame_matches: list[ActorMatch],
+        deadline: float | None,
+        timings: StepTimings | None,
+    ) -> list[ActorMatch]:
+        """Dispatch each temporal pipeline once over a track→sequence
+        index, sequentially (they serialize on the GPU pool anyway).
+
+        Gates per pipeline by: ``triggers_on`` ∩ window kinds,
+        ``has_enrollments``, the window ``deadline``, and the
+        per-track short-circuit (drop tracks an upstream matched above
+        ``skip_when_upstream_matched_above``)."""
+        frames_by_ts: dict[float, BufferedFrame] = {f.ts: f for f in buffered}
+        out: list[ActorMatch] = []
+        for pipeline in self._temporal_pipelines:
+            if not pipeline.has_enrollments(corpus):
+                continue
+            if deadline is not None and time.perf_counter() > deadline:
+                logger.info("identity.budget_drop", pipeline=pipeline.name, reason="temporal")
+                continue
+
+            # Tracks an upstream per-frame pipeline already matched
+            # confidently — don't pay the temporal pipeline's cost on them.
+            skip_above = pipeline.skip_when_upstream_matched_above
+            covered = (
+                {
+                    m.track_id
+                    for m in frame_matches
+                    if m.track_id is not None and m.confidence >= skip_above
+                }
+                if skip_above is not None
+                else set()
+            )
+
+            # Build the track→sequence index for this pipeline's kinds.
+            tracks: dict[str, list[tuple[float, BufferedFrame, tuple[float, float, float, float]]]]
+            tracks = defaultdict(list)
+            for d in detections:
+                if d.track_id is None or d.track_id in covered:
+                    continue
+                if d.kind not in pipeline.triggers_on:
+                    continue
+                frame = frames_by_ts.get(d.frame_ts)
+                if frame is None:
+                    continue
+                tracks[d.track_id].append((d.frame_ts, frame, d.bbox))
+            if not tracks:
+                continue
+            sequences: dict[str, TrackSequence] = {
+                tid: tuple((frame, bbox) for _ts, frame, bbox in sorted(items, key=lambda r: r[0]))
+                for tid, items in tracks.items()
+            }
+
+            t0 = time.perf_counter()
+            async with self._pool.slot(getattr(pipeline, "resource_class", "cpu")):
+                matches = await pipeline.run_sequence(tracks=sequences, corpus=corpus)
+            if timings is not None:
+                timings.record(f"id.{pipeline.name}", (time.perf_counter() - t0) * 1000.0)
+            out.extend(matches)
+        return out
 
 
 # ─── branch building + per-branch execution ─────────────────────────

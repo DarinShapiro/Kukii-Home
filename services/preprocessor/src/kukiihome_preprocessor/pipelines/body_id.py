@@ -309,10 +309,20 @@ def _match(
 # ─── Public helper for ActorMatch building ──────────────────────────
 
 
-def detected_body_to_actor_match(body: DetectedBody, *, frame_ts: float):
+def detected_body_to_actor_match(
+    body: DetectedBody,
+    *,
+    frame_ts: float,
+    match_method: str = "body_id_osnet",
+):
     """Convert a matched :class:`DetectedBody` into an
-    :class:`ActorMatch`. Returns ``None`` for unmatched. The
-    body_id pipeline produces match_method='body_id_osnet'."""
+    :class:`ActorMatch`. Returns ``None`` for unmatched.
+
+    ``match_method`` defaults to ``body_id_osnet`` (the OSNet body-ID
+    pipeline). CC-ReID reuses :class:`BodyIdRecognizer` (it's the same
+    crop -> CNN -> cosine technique, only the weights / input size /
+    durability differ) and passes ``match_method="ccreid_cal"`` so the
+    fusion layer can weight the clothes-invariant signal distinctly."""
     from kukiihome_shared.preprocessor import ActorMatch
 
     if body.matched_actor_id is None:
@@ -320,7 +330,7 @@ def detected_body_to_actor_match(body: DetectedBody, *, frame_ts: float):
     return ActorMatch(
         actor_id=body.matched_actor_id,
         confidence=body.match_confidence,
-        match_method="body_id_osnet",
+        match_method=match_method,
         frame_ts=frame_ts,
         track_id=body.track_id,
     )

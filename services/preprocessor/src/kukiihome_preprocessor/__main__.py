@@ -133,6 +133,27 @@ def _build_backend(
             )
             identity_pipelines.append(BodyIdPipeline(body_id_recognizer))
 
+        if config.ccreid_enabled:
+            # CC-ReID reuses BodyIdRecognizer (a generic person-crop
+            # embedder), configured for the CAL/AIM input size. Lazy
+            # import for the same reason as body_id.
+            from kukiihome_preprocessor.pipelines.body_id import (
+                BodyIdConfig,
+                BodyIdRecognizer,
+            )
+            from kukiihome_preprocessor.pipelines.identity import CCReIDPipeline
+
+            ccreid_recognizer = BodyIdRecognizer(
+                BodyIdConfig(
+                    model_path=config.ccreid_model_path,
+                    match_threshold=config.ccreid_match_threshold,
+                    input_height=config.ccreid_input_height,
+                    input_width=config.ccreid_input_width,
+                    providers=tuple(config.ccreid_providers),
+                )
+            )
+            identity_pipelines.append(CCReIDPipeline(ccreid_recognizer))
+
         if config.pet_enabled:
             from kukiihome_preprocessor.pipelines.identity import PetPipeline
             from kukiihome_preprocessor.pipelines.pet import (
@@ -148,6 +169,27 @@ def _build_backend(
                 )
             )
             identity_pipelines.append(PetPipeline(pet_recognizer))
+
+        if config.gait_enabled:
+            # Gait is a TEMPORAL pipeline (per-track sequence). Heavy:
+            # pulls in ultralytics (YOLO-seg) + onnxruntime — lazy import.
+            from kukiihome_preprocessor.pipelines.gait import (
+                GaitConfig,
+                GaitRecognizer,
+            )
+            from kukiihome_preprocessor.pipelines.identity import GaitPipeline
+
+            gait_recognizer = GaitRecognizer(
+                GaitConfig(
+                    model_path=config.gait_model_path,
+                    seg_weights=config.gait_seg_weights,
+                    match_threshold=config.gait_match_threshold,
+                    min_frames=config.gait_min_frames,
+                    seg_device=config.gait_seg_device,
+                    providers=tuple(config.gait_providers),
+                )
+            )
+            identity_pipelines.append(GaitPipeline(gait_recognizer))
 
         identity_router = None
         if identity_pipelines:

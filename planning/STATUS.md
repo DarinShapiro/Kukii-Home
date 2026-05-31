@@ -2,10 +2,10 @@
 
 > **Resumption document** for agents continuing implementation work. This is a snapshot of where the code is, what's done, what's next, and the conventions established so far.
 
-**Last updated:** 2026-05-31 (project renamed SentiHome → Kukii-Home; add-on v0.4.0; reasoning-gated notifications v0.3.34; frontend toolchain upgraded)
+**Last updated:** 2026-05-31 (identity DAG: CC-ReID + gait pipelines wired live + durable-modality fusion; project renamed SentiHome → Kukii-Home; add-on v0.4.0)
 **Branch:** `main`
 **CI status:** ✅ green
-**Tests:** 938 unit passing (Python) + 5 (TypeScript) + integration test suite scaffolded
+**Tests:** ~970 unit passing (Python) + 5 (TypeScript) + integration test suite scaffolded
 
 > **Naming:** The project was renamed **SentiHome → Kukii-Home** on 2026-05-31.
 > Identifier token is `kukiihome` everywhere (Python modules `kukiihome_*`, HA
@@ -15,6 +15,53 @@
 > The on-disk working directory is still `...\SentiHome` (not renamed).
 
 ---
+
+## Milestone: identity DAG — clothing-robust + temporal recognition live (2026-05-31)
+
+> **Reconciliation note:** This file's epic tables below predate the
+> finer-grained `10.x` epic scheme (`planning/epics/10.10`, `10.11`,
+> `10.12`, …) that recent work actually followed. GitHub issues #158–174
+> (Epic 10 Identity) are stale — the work landed under the `10.x` files,
+> not by closing those issues. Treat the milestone narratives (not the
+> issue tables) as the source of truth for Epic-10 progress until a
+> housekeeping pass reconciles the two.
+
+Epic 10's identity DAG (`services/preprocessor/.../pipelines/identity/`)
+gained two **clothes-/face-independent durable modalities**, turning
+models that were exported + probed offline into recognition running in
+the live router:
+
+- **CC-ReID (`ccreid_cal`, 10.11.5).** A `CCReIDPipeline` (modality
+  `body_shape`) reuses the generic `BodyIdRecognizer` configured for the
+  CAL/AIM 384×192 input over `models/ccreid_cal_ltcc.onnx`. Unlike OSNet
+  body-ID (clothing-dependent, transient), CC-ReID is clothes-**invariant**
+  — a durable body anchor that survives outfit changes. Cost-gated behind
+  face (`depends_on=("face_arcface",)`, skip ≥0.85).
+- **Gait (`gait_opengait`, 10.11.6).** The router gained a **temporal
+  dispatch path**: `temporal=True` pipelines run once per window over a
+  per-track frame sequence (`run_sequence`), AFTER the per-frame branch
+  barrier so they skip tracks face already nailed (gait is the heaviest
+  signal, gated hardest). `GaitPipeline` + `GaitRecognizer` chain
+  YOLO-seg silhouettes → `models/gaitbase_grew.onnx` → one 4096-d
+  per-track embedding → cosine. The durable anchor for face-fail cameras
+  (distance, back-of-head, the pool cam). The per-frame path is
+  **untouched** — branches are built from non-temporal pipelines only.
+- **Durable enrollment + fusion.** `ActorEnrollmentEvent` now carries
+  `body_shape_embedding` + `gait_embedding`; the `ActorCache` merges them
+  independently and `EnrolledCorpus` projects them into their own slices.
+  `fusion.py`'s durability model was corrected — CC-ReID and gait are
+  weighted as **durable** traits (0.85 / 0.8, below face's 1.0) above
+  transient OSNet body-ID (0.6), fixing a comment that had wrongly called
+  CC-ReID "appearance/clothing transient."
+
+All four gated behind config flags (`*_enabled`, default off; off-box
+ONNX models). ~37 new unit tests; full preprocessor + shared suite green.
+
+**Remaining in 10.11:** `10.11.4` RemotePipeline + placement (distribute
+a model to a second box — the seam 10.12's capacity plan needs) and
+`10.11.7` height_calib (blocked on Epic 14 calibration). `10.12`
+production infra (NVDEC, TensorRT) stays blocked until the 4090 box
+exists.
 
 ## Milestone: rebrand + v0.4.0 (2026-05-31)
 
@@ -417,4 +464,4 @@ gh run watch "$RUN_ID" --repo DarinShapiro/Kukii-Home --exit-status
 
 ---
 
-**Next session — pick up at Epic 10 (#157 Identity & Recognition).** The repo is now HA-installable end-to-end: users paste the repo URL into Supervisor → Add-ons → Repositories, install the add-on, then install the custom integration via HACS (or manual). See `docs/install.md` for the full walk-through. Identity is the next functional gap — without it Kukii-Home can detect "person" but not "Sarah vs unknown person." Good luck.
+**Next session — finish the identity DAG distribution leg, then pick a new track.** Epic 10 identity is largely built: face + body-ID + pet + CC-ReID + gait all run in the live router with multi-modal durable-vs-transient fusion. The remaining identity work is `10.11.4` (RemotePipeline + topology placement — distribute a model to a second inference box) and `10.11.7` (height_calib, blocked on Epic 14). After that the open strategic tracks are Resilience (#238, P1 — the add-on is live in a home now), Privacy & Governance (#208, the only P0s), and Feedback-Driven Optimization (#175). Repo is HA-installable end-to-end — see `docs/install.md`. Good luck.

@@ -33,6 +33,8 @@ _MERGE_FIELDS = (
     "access_profile",
     "face_embedding",
     "body_embedding",
+    "body_shape_embedding",
+    "gait_embedding",
     "pet_dinov2_centroid",
     "plate_text",
 )

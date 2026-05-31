@@ -171,6 +171,32 @@ class PreprocessorConfig:
 
     body_id_providers: list[str] = field(default_factory=lambda: ["CPUExecutionProvider"])
 
+    # ─── CC-ReID — cloth-changing body re-ID (Phase 10.11.5) ───────
+    ccreid_enabled: bool = False
+    """When True (and backend=rtsp), the IdentityRouter gets a
+    CCReIDPipeline. Off by default — needs a CAL/AIM CC-ReID ONNX
+    model at ``ccreid_model_path``. Unlike OSNet body-ID, CC-ReID is
+    clothes-invariant — a *durable* body anchor that survives outfit
+    changes (Epic 10.11.5)."""
+
+    ccreid_model_path: str = "/data/kukiihome/models/ccreid_cal_ltcc.onnx"
+    """Filesystem path to the pre-exported CC-ReID ONNX. Produced by
+    ``scripts/dev/export_ccreid_onnx.py``. Recognizer logs an error +
+    treats every match as 'no match' if the file is missing."""
+
+    ccreid_match_threshold: float = 0.5
+    """CC-ReID cosine threshold. Clothes-invariant features sit in a
+    tighter space than OSNet's clothing-dominated ones but cross-outfit
+    matching is harder; 0.5 is a sane starting point — tune via
+    KnobAdjustment once per-camera FP/FN data lands."""
+
+    ccreid_input_height: int = 384
+    ccreid_input_width: int = 192
+    """CAL/AIM ships 384x192 (HxW) — taller ReID crop than OSNet's
+    256x128. See ``scripts/dev/export_ccreid_onnx.py``."""
+
+    ccreid_providers: list[str] = field(default_factory=lambda: ["CPUExecutionProvider"])
+
     # ─── Pet recognition (Phase 10.5.3) ────────────────────────────
     pet_enabled: bool = False
     """When True (and backend=rtsp), the IdentityRouter gets a
@@ -186,6 +212,34 @@ class PreprocessorConfig:
     if a neighbor's same-breed pet false-matches."""
 
     pet_providers: list[str] = field(default_factory=lambda: ["CPUExecutionProvider"])
+
+    # ─── Gait recognition (Phase 10.11.6) ──────────────────────────
+    gait_enabled: bool = False
+    """When True (and backend=rtsp), the IdentityRouter gets a
+    GaitPipeline (a TEMPORAL pipeline — runs once per window over a
+    per-track frame sequence). Off by default — needs a GaitBase ONNX
+    at ``gait_model_path`` + YOLO-seg weights. Durable, distance-robust,
+    face-/clothing-independent (Epic 10.11.6)."""
+
+    gait_model_path: str = "/data/kukiihome/models/gaitbase_grew.onnx"
+    """Filesystem path to the pre-exported GaitBase ONNX. Produced by
+    ``scripts/dev/export_gait_onnx.py``."""
+
+    gait_seg_weights: str = "yolo11x-seg.pt"
+    """Ultralytics segmentation weights for silhouette extraction."""
+
+    gait_match_threshold: float = 0.35
+    """GaitBase cosine threshold. Gait sims sit lower than face/body;
+    0.35 is conservative — tune via KnobAdjustment per camera."""
+
+    gait_min_frames: int = 15
+    """Minimum usable silhouettes for a track to produce a gait match —
+    a glance-by has no coherent stride."""
+
+    gait_seg_device: str | None = None
+    """``"cuda:0"`` / ``"cpu"`` / None for the segmentation model."""
+
+    gait_providers: list[str] = field(default_factory=lambda: ["CPUExecutionProvider"])
 
 
 def load_from_env() -> PreprocessorConfig:
@@ -249,6 +303,19 @@ def load_from_env() -> PreprocessorConfig:
             "KUKIIHOME_PREPROCESSOR_BODY_ID_PROVIDERS",
             ["CPUExecutionProvider"],
         ),
+        ccreid_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_CCREID", "false").lower()
+        in ("1", "true", "yes", "on"),
+        ccreid_model_path=os.environ.get(
+            "KUKIIHOME_PREPROCESSOR_CCREID_MODEL_PATH",
+            "/data/kukiihome/models/ccreid_cal_ltcc.onnx",
+        ),
+        ccreid_match_threshold=_env_float("KUKIIHOME_PREPROCESSOR_CCREID_MATCH_THRESHOLD", 0.5),
+        ccreid_input_height=_env_int("KUKIIHOME_PREPROCESSOR_CCREID_INPUT_HEIGHT", 384),
+        ccreid_input_width=_env_int("KUKIIHOME_PREPROCESSOR_CCREID_INPUT_WIDTH", 192),
+        ccreid_providers=_env_list(
+            "KUKIIHOME_PREPROCESSOR_CCREID_PROVIDERS",
+            ["CPUExecutionProvider"],
+        ),
         pet_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_PET", "false").lower()
         in ("1", "true", "yes", "on"),
         pet_model_path=os.environ.get(
@@ -258,6 +325,22 @@ def load_from_env() -> PreprocessorConfig:
         pet_match_threshold=_env_float("KUKIIHOME_PREPROCESSOR_PET_MATCH_THRESHOLD", 0.6),
         pet_providers=_env_list(
             "KUKIIHOME_PREPROCESSOR_PET_PROVIDERS",
+            ["CPUExecutionProvider"],
+        ),
+        gait_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_GAIT", "false").lower()
+        in ("1", "true", "yes", "on"),
+        gait_model_path=os.environ.get(
+            "KUKIIHOME_PREPROCESSOR_GAIT_MODEL_PATH",
+            "/data/kukiihome/models/gaitbase_grew.onnx",
+        ),
+        gait_seg_weights=os.environ.get(
+            "KUKIIHOME_PREPROCESSOR_GAIT_SEG_WEIGHTS", "yolo11x-seg.pt"
+        ),
+        gait_match_threshold=_env_float("KUKIIHOME_PREPROCESSOR_GAIT_MATCH_THRESHOLD", 0.35),
+        gait_min_frames=_env_int("KUKIIHOME_PREPROCESSOR_GAIT_MIN_FRAMES", 15),
+        gait_seg_device=os.environ.get("KUKIIHOME_PREPROCESSOR_GAIT_SEG_DEVICE") or None,
+        gait_providers=_env_list(
+            "KUKIIHOME_PREPROCESSOR_GAIT_PROVIDERS",
             ["CPUExecutionProvider"],
         ),
     )

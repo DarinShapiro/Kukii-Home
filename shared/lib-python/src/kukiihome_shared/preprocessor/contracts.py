@@ -383,7 +383,24 @@ class ActorEnrollmentEvent(_Strict):
     Powers body re-identification — the fallback when face isn't
     visible (subject turned away, partial occlusion, distance).
     Averaged across N enrollment crops; None for actors without
-    body enrollment (Phase 10.5+)."""
+    body enrollment (Phase 10.5+).
+
+    TRANSIENT: OSNet keys on clothing, so this is a same-visit carry,
+    not a durable trait — contrast ``body_shape_embedding`` below."""
+
+    body_shape_embedding: tuple[float, ...] | None = None
+    """L2-normalized CC-ReID feature vector (4096-d for CAL/AIM). Powers
+    cloth-changing body re-ID — clothes-INVARIANT (body shape / build /
+    structure), so unlike ``body_embedding`` it's a DURABLE template that
+    survives outfit changes. None for actors without CC-ReID enrollment
+    (Phase 10.11.5+)."""
+
+    gait_embedding: tuple[float, ...] | None = None
+    """L2-normalized GaitBase gait descriptor (4096-d). Identity from
+    walking dynamics — DURABLE, distance-robust, face-/clothing-
+    independent; the anchor on cameras where face fails. Per-sequence
+    (built from a dense walk clip). None for actors without gait
+    enrollment (Phase 10.11.6+)."""
 
     pet_dinov2_centroid: tuple[float, ...] | None = None
     """DINOv2 patch-feature centroid for pet recognition."""

@@ -15,10 +15,13 @@ noisy-OR**:
     fused = 1 - prod over modalities m of (1 - alpha_m * sim_m)
 
 * ``alpha_m`` is a per-modality reliability weight (config) — how much
-  we trust that modality for *identity* (not for *this camera*). Face
-  is the durable high-precision anchor (alpha~1.0); body/CC-ReID is
-  appearance/clothing and transient (alpha~0.6); height is a soft
-  prior (alpha~0.3).
+  we trust that modality for *identity* (not for *this camera*). Face is
+  the durable high-precision anchor (alpha~1.0). The body modalities
+  split by DURABILITY: OSNet ``body_id_osnet`` keys on clothing so it's
+  a transient same-visit carry (alpha~0.6), while CC-ReID ``ccreid_cal``
+  and ``gait_opengait`` are clothes-INVARIANT durable traits (alpha~0.85
+  / 0.8) — they can anchor identity even across outfit changes and on
+  face-fail cameras. Height is a soft prior (alpha~0.3).
 * Noisy-OR is monotonic and corroborating: two independent 0.5 votes
   fuse *above* 0.5 (each adds evidence), while a single weak vote is
   damped by its alpha. It needs no training — the seam for a learned
@@ -45,16 +48,17 @@ from kukiihome_shared.preprocessor import ActorMatch
 
 # Per-modality reliability weights for identity fusion. Tunable; these
 # are sane priors, not learned. Higher = more trusted as an identity
-# signal. (Body is deliberately < face: it's appearance/clothing, a
-# same-visit carry, not a durable trait — see Epic 10.10.)
+# signal. The body modalities split by DURABILITY (see Epic 10.10 /
+# 10.11): OSNet is clothing-dependent + transient (low); CC-ReID and
+# gait are clothes-invariant durable traits (high, below face).
 DEFAULT_WEIGHTS: dict[str, float] = {
     "face_arcface": 1.0,
-    "pet_dinov2": 0.9,
-    "gait_opengait": 0.8,  # forward-compat (Epic 10.11.6)
-    "body_id_osnet": 0.6,
-    "ccreid_cal": 0.6,  # forward-compat (Epic 10.11.5)
     "plate_lpr": 1.0,
-    "height_calib": 0.3,  # forward-compat (Epic 10.11.7) — soft prior
+    "pet_dinov2": 0.9,
+    "ccreid_cal": 0.85,  # durable: clothes-invariant body shape (10.11.5)
+    "gait_opengait": 0.8,  # durable: walking dynamics, distance-robust (10.11.6)
+    "body_id_osnet": 0.6,  # transient: clothing appearance, same-visit carry
+    "height_calib": 0.3,  # soft prior (Epic 10.11.7)
 }
 DEFAULT_ALPHA = 0.5
 """Weight for a modality not in DEFAULT_WEIGHTS — trusted modestly so
