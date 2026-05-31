@@ -2,12 +2,35 @@
 
 > **Resumption document** for agents continuing implementation work. This is a snapshot of where the code is, what's done, what's next, and the conventions established so far.
 
-**Last updated:** 2026-05-27 (add-on v0.3.0 → v0.3.15 — zero-config camera onboarding + UI-configurable notifications + diagnostic loop closed)
+**Last updated:** 2026-05-31 (project renamed SentiHome → Kukii-Home; add-on v0.4.0; reasoning-gated notifications v0.3.34; frontend toolchain upgraded)
 **Branch:** `main`
 **CI status:** ✅ green
-**Tests:** 330 unit passing (Python) + 4 (TypeScript) + integration test suite scaffolded
+**Tests:** 938 unit passing (Python) + 5 (TypeScript) + integration test suite scaffolded
+
+> **Naming:** The project was renamed **SentiHome → Kukii-Home** on 2026-05-31.
+> Identifier token is `kukiihome` everywhere (Python modules `kukiihome_*`, HA
+> domain `kukiihome`, npm scope `@kukiihome`, zeroconf `_kukiihome._tcp`, NATS
+> subjects `kukiihome.*`). Display name is **Kukii-Home**. The HA domain change
+> is breaking — existing installs must remove + reinstall (no config migration).
+> The on-disk working directory is still `...\SentiHome` (not renamed).
 
 ---
+
+## Milestone: rebrand + v0.4.0 (2026-05-31)
+
+- **Renamed SentiHome → Kukii-Home** across the whole repo: display name,
+  `kukiihome` identifier token (Python packages/dirs, HA domain, NATS subjects,
+  npm scope, zeroconf), GitHub repo URL (`DarinShapiro/Kukii-Home`), and
+  regenerated `uv.lock` + `pnpm-lock.yaml`. New brand assets shipped:
+  `ha-integration/addon/kukiihome/icon.png` (256×256) and `logo.png` (1061×250).
+- **Add-on bumped to v0.4.0** (config.yaml, build.yaml `ADDON_VERSION`,
+  Dockerfile `io.hass.version`, integration `manifest.json`). Add-on is
+  **running in HA** post-rename; user reinstalled (domain change required it).
+- **Frontend toolchain upgraded** to clear all Dependabot alerts: vite 5→7,
+  vitest 2→4 across the three TS packages; `vite.config.ts` now imports
+  `defineConfig` from `vitest/config`. operator-dashboard build fixed to
+  library mode (was pre-broken — no `index.html` entry ever existed).
+  **0 open Dependabot alerts.**
 
 ## Milestone: add-on v0.3 — from "installable skeleton" to a working zero-handwriting product
 
