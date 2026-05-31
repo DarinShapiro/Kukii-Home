@@ -181,6 +181,13 @@ class BootState:
     """Epic 10.9: AlertEnricher subscribed to AlertLog. Pulls
     recognition for each alert from the preprocessor and folds it
     into the stored event. None when no preprocessor is configured."""
+    event_store: Any | None = None
+    """Epic 10.8.1: per-event durable store. Held on boot so the triage
+    gate (built after HA connects) can persist reasoning decisions."""
+    triage_gate: Any | None = None
+    """Epic 10.6: reasoning gate subscribed to AlertLog in place of the
+    notifier — reasons about each event and notifies only when warranted.
+    None when SENTIHOME_TRIAGE_REASONING=off (legacy direct-notify)."""
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -504,9 +511,25 @@ def _render_alert_page(event: dict[str, Any], event_id: str) -> str:
         # eventually settles on. Show the text content if it has
         # a `.text` key (common); else dump as JSON.
         if isinstance(vlm, dict) and "text" in vlm:
+            # Epic 10.6: the reasoning decision. Show the explanation,
+            # the criticality (why it did/didn't notify), and a marker
+            # when the decision came from the stub reasoner rather than a
+            # real VLM backend — so an operator never mistakes a
+            # heuristic for model output.
+            crit = str(vlm.get("criticality", "")).strip()
+            crit_badge = (
+                f" <span class='triage'>criticality: {html.escape(crit)}</span>" if crit else ""
+            )
+            stub_note = (
+                "<p class='muted'>Stub reasoner (no VLM backend configured) — "
+                "decision from coarse classification, not a vision model.</p>"
+                if vlm.get("stub")
+                else ""
+            )
             vlm_html = (
-                "<section class='card'><h2>VLM analysis</h2>"
-                f"<p>{html.escape(str(vlm['text']), quote=True)}</p>"
+                "<section class='card'><h2>Reasoning</h2>"
+                f"<p>{html.escape(str(vlm['text']), quote=True)}{crit_badge}</p>"
+                f"{stub_note}"
                 "</section>"
             )
         else:
@@ -1076,7 +1099,21 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
             if alert_id and alert_id != "?":
                 headline = f"<a href='alert/{_escape(alert_id)}'>{headline or 'View alert'}</a>"
             tier = a.get("tier", "")
-            status = "ack" if a.get("acknowledged") else "open"
+            # Status reflects the triage decision (Epic 10.6): alerts the
+            # reasoner dismissed show "dismissed" + why, so the timeline
+            # is complete but the user sees what was silenced and the
+            # reason. User-acknowledged still wins as the latest state.
+            triage_status = a.get("triage_status")
+            triage_expl = a.get("triage_explanation") or ""
+            if a.get("acknowledged"):
+                status = "ack"
+            elif triage_status == "dismissed":
+                tip = f' title="{_escape(triage_expl)}"' if triage_expl else ""
+                status = f"<span class='muted'{tip}>dismissed</span>"
+            elif triage_status == "alerted":
+                status = "<span class='ok'>alerted</span>"
+            else:
+                status = "open"
 
             # Time: show HH:MM:SS from recorded_at. Old alerts without
             # the field (logged before v0.3.4) render an em-dash.
@@ -2088,15 +2125,52 @@ async def _bootstrap_topology_and_ha(boot: BootState, *, alert_log: AlertLog) ->
             sentihome_ingress_base=ingress_base,
             panel_url_base=panel_base,
         )
-        alert_log.add_on_record(notifier.on_alert)
         boot.notifier = notifier
-        logger.info(
-            "ha_agent.alert_notifier_wired",
-            services=initial_services,
-            from_yaml_fallback=(initial_services == list(yaml_services or [])),
-            ingress_base=ingress_base or "(none — using relative URLs)",
-            panel_base=panel_base or "(none — tap URL disabled)",
+
+        # Epic 10.6: the triage gate, not the notifier, subscribes to
+        # AlertLog. Every recorded event is reasoned about (preprocessor
+        # evidence when available, else HA's AI classification) and the
+        # notification fires only when the decision warrants it — a
+        # camera event alone never notifies. Set
+        # SENTIHOME_TRIAGE_REASONING=off to revert to legacy direct
+        # notify (every event → push).
+        reasoning_enabled = os.environ.get(
+            "SENTIHOME_TRIAGE_REASONING", "on"
+        ).strip().lower() not in (
+            "0",
+            "false",
+            "off",
+            "no",
         )
+        if reasoning_enabled:
+            from sentihome_ha_agent.reasoning import StubReasoner
+            from sentihome_ha_agent.triage import TriageGate
+
+            gate = TriageGate(
+                reasoner=StubReasoner(),
+                notifier=notifier,
+                event_store=boot.event_store,
+                alert_log=alert_log,
+                preprocessor=boot.preprocessor_client,
+            )
+            boot.triage_gate = gate
+            alert_log.add_on_record(gate.on_alert)
+            logger.info(
+                "ha_agent.triage_gate_wired",
+                reasoner="stub_heuristic",
+                preprocessor=bool(boot.preprocessor_client),
+                services=initial_services,
+                panel_base=panel_base or "(none — tap URL disabled)",
+            )
+        else:
+            alert_log.add_on_record(notifier.on_alert)
+            logger.info(
+                "ha_agent.triage_gate_disabled_legacy_notify",
+                services=initial_services,
+                from_yaml_fallback=(initial_services == list(yaml_services or [])),
+                ingress_base=ingress_base or "(none — using relative URLs)",
+                panel_base=panel_base or "(none — tap URL disabled)",
+            )
 
         # v0.3.11 zero-config path: run discovery + reconciler when
         # `auto_discover` is on (the default). The reconciler manages
@@ -2177,6 +2251,7 @@ async def _run() -> None:
     # is non-fatal — alerts still record into AlertLog.
     event_store = EventStore(root=Path("/data/sentihome/events"))
     alert_log.add_on_record(event_store.record_from_alert)
+    boot.event_store = event_store
 
     # Epic 10.9: enrich alerts with preprocessor recognition. When a
     # preprocessor URL is configured, every recorded alert triggers an

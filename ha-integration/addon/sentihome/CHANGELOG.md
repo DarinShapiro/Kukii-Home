@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.3.34 — 2026-05-30
+
+**Notifications are now reasoning-gated (Epic 10.6 — the real pipeline).**
+
+Until now every camera motion event that cleared the cooldown became a
+push. That's backwards: a camera event alone shouldn't notify you —
+something has to decide the event is _worth_ knowing about. This
+release puts that decision in the path.
+
+New flow for every motion event:
+
+1. Record to the timeline (always — nothing is lost).
+2. **Gather evidence** — the preprocessor's frame window when an
+   inference box is configured, otherwise HA's own AI classification
+   (person / vehicle / animal / motion).
+3. **Reason** about it → a structured decision (the project's real
+   `VLMResponse` contract: `criticality` + explanation + confidence).
+4. **Notify only when warranted** — `alert`/`warning` push; `info`
+   stays a silent timeline entry.
+
+There's no VLM backend running yet, so a **stub reasoner** stands in.
+It's deterministic and shaped exactly like the real VLM's output, so
+the VLM drops in later with a one-line wiring change. Its decisions
+today:
+
+- **Unknown person → alert** (push)
+- **Known/enrolled person → silent** (the "boring known person" case;
+  activates once enrollment lands)
+- **Vehicle → notify** (configurable)
+- **Animal only → silent**
+- **Unclassified motion (rippling water, blowing foliage) → silent**
+
+That last one is the direct fix for the pool-cam flood: generic motion
+with no person/vehicle is dismissed by default. Every dismissal is
+still recorded — the **Recent alerts** list shows it as "dismissed"
+with the reason on hover, and the per-alert page shows a **Reasoning**
+section (marked as stub until a real VLM is wired).
+
+Notes:
+
+- Set `SENTIHOME_TRIAGE_REASONING=off` to revert to the old
+  every-event-notifies behavior.
+- Reasoning fails **open**: if the reasoner errors, the event notifies
+  anyway, so a bug can't silently swallow a real alert.
+- "Send test alert" still always notifies — it bypasses reasoning by
+  design (it's a wiring diagnostic).
+
 ## 0.3.33 — 2026-05-30
 
 **Fix: disabling a camera didn't stop its alerts (the alert flood).**

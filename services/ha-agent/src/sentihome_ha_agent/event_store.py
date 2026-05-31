@@ -240,6 +240,54 @@ class EventStore:
             return False
         return True
 
+    def record_decision(
+        self,
+        event_id: str,
+        *,
+        criticality: str,
+        explanation: str,
+        confidence: float,
+        backend: str,
+        notified: bool,
+        recognition_status: str,
+    ) -> bool:
+        """Persist the triage/VLM decision onto an event (Epic 10.6).
+
+        Written by :class:`TriageGate` after the reasoner decides. Stores
+        a ``vlm_response`` block (so the per-alert page's "VLM analysis"
+        section renders the reasoning — the ``text`` key feeds the
+        existing renderer) plus a ``triage_status`` of ``alerted`` /
+        ``dismissed`` for the Recent-alerts list and the
+        ``recognition_status`` tag (how grounded the decision was).
+
+        Returns False for unknown events (the dir is written
+        synchronously at alert time, before this async decision runs).
+        """
+        event_dir = self._dir_for(event_id)
+        meta_path = event_dir / "meta.json"
+        if not meta_path.exists():
+            logger.warning("event_store.decision_unknown_event", event_id=event_id)
+            return False
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            from datetime import UTC, datetime
+
+            meta["vlm_response"] = {
+                "text": explanation,
+                "criticality": criticality,
+                "confidence": confidence,
+                "backend": backend,
+                "stub": backend.startswith("stub"),
+            }
+            meta["triage_status"] = "alerted" if notified else "dismissed"
+            meta["recognition_status"] = recognition_status
+            meta["reasoned_at"] = datetime.now(UTC).isoformat()
+            self._write_meta(event_dir, meta)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("event_store.decision_write_failed", event_id=event_id, error=str(e))
+            return False
+        return True
+
     def mark_dismissed(self, event_id: str) -> bool:
         """Tag the event as user-dismissed.
 

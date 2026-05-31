@@ -102,6 +102,20 @@ class AlertNotifier:
         self._pending_tasks.add(task)
         task.add_done_callback(self._pending_tasks.discard)
 
+    async def send(self, alert: dict[str, Any]) -> None:
+        """Dispatch this alert's notification now (awaitable).
+
+        Used by :class:`~sentihome_ha_agent.triage.TriageGate` once
+        reasoning has decided the event warrants a notification. The
+        gate owns the decision, so this is an unconditional send —
+        unlike :meth:`on_alert`, it does not consult notify_services
+        emptiness beyond the dispatch itself or the suppress flag (those
+        are the auto-path's concern). Failures are logged per service.
+        """
+        if not self.notify_services:
+            return
+        await self._dispatch(alert)
+
     async def _dispatch(self, alert: dict[str, Any]) -> None:
         results = await self._dispatch_capture(alert)
         for r in results:

@@ -211,6 +211,30 @@ class AlertLog:
                 self._save_to_disk()
                 return
 
+    def set_triage(
+        self,
+        alert_id: str,
+        *,
+        status: str,
+        explanation: str,
+        criticality: str,
+    ) -> None:
+        """Fold the triage/VLM outcome back onto a recorded alert.
+
+        Called by :class:`~sentihome_ha_agent.triage.TriageGate` after
+        reasoning. ``status`` is ``alerted`` or ``dismissed`` (drives the
+        Recent-alerts Status column); ``explanation`` + ``criticality``
+        let the list show *why* an event was silenced without opening it.
+        No-op for unknown ids (alert may have aged out of the ring).
+        """
+        for e in self._entries:
+            if e.get("alert_id") == alert_id:
+                e["triage_status"] = status
+                e["triage_explanation"] = explanation
+                e["criticality"] = criticality
+                self._save_to_disk()
+                return
+
     # ─── persistence ────────────────────────────────────────────────
 
     def _save_to_disk(self) -> None:
