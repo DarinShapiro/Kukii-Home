@@ -11,10 +11,10 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
-from sentihome_preprocessor.app import AppState, create_app
-from sentihome_preprocessor.config import PreprocessorConfig
-from sentihome_preprocessor.pipelines.synthetic_frames import SyntheticFrameBuffer
-from sentihome_preprocessor.state import ActorCache
+from kukiihome_preprocessor.app import AppState, create_app
+from kukiihome_preprocessor.config import PreprocessorConfig
+from kukiihome_preprocessor.pipelines.synthetic_frames import SyntheticFrameBuffer
+from kukiihome_preprocessor.state import ActorCache
 
 
 @pytest.fixture
@@ -259,11 +259,11 @@ def test_frames_route_synthetic_backend_returns_404(client: TestClient):
 def test_frames_route_serves_bytes_from_rtsp_backend():
     """Wire the app against an RTSPFrameBuffer pre-populated with one
     frame; /frames should serve those bytes."""
-    from sentihome_preprocessor.pipelines.rolling_buffer import (
+    from kukiihome_preprocessor.pipelines.rolling_buffer import (
         BufferedFrame,
         RollingBuffer,
     )
-    from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
+    from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
 
     rolling = RollingBuffer(horizon_seconds=60.0)
 
@@ -317,8 +317,8 @@ def test_annotated_frames_route_serves_bytes_from_rtsp_backend():
     cached annotated JPEG."""
     import asyncio as _asyncio
 
-    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
-    from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
+    from kukiihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+    from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
 
     ann_cache = AnnotationCache(horizon_seconds=60.0)
     payload = b"\xff\xd8\xff\xe0annotated-jpeg"
@@ -328,7 +328,7 @@ def test_annotated_frames_route_serves_bytes_from_rtsp_backend():
 
     _asyncio.run(_seed())
 
-    from sentihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
+    from kukiihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
 
     config = PreprocessorConfig(
         node_id="rtsp-test",
@@ -358,8 +358,8 @@ def test_annotated_frames_route_serves_bytes_from_rtsp_backend():
 
 def test_frames_route_unknown_camera_returns_404():
     """RTSP backend: known route shape, unknown camera → 404."""
-    from sentihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
-    from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
+    from kukiihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
+    from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
 
     rolling = RollingBuffer(horizon_seconds=60.0)
     config = PreprocessorConfig(cameras=["front_porch"], backend="rtsp")

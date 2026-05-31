@@ -11,7 +11,7 @@ data harness exercises the same functions in scenario-level tests.
 
 from __future__ import annotations
 
-from sentihome_memory.dynamics import (
+from kukiihome_memory.dynamics import (
     DecayParams,
     HabituationParams,
     RedundancyParams,

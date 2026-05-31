@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from sentihome_vlm_router.breaker import CircuitBreaker, CircuitState
+from kukiihome_vlm_router.breaker import CircuitBreaker, CircuitState
 
 
 def test_starts_closed() -> None:

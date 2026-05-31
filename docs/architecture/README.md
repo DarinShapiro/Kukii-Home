@@ -1,4 +1,4 @@
-# SentiHome Architecture
+# Kukii-Home Architecture
 
 Living architecture docs. Each file is a focused section; this index defines reading order and ownership of concerns.
 

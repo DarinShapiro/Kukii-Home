@@ -7,7 +7,7 @@
 
 ## ⚠ Preliminary estimates pending real-world validation
 
-The numbers in this document are **engineering estimates**, not validated measurements. They will be refined as SentiHome runs in real households over the coming months. Expect significant revisions to:
+The numbers in this document are **engineering estimates**, not validated measurements. They will be refined as Kukii-Home runs in real households over the coming months. Expect significant revisions to:
 
 - Cameras-per-hardware-tier ratios
 - Power and thermal envelopes
@@ -835,5 +835,5 @@ Monthly: $84/month
 Compare to:
   Cloud security service: $40-100/month per camera
   4 cameras × $60/month = $2880/year = $8640 / 3 years
-  → SentiHome saves $5600 over 3 years + privacy benefit
+  → Kukii-Home saves $5600 over 3 years + privacy benefit
 ```

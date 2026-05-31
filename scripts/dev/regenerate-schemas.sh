@@ -3,7 +3,7 @@
 # Regenerate Python + TypeScript bindings from JSON schemas in shared/schemas/
 #
 # Outputs:
-#   shared/lib-python/src/sentihome_shared/generated/    (pydantic models)
+#   shared/lib-python/src/kukiihome_shared/generated/    (pydantic models)
 #   shared/lib-typescript/src/generated/                  (TS interfaces)
 #
 # CI runs this and fails if generated content differs from committed.
@@ -12,7 +12,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-PY_OUT="shared/lib-python/src/sentihome_shared/generated"
+PY_OUT="shared/lib-python/src/kukiihome_shared/generated"
 TS_OUT="shared/lib-typescript/src/generated"
 
 blue()   { printf '\033[34m%s\033[0m\n' "$*"; }

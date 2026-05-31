@@ -1,13 +1,13 @@
 # 01 — Overview & Goals
 
-**Purpose:** What SentiHome is, who it's for, and the constraints that shape every other decision.
+**Purpose:** What Kukii-Home is, who it's for, and the constraints that shape every other decision.
 **Status:** drafting
 
 ---
 
 ## Vision
 
-**SentiHome** is a home AI system that watches camera streams and Home Assistant device state to detect what matters, remember patterns, and act intelligently — without constant false alarms and without invading privacy.
+**Kukii-Home** is a home AI system that watches camera streams and Home Assistant device state to detect what matters, remember patterns, and act intelligently — without constant false alarms and without invading privacy.
 
 Core idea: Turn raw sensor feeds into _trusted intelligence_ by combining:
 
@@ -16,13 +16,13 @@ Core idea: Turn raw sensor feeds into _trusted intelligence_ by combining:
 - **Home automation integration** (knowing what devices can do and executing safely)
 - **Explicit user control** (rules are written by the user, not discovered in a blackbox)
 
-Unlike cloud security cameras (requires subscription, privacy trade-off) or dumb motion sensors (constant false alarms), SentiHome lives on the LAN, learns the home's specific patterns, and keeps raw data local by default.
+Unlike cloud security cameras (requires subscription, privacy trade-off) or dumb motion sensors (constant false alarms), Kukii-Home lives on the LAN, learns the home's specific patterns, and keeps raw data local by default.
 
 ---
 
 ## Primary users & scenarios
 
-### Who uses SentiHome
+### Who uses Kukii-Home
 
 - **Homeowners** (primary) — single family, multiple residents, multi-generational
 - **Rental properties** — property managers wanting visibility without landlord-tenant friction
@@ -33,7 +33,7 @@ Not for: non-technical users, renters without LAN access, those demanding zero-c
 
 ### Canonical scenarios
 
-| Scenario                             | SentiHome advantage                                                                                                       |
+| Scenario                             | Kukii-Home advantage                                                                                                       |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | **Pool safety (S15, S20)**           | Continuous monitoring + immediate drowning detection (< 15s). Not safe to rely on periodic human checks.                  |
 | **Unexpected visitor (S1)**          | Knows which residents are home, whether guest is expected, whether face matches known profiles. Explains why alert fired. |
@@ -47,7 +47,7 @@ Not for: non-technical users, renters without LAN access, those demanding zero-c
 
 ## Non-goals
 
-**SentiHome does NOT:**
+**Kukii-Home does NOT:**
 
 - Replace professional security systems (no armed/disarmed state, no 24/7 monitoring service, no legal liability shielding)
 - Provide real-time threat detection at CCTV quality (local inference trades accuracy for privacy & latency)
@@ -94,7 +94,7 @@ Not for: non-technical users, renters without LAN access, those demanding zero-c
 
 **A false alarm is worse than a missed real event.**
 
-This is the inverse of most security products. A Ring doorbell at high sensitivity sends 20 false alerts for every real doorbell press. SentiHome prefers silence to noise — the cost of an unnecessary alert (annoyance, trust erosion) outweighs the benefit of catching everything.
+This is the inverse of most security products. A Ring doorbell at high sensitivity sends 20 false alerts for every real doorbell press. Kukii-Home prefers silence to noise — the cost of an unnecessary alert (annoyance, trust erosion) outweighs the benefit of catching everything.
 
 **Mechanisms:**
 
@@ -165,7 +165,7 @@ This is the inverse of most security products. A Ring doorbell at high sensitivi
 
 ## Key insight: VLM as a reasoning tool, not automation
 
-SentiHome uses vision models to _understand_ what's in frames, but the system treats VLM outputs as _information for the user_, not _directives for action_.
+Kukii-Home uses vision models to _understand_ what's in frames, but the system treats VLM outputs as _information for the user_, not _directives for action_.
 
 ```
 Traditional security camera:
@@ -176,7 +176,7 @@ Ring / Nest model:
   Video analyzed → ML model guesses "person" or "package" → alert
   (user trusts model or dismisses)
 
-SentiHome model:
+Kukii-Home model:
   Video analyzed → VLM reports: "person at door, face 0.75 confidence,
   behavior: standing still, time: 22:00 (unusual), rules fired: [guest_alert]"
   User sees context → decides alert tier based on their rules + confidence
@@ -194,7 +194,7 @@ The goal is not autonomous agents that lock doors and call police. The goal is a
 | **AttentionMode**        | Sustained high-cadence monitoring for life-safety (e.g., "pool occupied" → 4fps continuous). Bypasses normal event queuing.                   |
 | **Episodic memory**      | Curated, significant records of past sessions/events. Queryable by SQL (structured) or semantic search (vector).                              |
 | **Gallery entry**        | Raw biometric data (face embedding, plate, pet face). May be linked to a KnownActor.                                                          |
-| **Home Assistant (HA)**  | Smart home hub running automations, integrations, AI add-ons. SentiHome's source of truth for device state.                                   |
+| **Home Assistant (HA)**  | Smart home hub running automations, integrations, AI add-ons. Kukii-Home's source of truth for device state.                                   |
 | **Identity resolution**  | Probabilistic claim about who a detected person/vehicle is. Includes confidence + evidence sources + alternatives.                            |
 | **KnownActor**           | A recognized entity (resident, service worker, pet, vehicle) with access profiles, behavioral models, and visit history.                      |
 | **MemoryMCP**            | MCP server providing read/write access to all memory layers (rules, sessions, episodic, identity).                                            |

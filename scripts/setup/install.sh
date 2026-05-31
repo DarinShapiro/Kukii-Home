@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/setup/install.sh — First-time SentiHome dev environment setup.
+# scripts/setup/install.sh — First-time Kukii-Home dev environment setup.
 #
 # Checks prerequisites, installs Python + TypeScript dependencies, brings the
 # docker-compose dev stack up, and reports next steps.
@@ -97,4 +97,4 @@ echo "  1. Edit infrastructure/docker/.env with your HA token + cloud keys"
 echo "  2. Bring up the dev stack:  ./scripts/dev/up.sh"
 echo "  3. Run tests:               uv run pytest && pnpm test"
 echo "  4. Browse the architecture: docs/architecture/README.md"
-echo "  5. Pick an issue to work:   https://github.com/DarinShapiro/SentiHome/issues"
+echo "  5. Pick an issue to work:   https://github.com/DarinShapiro/Kukii-Home/issues"

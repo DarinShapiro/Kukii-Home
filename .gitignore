@@ -82,7 +82,7 @@ credentials/
 # --- Docker volumes / runtime data ---
 data/
 volumes/
-sentihome-data/
+kukiihome-data/
 *.sqlite
 *.db
 *.db-journal

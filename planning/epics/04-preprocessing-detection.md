@@ -7,7 +7,7 @@
 
 ## Description
 
-The preprocessing layer that gates the pipeline (motion detection) and enriches frames before they reach the VLM. Used by all service-mode NVR adapters and by the direct RTSP adapter as SentiHome's internal preprocessing.
+The preprocessing layer that gates the pipeline (motion detection) and enriches frames before they reach the VLM. Used by all service-mode NVR adapters and by the direct RTSP adapter as Kukii-Home's internal preprocessing.
 
 ## Definition of done
 

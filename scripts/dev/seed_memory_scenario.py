@@ -17,7 +17,7 @@ Examples:
 
 After the script returns, open http://localhost:7474 in your browser:
     user:     neo4j
-    password: sentihome   (or whatever NEO4J_PASSWORD is set to)
+    password: kukiihome   (or whatever NEO4J_PASSWORD is set to)
 
 Then explore with Cypher, e.g.:
     MATCH (n) RETURN n LIMIT 50
@@ -77,8 +77,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--password",
-        default=os.environ.get("NEO4J_PASSWORD", "sentihome"),
-        help="Neo4j password (default: sentihome or $NEO4J_PASSWORD)",
+        default=os.environ.get("NEO4J_PASSWORD", "kukiihome"),
+        help="Neo4j password (default: kukiihome or $NEO4J_PASSWORD)",
     )
     args = parser.parse_args()
 
@@ -99,7 +99,7 @@ def main() -> int:
     # Defer heavy imports until we actually need them (keeps --list snappy).
     from neo4j import GraphDatabase
 
-    from sentihome_memory.graph import Neo4jGraphClient
+    from kukiihome_memory.graph import Neo4jGraphClient
     from synthesis.runner import run_scenario
     from synthesis.scenarios.schema import load_scenario
 

@@ -8,8 +8,8 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-from sentihome_memory.models import RuleRecord
-from sentihome_memory.store import MemoryStore, MemoryStoreConfig
+from kukiihome_memory.models import RuleRecord
+from kukiihome_memory.store import MemoryStore, MemoryStoreConfig
 
 pytestmark = pytest.mark.asyncio
 
@@ -185,7 +185,7 @@ async def test_update_visit_ledger(store: MemoryStore) -> None:
 
 
 async def test_sweep_expired_returns_zero_for_now(store: MemoryStore) -> None:
-    from sentihome_memory.retention import DataClass, RetentionPolicy
+    from kukiihome_memory.retention import DataClass, RetentionPolicy
 
     count = await store.sweep_expired(policy=RetentionPolicy.default_for(DataClass.B_INTERIOR))
     assert count == 0  # placeholder until per-table sweep ships

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentihome.io/schemas/v1/events/trigger-event.schema.json",
+  "$id": "https://kukiihome.io/schemas/v1/events/trigger-event.schema.json",
   "title": "TriggerEvent",
   "description": "Event published by an NVR adapter or HA poller when something potentially noteworthy happens. Triage worker consumes this from the bus and decides whether to enrich + route to VLM (see §05).",
   "type": "object",

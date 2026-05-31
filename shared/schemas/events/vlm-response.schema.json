@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentihome.io/schemas/v1/events/vlm-response.schema.json",
+  "$id": "https://kukiihome.io/schemas/v1/events/vlm-response.schema.json",
   "title": "VLMResponse",
   "description": "Structured decision JSON returned by the VLM. See §09.",
   "type": "object",

@@ -25,7 +25,7 @@ User-facing documentation, installation guides, getting started tutorials. The a
 4. **docs: identity enrollment guide** — adding residents, labeling visitors. (labels: `epic:docs`, `component:docs`, `priority:p2`)
 5. **docs: dashboard reference** — what every metric means, how to interpret. (labels: `epic:docs`, `component:docs`, `priority:p2`)
 6. **docs: troubleshooting guide** — common issues + how to diagnose. (labels: `epic:docs`, `component:docs`, `priority:p1`)
-7. **docs: HA blueprint library** — example automations on top of SentiHome events. (labels: `epic:docs`, `component:docs`, `priority:p2`)
+7. **docs: HA blueprint library** — example automations on top of Kukii-Home events. (labels: `epic:docs`, `component:docs`, `priority:p2`)
 8. **chore(packaging): HACS-ready manifest for ha-integration** — for community installation. (labels: `epic:docs`, `component:ha-integration`, `priority:p2`)
 9. **chore(packaging): HA add-on packaging** — for installation through HA Supervisor. (labels: `epic:docs`, `component:infrastructure`, `priority:p2`)
 10. **docs: video walkthrough (install + first rule)** — for the HA community. (labels: `epic:docs`, `component:docs`, `priority:p2`)

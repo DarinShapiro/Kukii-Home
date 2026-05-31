@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from eval_corpus import discover_manifests
 from extract_silhouettes import _center_silhouette
 
-GAIT_MODEL = "C:/Users/darin_jwxgczt/SentiHome/models/gaitbase_grew.onnx"
+GAIT_MODEL = "C:/Users/darin_jwxgczt/Kukii-Home/models/gaitbase_grew.onnx"
 
 
 def _clip_silhouettes(seg: YOLO, clip_dir: Path) -> np.ndarray:

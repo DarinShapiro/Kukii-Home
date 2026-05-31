@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentihome.io/schemas/v1/events/action-event.schema.json",
+  "$id": "https://kukiihome.io/schemas/v1/events/action-event.schema.json",
   "title": "ActionEvent",
   "description": "Dispatched device action or notification. Published to the ACTIONS stream by services/core. See §15.",
   "type": "object",

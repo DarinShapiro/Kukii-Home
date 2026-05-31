@@ -37,7 +37,7 @@ from pathlib import Path
 
 import torch
 
-_DEFAULT_OUTPUT = Path("/data/sentihome/models/dinov2_vits14.onnx")
+_DEFAULT_OUTPUT = Path("/data/kukiihome/models/dinov2_vits14.onnx")
 _EMBED_DIM = {
     "dinov2_vits14": 384,
     "dinov2_vitb14": 768,
@@ -151,8 +151,8 @@ def main() -> None:
     _validate_onnx(output, args.input_size, _EMBED_DIM[args.model])
     print(
         "Done. Point the preprocessor at this file via:\n"
-        "    SENTIHOME_PREPROCESSOR_PET=true\n"
-        f"    SENTIHOME_PREPROCESSOR_PET_MODEL_PATH={output}"
+        "    KUKIIHOME_PREPROCESSOR_PET=true\n"
+        f"    KUKIIHOME_PREPROCESSOR_PET_MODEL_PATH={output}"
     )
 
 

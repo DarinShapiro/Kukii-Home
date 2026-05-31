@@ -43,7 +43,7 @@ Default handling:
   - Storage: local only (vector DB + object store on home server)
   - Cloud: NEVER (not even optional; not in product)
   - Retention: indefinite (linked to household; user can delete)
-  - Sharing: never externally; internal SentiHome system only
+  - Sharing: never externally; internal Kukii-Home system only
 
 Exceptions:
   - Emergency override if resident explicitly opts to backup to personal cloud (encrypted, user-controlled)
@@ -493,7 +493,7 @@ Rule: If visitor is known + face in system + cloud backup enabled:
 
 ## Compliance & legal
 
-**SentiHome is designed for GDPR, CCPA, and similar privacy frameworks:**
+**Kukii-Home is designed for GDPR, CCPA, and similar privacy frameworks:**
 
 - Data minimization: collect only what's needed (§08 quality gates)
 - Purpose limitation: data used only for home security (no re-sale, no ads)

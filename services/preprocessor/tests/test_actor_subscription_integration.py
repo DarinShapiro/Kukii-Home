@@ -19,9 +19,9 @@ import asyncio
 import contextlib
 
 import pytest
-from sentihome_preprocessor.nats_subscriber import ActorEnrollmentSubscriber
-from sentihome_preprocessor.state import ActorCache
-from sentihome_shared.preprocessor import (
+from kukiihome_preprocessor.nats_subscriber import ActorEnrollmentSubscriber
+from kukiihome_preprocessor.state import ActorCache
+from kukiihome_shared.preprocessor import (
     SUBJECT_ACTOR_DEACTIVATED,
     SUBJECT_ACTOR_ENROLLED,
     ActorEnrollmentEvent,

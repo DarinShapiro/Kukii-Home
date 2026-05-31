@@ -8,13 +8,13 @@ by integration tests against a media-server testcontainer).
 from __future__ import annotations
 
 import pytest
-from sentihome_preprocessor.pipelines.identity import FacePipeline, IdentityRouter
-from sentihome_preprocessor.pipelines.rolling_buffer import (
+from kukiihome_preprocessor.pipelines.identity import FacePipeline, IdentityRouter
+from kukiihome_preprocessor.pipelines.rolling_buffer import (
     BufferedFrame,
     RollingBuffer,
 )
-from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
-from sentihome_preprocessor.state import ActorCache
+from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
+from kukiihome_preprocessor.state import ActorCache
 
 
 @pytest.fixture
@@ -166,7 +166,7 @@ class _StubDetector:
         self._tags_per_frame = tags_per_frame
 
     async def detect_batch(self, frames: list[tuple[bytes, float]]) -> tuple:
-        from sentihome_shared.preprocessor import DetectionTag
+        from kukiihome_shared.preprocessor import DetectionTag
 
         self.batches_received.append(list(frames))
         out: list[DetectionTag] = []
@@ -422,8 +422,8 @@ async def test_get_window_runs_face_recognizer_for_person_frames(
     the actor cache's face embeddings, then surfaces matched faces
     as ActorMatches with track_ids inherited from the person bbox."""
     import numpy as np
-    from sentihome_preprocessor.pipelines.face import DetectedFace
-    from sentihome_shared.preprocessor import (
+    from kukiihome_preprocessor.pipelines.face import DetectedFace
+    from kukiihome_shared.preprocessor import (
         ActorEnrollmentEvent,
         DetectionTag,
     )
@@ -507,7 +507,7 @@ async def test_get_window_skips_face_recognition_without_person_detections(
     """Frames carrying only non-person detections (e.g. just a car)
     skip face recognition entirely — no ArcFace inference cost."""
     import numpy as np
-    from sentihome_shared.preprocessor import (
+    from kukiihome_shared.preprocessor import (
         ActorEnrollmentEvent,
         DetectionTag,
     )
@@ -563,7 +563,7 @@ async def test_get_window_no_face_recognition_when_actor_cache_empty(
 ):
     """No enrolled faces -> short-circuit before invoking the
     recognizer."""
-    from sentihome_shared.preprocessor import DetectionTag
+    from kukiihome_shared.preprocessor import DetectionTag
 
     class _PersonDetector:
         async def detect_batch(self, frames):

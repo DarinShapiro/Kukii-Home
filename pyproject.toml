@@ -1,5 +1,5 @@
 [project]
-name = "sentihome"
+name = "kukiihome"
 version = "0.1.0"
 description = "Vision-intelligence and rule-engine layer for Home Assistant"
 readme = "README.md"
@@ -12,8 +12,8 @@ authors = [{ name = "Darin Shapiro" }]
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/DarinShapiro/SentiHome"
-Documentation = "https://github.com/DarinShapiro/SentiHome/tree/main/docs"
+Repository = "https://github.com/DarinShapiro/Kukii-Home"
+Documentation = "https://github.com/DarinShapiro/Kukii-Home/tree/main/docs"
 
 [dependency-groups]
 dev = [
@@ -47,21 +47,21 @@ members = [
 
 [tool.uv.sources]
 # Internal workspace dependencies — uv resolves these to the local member.
-sentihome-shared = { workspace = true }
-sentihome-core = { workspace = true }
-sentihome-preprocessor = { workspace = true }
-sentihome-detector = { workspace = true }
-sentihome-vlm-router = { workspace = true }
-sentihome-memory = { workspace = true }
-sentihome-ha-agent = { workspace = true }
-sentihome-notify = { workspace = true }
-sentihome-adapter-rtsp-direct = { workspace = true }
-sentihome-adapter-agent-dvr = { workspace = true }
-sentihome-adapter-frigate = { workspace = true }
-sentihome-adapter-blueiris = { workspace = true }
-sentihome-adapter-synology = { workspace = true }
-sentihome-adapter-qnap = { workspace = true }
-sentihome-adapter-unifi = { workspace = true }
+kukiihome-shared = { workspace = true }
+kukiihome-core = { workspace = true }
+kukiihome-preprocessor = { workspace = true }
+kukiihome-detector = { workspace = true }
+kukiihome-vlm-router = { workspace = true }
+kukiihome-memory = { workspace = true }
+kukiihome-ha-agent = { workspace = true }
+kukiihome-notify = { workspace = true }
+kukiihome-adapter-rtsp-direct = { workspace = true }
+kukiihome-adapter-agent-dvr = { workspace = true }
+kukiihome-adapter-frigate = { workspace = true }
+kukiihome-adapter-blueiris = { workspace = true }
+kukiihome-adapter-synology = { workspace = true }
+kukiihome-adapter-qnap = { workspace = true }
+kukiihome-adapter-unifi = { workspace = true }
 
 # ────────────────────────────────────────────────────────────────
 # Linting & formatting (ruff)
@@ -109,7 +109,7 @@ ignore = [
 "scripts/**" = ["T20"]  # scripts can use print
 # Adapter base class has methods with intentionally-unused args in default
 # `raise UnsupportedCapability` implementations; concrete subclasses use them.
-"shared/lib-python/src/sentihome_shared/adapter/base.py" = ["ARG002"]
+"shared/lib-python/src/kukiihome_shared/adapter/base.py" = ["ARG002"]
 # Skeleton adapters (Synology/QNAP/UniFi) have intentionally-unused args in
 # placeholder methods that all raise AdapterError pending full implementation.
 "adapters/nvr-synology/src/**" = ["ARG002"]

@@ -1,21 +1,21 @@
 [project]
-name = "sentihome-notify"
+name = "kukiihome-notify"
 version = "0.1.0"
 description = "Notification dispatcher: push, TTS, in-app, ask flows"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
-    "sentihome-shared",
-    "sentihome-ha-agent",
+    "kukiihome-shared",
+    "kukiihome-ha-agent",
     "pydantic>=2.9.0",
 ]
 
 [project.scripts]
-sentihome-notify = "sentihome_notify.__main__:main"
+kukiihome-notify = "kukiihome_notify.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sentihome_notify"]
+packages = ["src/kukiihome_notify"]

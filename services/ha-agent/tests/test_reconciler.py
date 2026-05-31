@@ -6,9 +6,9 @@ import asyncio
 from dataclasses import dataclass
 from unittest.mock import MagicMock
 
-from sentihome_ha_agent.camera_loop import CameraLoopRegistry
-from sentihome_ha_agent.discovery import DiscoverySpec
-from sentihome_ha_agent.reconciler import Reconciler, _specs_differ
+from kukiihome_ha_agent.camera_loop import CameraLoopRegistry
+from kukiihome_ha_agent.discovery import DiscoverySpec
+from kukiihome_ha_agent.reconciler import Reconciler, _specs_differ
 
 
 def _spec(
@@ -90,7 +90,7 @@ class _FakeLoop:
         # Mirror HACameraLoop: register a status object so the
         # reconciler's cleanup-path (pop from registry) has something
         # to remove.
-        from sentihome_ha_agent.camera_loop import CameraStreamStatus
+        from kukiihome_ha_agent.camera_loop import CameraStreamStatus
 
         self.registry.register(
             CameraStreamStatus(camera_id=self.camera_id, rtsp_url=self.camera_entity)
@@ -119,7 +119,7 @@ def _make_reconciler() -> Reconciler:
 async def _apply_with_fake_loop(rec: Reconciler, specs: list[DiscoverySpec]):
     """Patch in _FakeLoop instead of HACameraLoop for tests that don't
     need the real camera plumbing."""
-    import sentihome_ha_agent.camera_loop as cl
+    import kukiihome_ha_agent.camera_loop as cl
 
     real_cls = cl.HACameraLoop
     cl.HACameraLoop = _FakeLoop  # type: ignore[assignment, misc]

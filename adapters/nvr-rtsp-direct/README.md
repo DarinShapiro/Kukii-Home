@@ -1,6 +1,6 @@
 # adapters/nvr-rtsp-direct/
 
-Direct RTSP adapter. No NVR; consumes RTSP streams directly from ONVIF cameras. SentiHome's internal preprocessing runs effectively in native mode (single decode, in-process).
+Direct RTSP adapter. No NVR; consumes RTSP streams directly from ONVIF cameras. Kukii-Home's internal preprocessing runs effectively in native mode (single decode, in-process).
 
 **Architecture:** [§03.5](../../docs/architecture/03.5-nvr-adapter-layer.md)
 

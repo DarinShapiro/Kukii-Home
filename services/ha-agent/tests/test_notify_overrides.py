@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from sentihome_ha_agent.notify_overrides import (
+from kukiihome_ha_agent.notify_overrides import (
     load_notify_services,
     resolve_initial_services,
     save_notify_services,

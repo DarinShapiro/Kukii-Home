@@ -7,7 +7,7 @@ divergence the diff is supposed to catch.
 
 from __future__ import annotations
 
-from sentihome_memory.graph import (
+from kukiihome_memory.graph import (
     CitedEdge,
     Event,
     InMemoryGraphClient,

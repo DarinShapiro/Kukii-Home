@@ -1,20 +1,20 @@
 # 10 — Rule Schema & Retrieval
 
-**Purpose:** How rules are defined, stored, retrieved per event, and executed in SentiHome. Rules are created conversationally and evaluated deterministically (not via HA automations).
+**Purpose:** How rules are defined, stored, retrieved per event, and executed in Kukii-Home. Rules are created conversationally and evaluated deterministically (not via HA automations).
 **Status:** drafting
 
 ---
 
-## Core principle: Rules live in SentiHome
+## Core principle: Rules live in Kukii-Home
 
-**Rules are NOT HA automations.** SentiHome is the rule engine:
+**Rules are NOT HA automations.** Kukii-Home is the rule engine:
 
 - Rules are created conversationally (user talks to LLM)
-- Rules fire based on SentiHome detections (people, animals, objects, identity)
-- Rules evaluate conditions against HA world state (but are owned by SentiHome)
+- Rules fire based on Kukii-Home detections (people, animals, objects, identity)
+- Rules evaluate conditions against HA world state (but are owned by Kukii-Home)
 - Rules dispatch actions to HA services (lights, notifications, locks, speakers, etc.)
 
-**HA automations are optional user extensions** (e.g., "if X event happens, do Y in HA"), but they are not the primary way SentiHome alerts trigger.
+**HA automations are optional user extensions** (e.g., "if X event happens, do Y in HA"), but they are not the primary way Kukii-Home alerts trigger.
 
 ---
 

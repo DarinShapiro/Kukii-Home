@@ -18,7 +18,7 @@ Usage:
     # then point at it:
     python scripts/dev/export_osnet_onnx.py \
         --weights ~/Downloads/osnet_x1_0_msmt17.pth \
-        --output /data/sentihome/models/osnet_x1_0_msmt17.onnx
+        --output /data/kukiihome/models/osnet_x1_0_msmt17.onnx
 
     # Smaller / faster variant — osnet_x0_25 (~1MB).
     python scripts/dev/export_osnet_onnx.py --model osnet_x0_25
@@ -46,7 +46,7 @@ from pathlib import Path
 
 import torch
 
-_DEFAULT_OUTPUT = Path("/data/sentihome/models/osnet_x1_0.onnx")
+_DEFAULT_OUTPUT = Path("/data/kukiihome/models/osnet_x1_0.onnx")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -210,8 +210,8 @@ def main() -> None:
     _validate_onnx(output, args.input_height, args.input_width)
     print(
         "Done. Point the preprocessor at this file via:\n"
-        f"    SENTIHOME_PREPROCESSOR_BODY_ID=true\n"
-        f"    SENTIHOME_PREPROCESSOR_BODY_ID_MODEL_PATH={output}"
+        f"    KUKIIHOME_PREPROCESSOR_BODY_ID=true\n"
+        f"    KUKIIHOME_PREPROCESSOR_BODY_ID_MODEL_PATH={output}"
     )
 
 

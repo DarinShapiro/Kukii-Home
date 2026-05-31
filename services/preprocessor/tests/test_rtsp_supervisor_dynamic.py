@@ -18,8 +18,8 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from sentihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
-from sentihome_preprocessor.pipelines.rtsp_capture import RTSPCaptureSupervisor
+from kukiihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
+from kukiihome_preprocessor.pipelines.rtsp_capture import RTSPCaptureSupervisor
 
 
 @pytest.fixture

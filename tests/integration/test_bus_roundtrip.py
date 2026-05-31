@@ -1,4 +1,4 @@
-"""Integration tests for sentihome_shared.bus.Bus against a real NATS instance.
+"""Integration tests for kukiihome_shared.bus.Bus against a real NATS instance.
 
 Runs in CI (workflow `integration.yml`) which starts a NATS service.
 Locally: `./scripts/dev/up.sh nats && uv run pytest tests/integration -m integration`.
@@ -12,8 +12,8 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from sentihome_shared.bus import Bus
-from sentihome_shared.generated.events.trigger_event import (
+from kukiihome_shared.bus import Bus
+from kukiihome_shared.generated.events.trigger_event import (
     EventType,
     PrivacyTier,
     Source,

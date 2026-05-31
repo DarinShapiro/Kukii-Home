@@ -35,7 +35,7 @@ importers:
 
   frontend/ha-cards:
     dependencies:
-      '@sentihome/shared':
+      '@kukiihome/shared':
         specifier: workspace:*
         version: link:../../shared/lib-typescript
       lit:
@@ -57,7 +57,7 @@ importers:
 
   frontend/operator-dashboard:
     dependencies:
-      '@sentihome/shared':
+      '@kukiihome/shared':
         specifier: workspace:*
         version: link:../../shared/lib-typescript
       react:

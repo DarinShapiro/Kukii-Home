@@ -23,7 +23,7 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from sentihome_preprocessor.pipelines.face import (
+from kukiihome_preprocessor.pipelines.face import (
     DetectedFace,
     FaceConfig,
     FaceRecognizer,

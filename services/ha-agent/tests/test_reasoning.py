@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from sentihome_ha_agent.reasoning import (
+from kukiihome_ha_agent.reasoning import (
     ReasoningPolicy,
     StubReasoner,
     should_notify,
 )
-from sentihome_shared.generated.events.vlm_response import Criticality
-from sentihome_shared.preprocessor import DetectionTag, FrameWindow, IdentifiedEntity
+from kukiihome_shared.generated.events.vlm_response import Criticality
+from kukiihome_shared.preprocessor import DetectionTag, FrameWindow, IdentifiedEntity
 
 pytestmark = pytest.mark.asyncio
 

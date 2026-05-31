@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from sentihome_adapter_blueiris import BlueIrisAdapter, BlueIrisConfig
-from sentihome_adapter_blueiris.adapter import BlueIrisCamera
-from sentihome_shared.adapter import PreprocessingMode
+from kukiihome_adapter_blueiris import BlueIrisAdapter, BlueIrisConfig
+from kukiihome_adapter_blueiris.adapter import BlueIrisCamera
+from kukiihome_shared.adapter import PreprocessingMode
 
 pytestmark = pytest.mark.asyncio
 

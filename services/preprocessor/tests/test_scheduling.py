@@ -6,7 +6,7 @@ import asyncio
 import time
 
 import pytest
-from sentihome_preprocessor.pipelines.identity.scheduling import ResourcePool
+from kukiihome_preprocessor.pipelines.identity.scheduling import ResourcePool
 
 
 @pytest.mark.asyncio

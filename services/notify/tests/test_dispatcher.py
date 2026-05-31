@@ -6,14 +6,14 @@ import asyncio
 from datetime import timedelta
 
 import pytest
-from sentihome_notify.dispatcher import (
+from kukiihome_notify.dispatcher import (
     AskFlow,
     AskOutcome,
     NotifyWorker,
     PushDispatcher,
     TTSDispatcher,
 )
-from sentihome_shared.generated.events.action_event import ActionEvent, ActionType, Tier
+from kukiihome_shared.generated.events.action_event import ActionEvent, ActionType, Tier
 
 
 def _push(targets: list[str], *, message: str = "msg") -> ActionEvent:

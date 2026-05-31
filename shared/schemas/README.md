@@ -21,7 +21,7 @@ schemas/
 
 - **Draft:** JSON Schema 2020-12
 - **`$id`:** every schema has a `$id` URI with a version segment, e.g.
-  `https://sentihome.io/schemas/v1/events/trigger-event.schema.json`
+  `https://kukiihome.io/schemas/v1/events/trigger-event.schema.json`
 - **`$schema`:** always set to `https://json-schema.org/draft/2020-12/schema`
 - **Naming:** kebab-case filenames ending in `.schema.json`
 - **Cross-refs:** use `$ref` with relative paths (`../common/privacy-tier.schema.json`)
@@ -30,7 +30,7 @@ schemas/
 
 Run `./scripts/dev/regenerate-schemas.sh` to regenerate language bindings:
 
-- **Python:** `shared/lib-python/src/sentihome_shared/generated/` (via `datamodel-code-generator` → pydantic models)
+- **Python:** `shared/lib-python/src/kukiihome_shared/generated/` (via `datamodel-code-generator` → pydantic models)
 - **TypeScript:** `shared/lib-typescript/src/generated/` (via `json-schema-to-typescript` → TS interfaces)
 
 CI verifies generated artifacts are in sync with the schemas; drift fails the build.

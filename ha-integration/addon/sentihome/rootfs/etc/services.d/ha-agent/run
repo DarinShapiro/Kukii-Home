@@ -1,7 +1,0 @@
-#!/usr/bin/with-contenv bash
-# SentiHome ha-agent (read+write HA bridge).
-#
-# /usr/local/bin/python is the system python; SentiHome packages are
-# installed in the project venv created by `uv sync` at build time. Use
-# the venv python explicitly.
-exec /app/.venv/bin/python -m sentihome_ha_agent

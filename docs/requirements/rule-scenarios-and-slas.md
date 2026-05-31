@@ -324,7 +324,7 @@ sleep_state still asleep?
 
 **Sleep stage awareness:** Apple Watch distinguishes sleep stages (light, deep, REM). Deep sleep → act more confidently. Light sleep / in-bed → wait longer before acting, or skip TV-off entirely (person may be about to wake). Stage data is available as HA sensor attributes if the companion app exposes them.
 
-**Why this works through HA with no SentiHome-specific integration:**
+**Why this works through HA with no Kukii-Home-specific integration:**
 
 ```
 Apple Watch
@@ -337,7 +337,7 @@ Apple Watch
   → ha.call_service(media_player, turn_off, bedroom_tv) via write-side MCP
 ```
 
-No HealthKit SDK, no Apple Watch integration, no wearable-specific code in SentiHome. HA handles the data bridge; SentiHome reasons over the result.
+No HealthKit SDK, no Apple Watch integration, no wearable-specific code in Kukii-Home. HA handles the data bridge; Kukii-Home reasons over the result.
 
 **Generalises to any wearable:** Fitbit, Garmin, Oura Ring — anything that exposes sleep state to HA via its companion integration flows through the same path. The rule references the semantic concept `resident.sleep_state`, not a device-specific sensor name.
 

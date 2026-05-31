@@ -23,7 +23,7 @@ import cv2
 from eval_corpus import ClipManifest, write_manifest
 
 RTSP = "rtsp://admin:J9v%258emo@192.168.68.89:554/cam/realmonitor?channel=1&subtype=0"
-CORPUS_ROOT = Path("C:/Users/darin_jwxgczt/SentiHome/face_debug/corpus")
+CORPUS_ROOT = Path("C:/Users/darin_jwxgczt/Kukii-Home/face_debug/corpus")
 
 
 def main() -> None:

@@ -30,11 +30,11 @@ import cv2
 import numpy as np
 from insightface.app import FaceAnalysis
 from insightface.utils import face_align
-from sentihome_preprocessor.pipelines.identity.face_pipeline import _head_region
+from kukiihome_preprocessor.pipelines.identity.face_pipeline import _head_region
 
 PREPROC = "http://localhost:8090"
 CAM = "dahuapoolcam"
-OUT = Path("C:/Users/darin_jwxgczt/SentiHome/face_debug")
+OUT = Path("C:/Users/darin_jwxgczt/Kukii-Home/face_debug")
 REF_PHOTOS = [
     "C:/Users/darin_jwxgczt/Downloads/68989224054__B95AD3E0-00E2-4BDF-903E-49A1A5A961FC.fullsizerender.JPG",
     "C:/Users/darin_jwxgczt/Downloads/IMG_2184.JPG",
@@ -90,7 +90,7 @@ def _pad_to(img: np.ndarray, size: int) -> np.ndarray:
 
 
 def main() -> None:
-    fw = json.loads(Path("C:/Users/darin_jwxgczt/SentiHome/fw_walk.json").read_text())
+    fw = json.loads(Path("C:/Users/darin_jwxgczt/Kukii-Home/fw_walk.json").read_text())
     persons = [d for d in fw.get("detections", []) if d["kind"] == "person"]
     print(f"person detections in window: {len(persons)}")
     OUT.mkdir(parents=True, exist_ok=True)

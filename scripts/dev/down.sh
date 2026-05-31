@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/dev/down.sh — Stop the SentiHome dev stack.
+# scripts/dev/down.sh — Stop the Kukii-Home dev stack.
 #
 # Usage:
 #   ./scripts/dev/down.sh            # stop services, keep volumes

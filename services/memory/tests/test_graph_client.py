@@ -12,7 +12,7 @@ that's an architectural alarm — one of them is wrong.
 from __future__ import annotations
 
 import pytest
-from sentihome_memory.graph import (
+from kukiihome_memory.graph import (
     CitedEdge,
     Event,
     GraphClient,
@@ -260,7 +260,7 @@ def _bootstrap_decision_node(client: GraphClient, decision_id: str) -> None:
     Cypher. Both backends support this via the same pathway in this
     Phase 1 minimum.
     """
-    from sentihome_memory.graph import InMemoryGraphClient, Neo4jGraphClient
+    from kukiihome_memory.graph import InMemoryGraphClient, Neo4jGraphClient
 
     if isinstance(client, InMemoryGraphClient):
         # In-memory doesn't validate node existence on edge writes;

@@ -17,12 +17,12 @@ Rule of thumb: if it's a network call to another service, it's a tool. If it's i
 
 ## HA agent — bidirectional MCP server (device orchestration)
 
-The HA agent is the single integration point for all of Home Assistant. It is **not** the automation engine — SentiHome is. Rather, HA provides:
+The HA agent is the single integration point for all of Home Assistant. It is **not** the automation engine — Kukii-Home is. Rather, HA provides:
 
-1. **Device state truth** (queried by SentiHome for world context)
-2. **Action execution** (SentiHome dispatches actions to HA services)
+1. **Device state truth** (queried by Kukii-Home for world context)
+2. **Action execution** (Kukii-Home dispatches actions to HA services)
 3. **User experience** (dashboards, mobile app, optional HA automations)
-4. **Ecosystem integration** (all HA-native integrations available to SentiHome via query)
+4. **Ecosystem integration** (all HA-native integrations available to Kukii-Home via query)
 
 The HA agent exposes two sides with different performance characteristics.
 
@@ -30,11 +30,11 @@ The HA agent exposes two sides with different performance characteristics.
 
 HA is a living platform with access to two layers of value:
 
-**Layer 1 — HA-native intelligence.** Other AI systems run inside HA and write their outputs as HA native constructs: persistent notifications, entity states, repairs, scripts. Example: a Thread network AI assessment system analyzes mesh topology and device health over time series data and writes HA native alerts and repairs. The HA agent surfaces these findings as world state updates — device degraded, repair attempted, node re-paired — without SentiHome needing any knowledge of Thread networking.
+**Layer 1 — HA-native intelligence.** Other AI systems run inside HA and write their outputs as HA native constructs: persistent notifications, entity states, repairs, scripts. Example: a Thread network AI assessment system analyzes mesh topology and device health over time series data and writes HA native alerts and repairs. The HA agent surfaces these findings as world state updates — device degraded, repair attempted, node re-paired — without Kukii-Home needing any knowledge of Thread networking.
 
-**Layer 2 — Third-party service integrations.** HA connects to a vast ecosystem of external services. SentiHome gains access to all of them through the single HA agent interface, with no separate integrations required:
+**Layer 2 — Third-party service integrations.** HA connects to a vast ecosystem of external services. Kukii-Home gains access to all of them through the single HA agent interface, with no separate integrations required:
 
-| Service category     | Examples                                                 | SentiHome use                                                              |
+| Service category     | Examples                                                 | Kukii-Home use                                                              |
 | -------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------- |
 | Calendars            | Google Calendar, Apple, Outlook, CalDAV                  | Proactive context priming, guest expectations, scheduled preparations      |
 | Weather              | OpenWeatherMap, Met.no, AccuWeather                      | Camera quality expectations, outdoor activity context, pre-actions         |
@@ -48,7 +48,7 @@ HA is a living platform with access to two layers of value:
 | Wearables            | Apple Watch, Fitbit, Garmin, Oura (via HA Companion App) | Sleep state, heart rate, presence, activity — biometric triggers for rules |
 | Voice assistants     | Alexa, Google Home                                       | Additional alert surfaces                                                  |
 
-**The principle:** SentiHome does not need its own calendar integration, weather API, or SMS gateway. HA already has them. The HA agent exposes them all through `ha.query()` and structured tools. Adding a new HA integration automatically makes it available to SentiHome's reasoning pipeline.
+**The principle:** Kukii-Home does not need its own calendar integration, weather API, or SMS gateway. HA already has them. The HA agent exposes them all through `ha.query()` and structured tools. Adding a new HA integration automatically makes it available to Kukii-Home's reasoning pipeline.
 
 **Concrete example — proactive pool preparation:**
 
@@ -71,7 +71,7 @@ Reasoner output:
   → TransientIntent: "notify if pool not at 80°F by Saturday noon"
 ```
 
-No SentiHome-specific calendar, weather, or energy integration needed.
+No Kukii-Home-specific calendar, weather, or energy integration needed.
 
 ### READ SIDE — LLM-backed synthesis
 
@@ -118,7 +118,7 @@ ha.query(natural_language)
               delivery status, presence — whatever is connected
 
   Reactive sweep examples (60s cadence):
-    "Anything requiring SentiHome attention since last check?"
+    "Anything requiring Kukii-Home attention since last check?"
     "What HA-native alerts or repairs are currently active?"
     "Is the Thread network reporting any degraded devices?"
 
@@ -138,7 +138,7 @@ ha.query(natural_language)
 
 ### WRITE SIDE — action execution (MCP + REST), no LLM
 
-Executes device commands on behalf of SentiHome rules. Called directly by the action dispatcher (§15), session manager, and attention mode manager. No LLM, no queue, sub-second execution.
+Executes device commands on behalf of Kukii-Home rules. Called directly by the action dispatcher (§15), session manager, and attention mode manager. No LLM, no queue, sub-second execution.
 
 **Core device actions:**
 
@@ -168,7 +168,7 @@ ha.get_entity_state(entity_id)
   Direct single-entity state fetch (for confirmation after action)
 ```
 
-**Important:** `ha.trigger_automation()` is NOT how SentiHome rules execute. SentiHome rules (defined conversationally in SentiHome) are evaluated and executed by the SentiHome action dispatcher. HA automations are optional user-defined extensions (e.g., "if X happens in SentiHome, then do Y in HA"), but they are not the primary rule mechanism.
+**Important:** `ha.trigger_automation()` is NOT how Kukii-Home rules execute. Kukii-Home rules (defined conversationally in Kukii-Home) are evaluated and executed by the Kukii-Home action dispatcher. HA automations are optional user-defined extensions (e.g., "if X happens in Kukii-Home, then do Y in HA"), but they are not the primary rule mechanism.
 
 **Semantic resolution happens inside the agent.** `illuminate_area("perimeter")` resolves to the correct HA entity group without the caller needing entity IDs. The area/zone model (§13) defines which entities belong to which area; the HA agent holds that mapping.
 
@@ -210,7 +210,7 @@ The action dispatcher routes `policy_gate` errors to an `ask` output — the pip
 
 ### `nvr.*` — NVR Adapter (pluggable, see §03.5)
 
-The NVR adapter is an MCP server that abstracts away the underlying frame source. The same tool calls work whether the user has Agent DVR, Frigate, Blue Iris, Synology, QNAP, UniFi Protect, or just raw RTSP cameras (no NVR). One adapter implementation per platform; SentiHome calls the unified contract.
+The NVR adapter is an MCP server that abstracts away the underlying frame source. The same tool calls work whether the user has Agent DVR, Frigate, Blue Iris, Synology, QNAP, UniFi Protect, or just raw RTSP cameras (no NVR). One adapter implementation per platform; Kukii-Home calls the unified contract.
 
 ```
 nvr.list_cameras()
@@ -249,7 +249,7 @@ nvr.switch_profile(camera_id, profile)
 
 **Implementations (v1 priority):**
 
-- `adapter-rtsp-direct` — no NVR, direct from cameras (SentiHome internal preprocessing)
+- `adapter-rtsp-direct` — no NVR, direct from cameras (Kukii-Home internal preprocessing)
 - `adapter-agent-dvr-service` — Agent DVR via OpenAPI 2.0
 - `adapter-frigate-builtin` — Frigate via MQTT + REST
 - `adapter-blueiris-service` — Blue Iris via HA integration + RTSP

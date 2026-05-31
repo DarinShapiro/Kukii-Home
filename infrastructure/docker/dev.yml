@@ -1,4 +1,4 @@
-# SentiHome — Development docker-compose stack
+# Kukii-Home — Development docker-compose stack
 #
 # Brings up the full runtime locally with hot-reload-friendly bind mounts
 # and dev-friendly defaults. NOT FOR PRODUCTION USE.
@@ -12,7 +12,7 @@
 # is the canonical declaration of which services exist, their network names,
 # port mappings, and dependency edges.
 
-name: sentihome-dev
+name: kukiihome-dev
 
 # ───────────────────────────────────────────────────────────────
 # Shared definitions (compose anchors)
@@ -23,7 +23,7 @@ x-python-service: &python-service
     dockerfile: infrastructure/docker/python-service.Dockerfile
   restart: unless-stopped
   environment:
-    - SENTIHOME_ENV=dev
+    - KUKIIHOME_ENV=dev
     - NATS_URL=nats://nats:4222
     - LOG_LEVEL=DEBUG
     - PYTHONUNBUFFERED=1
@@ -32,7 +32,7 @@ x-python-service: &python-service
     - ../../services:/app/services:ro
     - ../../adapters:/app/adapters:ro
   networks:
-    - sentihome
+    - kukiihome
 
 # ───────────────────────────────────────────────────────────────
 # Infrastructure services
@@ -40,7 +40,7 @@ x-python-service: &python-service
 services:
   nats:
     image: nats:2.11-alpine
-    container_name: sentihome-nats
+    container_name: kukiihome-nats
     command: ['-js', '-sd', '/data', '-m', '8222']
     ports:
       - '4222:4222' # client connections
@@ -48,7 +48,7 @@ services:
     volumes:
       - nats-data:/data
     networks:
-      - sentihome
+      - kukiihome
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:8222/healthz']
       interval: 10s
@@ -57,33 +57,33 @@ services:
 
   postgres:
     image: postgres:17-alpine
-    container_name: sentihome-postgres
+    container_name: kukiihome-postgres
     environment:
-      POSTGRES_USER: sentihome
-      POSTGRES_PASSWORD: sentihome
-      POSTGRES_DB: sentihome
+      POSTGRES_USER: kukiihome
+      POSTGRES_PASSWORD: kukiihome
+      POSTGRES_DB: kukiihome
     ports:
       - '5432:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
-      - sentihome
+      - kukiihome
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U sentihome']
+      test: ['CMD-SHELL', 'pg_isready -U kukiihome']
       interval: 5s
       timeout: 3s
       retries: 10
 
   qdrant:
     image: qdrant/qdrant:v1.12.4
-    container_name: sentihome-qdrant
+    container_name: kukiihome-qdrant
     ports:
       - '6333:6333' # REST
       - '6334:6334' # gRPC
     volumes:
       - qdrant-data:/qdrant/storage
     networks:
-      - sentihome
+      - kukiihome
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:6333/healthz']
       interval: 10s
@@ -92,13 +92,13 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: sentihome-redis
+    container_name: kukiihome-redis
     ports:
       - '6379:6379'
     volumes:
       - redis-data:/data
     networks:
-      - sentihome
+      - kukiihome
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -114,16 +114,16 @@ services:
   #   http://localhost:7474  — Neo4j Browser (UI for hand-running Cypher)
   #   bolt://localhost:7687  — driver protocol (what the services use)
   #
-  # Default credentials: neo4j / sentihome. Override via
-  # NEO4J_AUTH env var. The schema lives in src/sentihome_memory and
+  # Default credentials: neo4j / kukiihome. Override via
+  # NEO4J_AUTH env var. The schema lives in src/kukiihome_memory and
   # is applied lazily by Neo4jGraphClient.initialize_schema(); run
   # any harness scenario or import-and-call to seed it.
   neo4j:
     image: neo4j:5.20-community
-    container_name: sentihome-neo4j
+    container_name: kukiihome-neo4j
     environment:
       # Format: 'user/password'. Override with NEO4J_AUTH=user/pass.
-      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/sentihome}
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/kukiihome}
       # Plugins: APOC is conventionally useful for ad-hoc admin Cypher.
       # NEO4JLABS_PLUGINS uses Neo4j's auto-download manifest.
       NEO4JLABS_PLUGINS: '["apoc"]'
@@ -141,19 +141,19 @@ services:
       - neo4j-data:/data
       - neo4j-logs:/logs
     networks:
-      - sentihome
+      - kukiihome
     healthcheck:
       # cypher-shell ships with the image. Empty query verifies the
       # DB is up and accepting auth.
       test:
-        ['CMD-SHELL', 'cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-sentihome} "RETURN 1" || exit 1']
+        ['CMD-SHELL', 'cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-kukiihome} "RETURN 1" || exit 1']
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
 
   # ───────────────────────────────────────────────────────────────
-  # SentiHome services (implementation tracked in respective epics)
+  # Kukii-Home services (implementation tracked in respective epics)
   # ───────────────────────────────────────────────────────────────
   # NOTE: All `command` directives below are placeholders that fail until
   # their tracking epics ship. The compose file is correct; the service
@@ -161,8 +161,8 @@ services:
 
   core:
     <<: *python-service
-    container_name: sentihome-core
-    command: ['python', '-m', 'sentihome_core']
+    container_name: kukiihome-core
+    command: ['python', '-m', 'kukiihome_core']
     depends_on:
       nats:
         condition: service_healthy
@@ -176,17 +176,17 @@ services:
   # the HA-side has a stream to consume without GPU/models present.
   preprocessor:
     <<: *python-service
-    container_name: sentihome-preprocessor
-    command: ['python', '-m', 'sentihome_preprocessor']
+    container_name: kukiihome-preprocessor
+    command: ['python', '-m', 'kukiihome_preprocessor']
     environment:
-      - SENTIHOME_ENV=dev
+      - KUKIIHOME_ENV=dev
       - NATS_URL=nats://nats:4222
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
       # Epic 10 preprocessor config (see services/preprocessor/src/
-      # sentihome_preprocessor/config.py for the full env contract).
+      # kukiihome_preprocessor/config.py for the full env contract).
       #
-      # Two backends — flip via SENTIHOME_PREPROCESSOR_BACKEND:
+      # Two backends — flip via KUKIIHOME_PREPROCESSOR_BACKEND:
       #
       #   "synthetic" (default): SyntheticFrameBuffer serves /frame_window
       #     with deterministic stub frames. Zero external deps. Good
@@ -195,30 +195,30 @@ services:
       #   "rtsp": Container runs as a mini-NVR. Per-camera PyAV tasks
       #     pull H.264 sub-streams, JPEG-encode keyframes, hold them
       #     in a 5-min rolling buffer. /frame_window serves real frames.
-      #     Requires one SENTIHOME_PREPROCESSOR_RTSP_<CAMERA_ID>=<url>
+      #     Requires one KUKIIHOME_PREPROCESSOR_RTSP_<CAMERA_ID>=<url>
       #     env var per camera (uppercase, non-alnum → underscore).
-      - SENTIHOME_PREPROCESSOR_NODE_ID=dev-local
-      - SENTIHOME_PREPROCESSOR_HTTP_HOST=0.0.0.0
-      - SENTIHOME_PREPROCESSOR_HTTP_PORT=8090
-      - SENTIHOME_PREPROCESSOR_EXTERNAL_URL=http://localhost:8090
-      - SENTIHOME_PREPROCESSOR_BACKEND=synthetic
-      - SENTIHOME_PREPROCESSOR_CAMERAS=front_porch,driveway_cam,backyard_cam
+      - KUKIIHOME_PREPROCESSOR_NODE_ID=dev-local
+      - KUKIIHOME_PREPROCESSOR_HTTP_HOST=0.0.0.0
+      - KUKIIHOME_PREPROCESSOR_HTTP_PORT=8090
+      - KUKIIHOME_PREPROCESSOR_EXTERNAL_URL=http://localhost:8090
+      - KUKIIHOME_PREPROCESSOR_BACKEND=synthetic
+      - KUKIIHOME_PREPROCESSOR_CAMERAS=front_porch,driveway_cam,backyard_cam
       # Synthetic-backend knobs (no-ops when backend=rtsp):
-      - SENTIHOME_PREPROCESSOR_SYNTHETIC_FPS=2.0
-      - SENTIHOME_PREPROCESSOR_BUFFER_HORIZON_S=300
+      - KUKIIHOME_PREPROCESSOR_SYNTHETIC_FPS=2.0
+      - KUKIIHOME_PREPROCESSOR_BUFFER_HORIZON_S=300
       # RTSP-backend knobs (no-ops when backend=synthetic):
-      - SENTIHOME_PREPROCESSOR_CAPTURE_INTERVAL_S=1.0
-      - SENTIHOME_PREPROCESSOR_BUFFER_MAX_ENTRIES=1024
+      - KUKIIHOME_PREPROCESSOR_CAPTURE_INTERVAL_S=1.0
+      - KUKIIHOME_PREPROCESSOR_BUFFER_MAX_ENTRIES=1024
       # Detection (Phase 10.3). When DETECTION=true and backend=rtsp,
       # a YOLODetector is wired in and populates FrameWindow.detections
       # from captured frames. Off by default — opt in once cameras are
       # streaming and ultralytics is installed in the runtime.
-      - SENTIHOME_PREPROCESSOR_DETECTION=false
-      - SENTIHOME_PREPROCESSOR_DETECTION_BACKEND=pytorch
-      - SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS=yolo11x.pt
-      - SENTIHOME_PREPROCESSOR_DETECTION_CONF_MIN=0.5
-      - SENTIHOME_PREPROCESSOR_DETECTION_IMG_SIZE=640
-      # SENTIHOME_PREPROCESSOR_DETECTION_DEVICE=cuda:0   # 4090 box
+      - KUKIIHOME_PREPROCESSOR_DETECTION=false
+      - KUKIIHOME_PREPROCESSOR_DETECTION_BACKEND=pytorch
+      - KUKIIHOME_PREPROCESSOR_DETECTION_WEIGHTS=yolo11x.pt
+      - KUKIIHOME_PREPROCESSOR_DETECTION_CONF_MIN=0.5
+      - KUKIIHOME_PREPROCESSOR_DETECTION_IMG_SIZE=640
+      # KUKIIHOME_PREPROCESSOR_DETECTION_DEVICE=cuda:0   # 4090 box
       # On Intel hardware: BACKEND=openvino, WEIGHTS=path/to/yolo11x_int8_openvino_model,
       # DEVICE=GPU (or CPU / AUTO). Requires running scripts/dev/
       # export_yolo_openvino.py once to produce the IR directory.
@@ -229,9 +229,9 @@ services:
       # H.264 sub-stream URLs work best — cheap to decode, sufficient
       # for motion + general detection. Main-stream pulls are
       # on-demand in Phase 10.4+.
-      # - SENTIHOME_PREPROCESSOR_RTSP_FRONT_PORCH=rtsp://user:pass@192.168.x.x:554/h264Preview_01_sub
-      # - SENTIHOME_PREPROCESSOR_RTSP_DRIVEWAY_CAM=rtsp://user:pass@192.168.x.x:554/cam/realmonitor?channel=1&subtype=1
-      # - SENTIHOME_PREPROCESSOR_RTSP_BACKYARD_CAM=rtsp://user:pass@192.168.x.x:554/...
+      # - KUKIIHOME_PREPROCESSOR_RTSP_FRONT_PORCH=rtsp://user:pass@192.168.x.x:554/h264Preview_01_sub
+      # - KUKIIHOME_PREPROCESSOR_RTSP_DRIVEWAY_CAM=rtsp://user:pass@192.168.x.x:554/cam/realmonitor?channel=1&subtype=1
+      # - KUKIIHOME_PREPROCESSOR_RTSP_BACKYARD_CAM=rtsp://user:pass@192.168.x.x:554/...
     ports:
       - '8090:8090' # /healthz, /status, /tune, /actors/enroll
     depends_on:
@@ -252,33 +252,33 @@ services:
 
   detector:
     <<: *python-service
-    container_name: sentihome-detector
-    command: ['python', '-m', 'sentihome_detector']
+    container_name: kukiihome-detector
+    command: ['python', '-m', 'kukiihome_detector']
     depends_on:
       nats:
         condition: service_healthy
 
   vlm-router:
     <<: *python-service
-    container_name: sentihome-vlm-router
-    command: ['python', '-m', 'sentihome_vlm_router']
+    container_name: kukiihome-vlm-router
+    command: ['python', '-m', 'kukiihome_vlm_router']
     depends_on:
       nats:
         condition: service_healthy
 
   memory:
     <<: *python-service
-    container_name: sentihome-memory
-    command: ['python', '-m', 'sentihome_memory']
+    container_name: kukiihome-memory
+    command: ['python', '-m', 'kukiihome_memory']
     environment:
-      - SENTIHOME_ENV=dev
+      - KUKIIHOME_ENV=dev
       - NATS_URL=nats://nats:4222
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
       # Neo4j is the primary memory substrate per Epic 10.
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-sentihome}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-kukiihome}
     depends_on:
       nats:
         condition: service_healthy
@@ -294,10 +294,10 @@ services:
 
   ha-agent:
     <<: *python-service
-    container_name: sentihome-ha-agent
-    command: ['python', '-m', 'sentihome_ha_agent']
+    container_name: kukiihome-ha-agent
+    command: ['python', '-m', 'kukiihome_ha_agent']
     environment:
-      - SENTIHOME_ENV=dev
+      - KUKIIHOME_ENV=dev
       - NATS_URL=nats://nats:4222
       - LOG_LEVEL=DEBUG
       - PYTHONUNBUFFERED=1
@@ -310,15 +310,15 @@ services:
 
   notify:
     <<: *python-service
-    container_name: sentihome-notify
-    command: ['python', '-m', 'sentihome_notify']
+    container_name: kukiihome-notify
+    command: ['python', '-m', 'kukiihome_notify']
     depends_on:
       nats:
         condition: service_healthy
 
 networks:
-  sentihome:
-    name: sentihome-dev
+  kukiihome:
+    name: kukiihome-dev
     driver: bridge
 
 volumes:

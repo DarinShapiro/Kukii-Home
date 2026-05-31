@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentihome.io/schemas/v1/common/frame-window.schema.json",
+  "$id": "https://kukiihome.io/schemas/v1/common/frame-window.schema.json",
   "title": "FrameWindow",
   "description": "Result of nvr.get_frame_window — selected frames + preprocessing metadata for a time range on a single camera.",
   "type": "object",

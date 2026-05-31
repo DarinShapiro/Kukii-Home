@@ -23,8 +23,8 @@ Usage:
     # (~5-10x over PyTorch CPU on Intel CPUs/iGPUs), ~1-2% mAP loss:
     python scripts/dev/export_yolo_openvino.py --weights yolo11x.pt --int8
 
-Output directory is printed; set SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS
-to that path and SENTIHOME_PREPROCESSOR_DETECTION_BACKEND=openvino
+Output directory is printed; set KUKIIHOME_PREPROCESSOR_DETECTION_WEIGHTS
+to that path and KUKIIHOME_PREPROCESSOR_DETECTION_BACKEND=openvino
 to actually use it at runtime.
 """
 
@@ -104,10 +104,10 @@ def main() -> int:
     )
     print("\nUse this model at runtime:")
     print(
-        f"  SENTIHOME_PREPROCESSOR_DETECTION=true \\\n"
-        f"  SENTIHOME_PREPROCESSOR_DETECTION_BACKEND=openvino \\\n"
-        f"  SENTIHOME_PREPROCESSOR_DETECTION_WEIGHTS={out_dir} \\\n"
-        f"  SENTIHOME_PREPROCESSOR_DETECTION_DEVICE=AUTO    # or GPU / CPU"
+        f"  KUKIIHOME_PREPROCESSOR_DETECTION=true \\\n"
+        f"  KUKIIHOME_PREPROCESSOR_DETECTION_BACKEND=openvino \\\n"
+        f"  KUKIIHOME_PREPROCESSOR_DETECTION_WEIGHTS={out_dir} \\\n"
+        f"  KUKIIHOME_PREPROCESSOR_DETECTION_DEVICE=AUTO    # or GPU / CPU"
     )
     return 0
 

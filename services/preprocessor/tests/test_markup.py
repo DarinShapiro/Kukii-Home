@@ -10,13 +10,13 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import pytest
-from sentihome_preprocessor.pipelines.markup import (
+from kukiihome_preprocessor.pipelines.markup import (
     _HIGH_CONF_THRESHOLD,
     _MIN_CONF_THRESHOLD,
     annotate_frame,
     encode_jpeg,
 )
-from sentihome_shared.preprocessor import IdentifiedEntity
+from kukiihome_shared.preprocessor import IdentifiedEntity
 
 
 def _blank(w: int = 320, h: int = 240, color: int = 80) -> np.ndarray:
@@ -162,7 +162,7 @@ def test_method_label_covers_all_active_modalities():
     """The label text is VLM-facing grounding, so every active identity
     method must map to a clean human name — a missing entry would leak
     the raw pipeline id (e.g. "body_id_osnet") onto the frame."""
-    from sentihome_preprocessor.pipelines.markup import _METHOD_LABEL
+    from kukiihome_preprocessor.pipelines.markup import _METHOD_LABEL
 
     for method in ("face_arcface", "body_id_osnet", "pet_dinov2"):
         assert method in _METHOD_LABEL, f"no pretty label for {method}"

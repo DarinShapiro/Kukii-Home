@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
-from sentihome_ha_agent.__main__ import BootState, _build_app
-from sentihome_ha_agent.event_store import EventStore
-from sentihome_ha_agent.http_api import AlertLog
+from kukiihome_ha_agent.__main__ import BootState, _build_app
+from kukiihome_ha_agent.event_store import EventStore
+from kukiihome_ha_agent.http_api import AlertLog
 
 
 def _alert(
@@ -74,7 +74,7 @@ def test_status_page_has_deep_link_reader():
     reads an #alert=<id> fragment and redirects the iframe to the
     per-alert detail page. This is the consumer half of the
     notification deep-link the notifier emits."""
-    from sentihome_ha_agent.__main__ import _STATUS_PAGE
+    from kukiihome_ha_agent.__main__ import _STATUS_PAGE
 
     # Reads the alert id from a fragment...
     assert "alert=" in _STATUS_PAGE

@@ -54,9 +54,9 @@ These questions are still in active discussion or awaiting implementation feedba
 
 ### Long-term (research / future versions)
 
-10. **NVR-optional architecture maturation** — When does the long-term vision (direct camera → HA → SentiHome, no NVR layer) become the default recommendation? Requires:
-    - SentiHome's internal motion detection proven robust in production
-    - SentiHome handling clip archival at scale
+10. **NVR-optional architecture maturation** — When does the long-term vision (direct camera → HA → Kukii-Home, no NVR layer) become the default recommendation? Requires:
+    - Kukii-Home's internal motion detection proven robust in production
+    - Kukii-Home handling clip archival at scale
     - Direct RTSP adapter performance validated across camera brands
     - User research on whether HA users actually want to drop their existing NVRs
     - Impacts: §02, §03.5, marketing/positioning
@@ -66,7 +66,7 @@ These questions are still in active discussion or awaiting implementation feedba
     - Impacts: §03.5
     - Status: Deferred until v1 ships and we measure service-mode bottlenecks in real deployments
 
-12. **SentiHome Plugin API open spec** — Should we publish a spec so third-party NVR vendors can implement native plugins?
+12. **Kukii-Home Plugin API open spec** — Should we publish a spec so third-party NVR vendors can implement native plugins?
     - Impacts: §03.5
     - Status: Deferred far-future; only relevant after we've shipped at least one native plugin and battle-tested it
 
@@ -122,11 +122,11 @@ These questions are still in active discussion or awaiting implementation feedba
 | 2026-05-25 | **Multi-resident consent: most restrictive wins**                                                                          | If one resident has stricter privacy, their preference blocks higher-risk data paths                                                                                                                     | §16                       | Implemented                      |
 | 2026-05-25 | **Right-to-forget flow: soft-delete + 7-day grace + secure erase**                                                         | User can request deletion of person; marked for deletion, grace period for recovery, then permanent                                                                                                      | §16                       | Implemented                      |
 | 2026-05-25 | **Variant rollout safety: 7d silent → 7d shadow → 2w gradual → full replacement**                                          | Phased rollout with instrumentation at each gate; rollback triggers on FP/FN degradation                                                                                                                 | §10.5                     | Implemented                      |
-| 2026-05-25 | **HA is device orchestration layer; SentiHome is rule engine**                                                             | Rules live in SentiHome (conversational creation), HA executes actions; HA automations are optional extensions                                                                                           | §02, §07, §10, §15        | Implemented                      |
+| 2026-05-25 | **HA is device orchestration layer; Kukii-Home is rule engine**                                                             | Rules live in Kukii-Home (conversational creation), HA executes actions; HA automations are optional extensions                                                                                           | §02, §07, §10, §15        | Implemented                      |
 | 2026-05-25 | **NVR is pluggable data source via NVR Adapter Layer (§03.5)**                                                             | Universal compatibility; v1 ships service mode; native/built-in modes are optimizations layered on top                                                                                                   | §02, §03, §03.5, §07, §08 | Implemented                      |
 | 2026-05-25 | **Service mode is the v1 default**                                                                                         | Ships universally with any RTSP/ONVIF source; no native plugins required for v1; works with Agent DVR, Blue Iris, Synology, QNAP, UniFi Protect, raw cameras                                             | §03.5                     | Implemented                      |
-| 2026-05-25 | **Do not recommend a specific NVR to users**                                                                               | Let users choose based on existing infrastructure; HA + cameras + SentiHome is a valid path; pushing an NVR creates friction and lock-in                                                                 | §03.5                     | Implemented                      |
-| 2026-05-25 | **Long-term vision: NVR-optional architecture (v3–v4)**                                                                    | As SentiHome matures, it absorbs NVR responsibilities (motion, archival, clips); direct camera → HA → SentiHome becomes the recommended path; NVR users remain supported but it's not the recommendation | §02, §03.5                | Future direction documented      |
+| 2026-05-25 | **Do not recommend a specific NVR to users**                                                                               | Let users choose based on existing infrastructure; HA + cameras + Kukii-Home is a valid path; pushing an NVR creates friction and lock-in                                                                 | §03.5                     | Implemented                      |
+| 2026-05-25 | **Long-term vision: NVR-optional architecture (v3–v4)**                                                                    | As Kukii-Home matures, it absorbs NVR responsibilities (motion, archival, clips); direct camera → HA → Kukii-Home becomes the recommended path; NVR users remain supported but it's not the recommendation | §02, §03.5                | Future direction documented      |
 | 2026-05-25 | **Hardware sizing marked preliminary**                                                                                     | Estimates will be revised based on real-world household deployment data from the maintainer; mode-dependent variance is significant and unmeasured                                                       | §18                       | Implemented (marked preliminary) |
 | 2026-05-25 | **Robust hybrid motion detection (MOG2 + optical flow + size filter + temporal consistency + on-camera AI corroboration)** | Motion detection is the 24/7 gating function; false positives from lighting/wind/rain would burn compute and erode trust                                                                                 | §08                       | Implemented                      |
 
@@ -163,11 +163,11 @@ These questions are still in active discussion or awaiting implementation feedba
 - ✓ AI observability synthesis layer designed
 - ✓ Hardware sizing from starter to enterprise
 - ✓ Failure modes and degradation strategies complete
-- ✓ **Architecture clarification: HA is device orchestration; SentiHome is rule engine**
-  - Rules created conversationally in SentiHome, not as HA automations
+- ✓ **Architecture clarification: HA is device orchestration; Kukii-Home is rule engine**
+  - Rules created conversationally in Kukii-Home, not as HA automations
   - HA provides world state context and executes actions
   - HA automations are optional user extensions, not primary mechanism
-  - Clean separation: SentiHome intelligence + HA device control
+  - Clean separation: Kukii-Home intelligence + HA device control
 - ✓ **NVR Adapter Layer added (§03.5)**
   - NVR is pluggable data source, not core dependency
   - Service mode is v1 default (universal RTSP/ONVIF compatibility)

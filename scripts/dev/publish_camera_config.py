@@ -54,7 +54,7 @@ from typing import Any
 
 import nats
 import yaml
-from sentihome_shared.preprocessor import (
+from kukiihome_shared.preprocessor import (
     SUBJECT_CAMERA_CONFIGURED,
     SUBJECT_CAMERA_REMOVED,
     CameraConfigEvent,

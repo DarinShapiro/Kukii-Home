@@ -1,5 +1,5 @@
 /**
- * @sentihome/operator-dashboard — standalone diagnostics dashboard.
+ * @kukiihome/operator-dashboard — standalone diagnostics dashboard.
  *
  * Optional: falls back to HA's built-in dashboard if not deployed.
  * Target audience: operators and developers needing deep diagnostics,
@@ -12,7 +12,7 @@
  *   planning/epics/14-calibration-spatial.md
  */
 
-import { VERSION as SHARED_VERSION } from '@sentihome/shared';
+import { VERSION as SHARED_VERSION } from '@kukiihome/shared';
 
 export const VERSION = '0.1.0';
 export const SHARED_LIB_VERSION = SHARED_VERSION;

@@ -19,7 +19,7 @@ Usage:
 
 from __future__ import annotations
 
-from sentihome_preprocessor.pipelines.identity.sim import SimFrame, SimPipeline, sweep
+from kukiihome_preprocessor.pipelines.identity.sim import SimFrame, SimPipeline, sweep
 
 PIPELINES = [
     SimPipeline("detect_yolo", frozenset({"frame"}), resource_class="gpu", base_ms=600, warmup_ms=35800),

@@ -51,11 +51,11 @@ def _person_silhouette_jpeg(width: int = 640, height: int = 480) -> bytes:
 async def test_real_yolo_detect_returns_tuple_of_detection_tags():
     """Smoke test: model loads, inference runs, output shape is
     compatible with our DetectionTag contract."""
-    from sentihome_preprocessor.pipelines.detection import (
+    from kukiihome_preprocessor.pipelines.detection import (
         DetectionConfig,
         YOLODetector,
     )
-    from sentihome_shared.preprocessor import DetectionTag
+    from kukiihome_shared.preprocessor import DetectionTag
 
     detector = YOLODetector(
         DetectionConfig(
@@ -82,7 +82,7 @@ async def test_real_yolo_detect_returns_tuple_of_detection_tags():
 async def test_real_yolo_batch_processes_multiple_frames():
     """Batch path: detect_batch over 3 frames returns DetectionTags
     whose frame_ts values come from our input list."""
-    from sentihome_preprocessor.pipelines.detection import YOLODetector
+    from kukiihome_preprocessor.pipelines.detection import YOLODetector
 
     detector = YOLODetector()
     frames = [
@@ -102,7 +102,7 @@ async def test_real_yolo_batch_processes_multiple_frames():
 async def test_real_yolo_warmup_does_not_raise():
     """warmup() should load the model without side effects beyond
     the load itself."""
-    from sentihome_preprocessor.pipelines.detection import YOLODetector
+    from kukiihome_preprocessor.pipelines.detection import YOLODetector
 
     detector = YOLODetector()
     await detector.warmup()

@@ -1,0 +1,117 @@
+# Kukii-Home deployment topology — copy to /etc/kukiihome/kukiihome.yaml
+# (or ~/.kukiihome/config.yaml) and edit. Every service reads its
+# connection slice from here at bootstrap.
+#
+# Override priority (later wins):
+#   defaults < named profile < this YAML < env-vars < CLI
+#
+# Env-var override syntax: KUKIIHOME__SECTION__SUBSECTION__FIELD=value
+#   Double underscore = dotted path. Numeric segments index into lists.
+#   Example: KUKIIHOME__VLM_ROUTER__BACKENDS__0__BASE_URL=http://10.0.0.5:11434
+#
+# ${VAR} interpolation expands env vars inside values so secrets stay
+# outside the file. ${VAR:-default} provides a fallback.
+#
+# Three named profiles ship out of the box and populate sensible defaults:
+#   yellow_single_box     — everything on one HA Yellow + Docker network
+#   yellow_plus_inference — Yellow runs brain+storage; VLM on a LAN box
+#   distributed           — fully explicit; no host assumptions
+#
+# Pick a profile and override only the fields you need.
+
+deployment:
+  profile: yellow_plus_inference
+  household_id: smith_2026
+  timezone: America/New_York
+
+# ─────────────────────────────────────────────────────────────────
+# Event bus
+# ─────────────────────────────────────────────────────────────────
+bus:
+  nats_url: nats://nats:4222
+
+# ─────────────────────────────────────────────────────────────────
+# Memory store (Postgres + Qdrant + Redis + object store)
+# ─────────────────────────────────────────────────────────────────
+memory:
+  postgres_url: postgresql+asyncpg://kukiihome:${POSTGRES_PASSWORD}@postgres:5432/kukiihome
+  qdrant_url: http://qdrant:6333
+  redis_url: redis://redis:6379/0
+  object_store: file:///data/kukiihome/objects
+  rules_top_k: 5
+  episodic_top_k: 3
+
+# ─────────────────────────────────────────────────────────────────
+# VLM router — declare one or more backends. Routing policy picks
+# per request based on privacy_tier, affinity, cost, and latency.
+# ─────────────────────────────────────────────────────────────────
+vlm_router:
+  backends:
+    - name: lan-ollama
+      kind: ollama
+      base_url: http://inference.lan:11434
+      model: qwen2.5-vl:7b
+      privacy_tier_max: local_only
+      typical_latency_ms: 1800
+
+    # Cloud fallback for cloud_eligible events — only used when local
+    # backends fail or saturate, and only for events the privacy gate
+    # permits to leave the home network. Uncomment + set ANTHROPIC_API_KEY
+    # in the environment to enable.
+    # - name: anthropic-cloud
+    #   kind: openai_compatible
+    #   base_url: https://api.anthropic.com/v1
+    #   model: claude-sonnet-4-5
+    #   api_key: ${ANTHROPIC_API_KEY}
+    #   privacy_tier_max: cloud_any
+    #   cost_per_1k_tokens_usd: 0.003
+
+# ─────────────────────────────────────────────────────────────────
+# Home Assistant agent
+# ─────────────────────────────────────────────────────────────────
+ha_agent:
+  # On HA add-on deployments, Supervisor injects SUPERVISOR_TOKEN and
+  # http://supervisor/core resolves to the local HA Core. For standalone
+  # deployments point at your HA instance directly.
+  ha_url: http://supervisor/core
+  ha_token: ${HA_TOKEN:-${SUPERVISOR_TOKEN:-}}
+  websocket: true
+
+# ─────────────────────────────────────────────────────────────────
+# Notify dispatcher — per-resident push routing + TTS speakers
+# ─────────────────────────────────────────────────────────────────
+notify:
+  resident_to_push_service:
+    resident_1: notify.mobile_app_pixel_8
+    resident_2: notify.mobile_app_iphone_15
+  tts_service: tts.cloud_say
+  media_players:
+    - media_player.kitchen
+    - media_player.bedroom
+
+# ─────────────────────────────────────────────────────────────────
+# NVR adapters — one entry per platform/instance
+# ─────────────────────────────────────────────────────────────────
+adapters:
+  - name: backyard-rtsp
+    kind: rtsp-direct
+    streams:
+      - id: cam_backyard
+        rtsp_url: rtsp://${CAM_USER}:${CAM_PASS}@192.168.1.42/stream
+      - id: cam_pool
+        rtsp_url: rtsp://${CAM_USER}:${CAM_PASS}@192.168.1.43/stream
+
+  - name: front-frigate
+    kind: frigate
+    url: http://supervisor/frigate
+    mqtt_host: core-mosquitto
+
+  # Additional supported kinds (uncomment + configure as needed):
+  # - name: studio-agent-dvr
+  #   kind: agent-dvr
+  #   url: http://agent-dvr.lan:8090
+  #   username: admin
+  #   password: ${AGENT_DVR_PASSWORD}
+  # - name: garage-blueiris
+  #   kind: blueiris
+  #   url: http://blueiris.lan:81

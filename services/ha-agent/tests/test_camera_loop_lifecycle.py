@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import asyncio
 
-from sentihome_ha_agent.camera_loop import CameraLoopRegistry, HACameraLoop
-from sentihome_ha_agent.client import HAState
-from sentihome_ha_agent.http_api import AlertLog
+from kukiihome_ha_agent.camera_loop import CameraLoopRegistry, HACameraLoop
+from kukiihome_ha_agent.client import HAState
+from kukiihome_ha_agent.http_api import AlertLog
 
 
 class _FakeClient:

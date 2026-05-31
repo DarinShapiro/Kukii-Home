@@ -1,6 +1,6 @@
 # adapters/
 
-Pluggable NVR adapters. Each adapter translates between a specific NVR platform (or no NVR at all) and the unified `nvr.*` MCP contract that SentiHome's core consumes. Architecture: [§03.5 NVR Adapter Layer](../docs/architecture/03.5-nvr-adapter-layer.md).
+Pluggable NVR adapters. Each adapter translates between a specific NVR platform (or no NVR at all) and the unified `nvr.*` MCP contract that Kukii-Home's core consumes. Architecture: [§03.5 NVR Adapter Layer](../docs/architecture/03.5-nvr-adapter-layer.md).
 
 ## Adapters (v1 priority order)
 
@@ -16,7 +16,7 @@ Pluggable NVR adapters. Each adapter translates between a specific NVR platform 
 
 ## Adapter contract
 
-All adapters implement the same MCP interface. SentiHome's core is mode-agnostic; the adapter handles the platform-specific translation.
+All adapters implement the same MCP interface. Kukii-Home's core is mode-agnostic; the adapter handles the platform-specific translation.
 
 See [`shared/protos/nvr-adapter.proto`](../shared/protos/) (TODO) for the formal contract. Key operations:
 
@@ -32,7 +32,7 @@ See [`shared/protos/nvr-adapter.proto`](../shared/protos/) (TODO) for the formal
 - **Service mode** (v1 default): adapter consumes RTSP from NVR, runs preprocessing in a companion service. Universal compatibility. Higher resource overhead (~1.8–2.2×).
 - **Built-in mode**: NVR provides preprocessing (Frigate). Adapter consumes pre-enriched results. ~1.1–1.3× overhead.
 - **Native mode** (future): plugin runs in-process inside the NVR. Direct frame buffer access. ~1.0× overhead. Currently planned for Agent DVR (v2+).
-- **Direct mode**: no NVR; SentiHome's internal preprocessing is effectively native by definition.
+- **Direct mode**: no NVR; Kukii-Home's internal preprocessing is effectively native by definition.
 
 ## Adding a new adapter
 

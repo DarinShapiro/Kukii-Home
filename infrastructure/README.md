@@ -8,7 +8,7 @@ Deployment and runtime infrastructure: Docker Compose stacks, NATS JetStream con
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`docker/`](docker/)               | Docker Compose files for local dev and production deployment. Each service has its own Dockerfile in the service folder; this directory composes them.                                             |
 | [`nats/`](nats/)                   | NATS JetStream stream + consumer definitions (see §03). Declared as YAML; applied via `nats` CLI.                                                                                                  |
-| [`db-migrations/`](db-migrations/) | SQL migrations for SentiHome's relational stores (sessions, rules, episodic metadata, audit log). Run with Alembic. Vector DB schemas live with the memory service since they're library-specific. |
+| [`db-migrations/`](db-migrations/) | SQL migrations for Kukii-Home's relational stores (sessions, rules, episodic metadata, audit log). Run with Alembic. Vector DB schemas live with the memory service since they're library-specific. |
 
 ## Deployment topologies
 
@@ -17,7 +17,7 @@ Architecture: [§02 High-Level Architecture](../docs/architecture/02-high-level-
 - **Single-box dev:** all services on one machine via `docker-compose -f docker/dev.yml`
 - **Single-box production:** same, but with production configs and external volumes
 - **Split-host production:** compose file per host (compute, NVR/preprocessing, NAS)
-- **HA add-on (future):** SentiHome packaged as a HA add-on for installation through HA's Supervisor
+- **HA add-on (future):** Kukii-Home packaged as a HA add-on for installation through HA's Supervisor
 
 ## Conventions
 
@@ -30,7 +30,7 @@ Architecture: [§02 High-Level Architecture](../docs/architecture/02-high-level-
 ## Storage layout
 
 ```
-~/sentihome-data/
+~/kukiihome-data/
 ├── postgres/         SQL (sessions, rules, episodic metadata)
 ├── qdrant/           Vector DB (embeddings, rule vectors)
 ├── objects/          Frame crops, clips, montages

@@ -1,4 +1,4 @@
-# Contributing to SentiHome
+# Contributing to Kukii-Home
 
 Thanks for your interest. This is a pre-implementation project — the architecture is documented, scaffolding is in place, and we're working through the GitHub epics that represent the v1 implementation.
 
@@ -6,8 +6,8 @@ Thanks for your interest. This is a pre-implementation project — the architect
 
 ```bash
 # Clone
-git clone https://github.com/DarinShapiro/SentiHome.git
-cd SentiHome
+git clone https://github.com/DarinShapiro/Kukii-Home.git
+cd Kukii-Home
 
 # Read the architecture
 open docs/architecture/README.md   # start here
@@ -33,7 +33,7 @@ open planning/README.md
 
 ## How to contribute
 
-1. **Pick an issue.** Browse [open issues](https://github.com/DarinShapiro/SentiHome/issues). Issues are grouped under epics (`type:epic` label).
+1. **Pick an issue.** Browse [open issues](https://github.com/DarinShapiro/Kukii-Home/issues). Issues are grouped under epics (`type:epic` label).
 2. **Comment on the issue** to claim it before starting work.
 3. **Branch from `main`.** Branch naming: `feat/<short-description>`, `fix/<short-description>`, `docs/<short-description>`.
 4. **Open a draft PR early.** Link the issue with `Closes #N` in the description.

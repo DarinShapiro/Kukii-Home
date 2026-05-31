@@ -12,10 +12,10 @@ import asyncio
 from pathlib import Path
 
 import pytest
-from sentihome_ha_agent.event_store import EventStore
-from sentihome_ha_agent.http_api import AlertLog
-from sentihome_ha_agent.reasoning import StubReasoner
-from sentihome_ha_agent.triage import TriageGate
+from kukiihome_ha_agent.event_store import EventStore
+from kukiihome_ha_agent.http_api import AlertLog
+from kukiihome_ha_agent.reasoning import StubReasoner
+from kukiihome_ha_agent.triage import TriageGate
 
 pytestmark = pytest.mark.asyncio
 

@@ -25,13 +25,13 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: sentihome
-          POSTGRES_PASSWORD: sentihome
-          POSTGRES_DB: sentihome_test
+          POSTGRES_USER: kukiihome
+          POSTGRES_PASSWORD: kukiihome
+          POSTGRES_DB: kukiihome_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U sentihome"
+          --health-cmd "pg_isready -U kukiihome"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -55,7 +55,7 @@ jobs:
 
     env:
       NATS_URL: nats://localhost:4222
-      DATABASE_URL: postgresql://sentihome:sentihome@localhost:5432/sentihome_test
+      DATABASE_URL: postgresql://kukiihome:kukiihome@localhost:5432/kukiihome_test
       QDRANT_URL: http://localhost:6333
       REDIS_URL: redis://localhost:6379
 

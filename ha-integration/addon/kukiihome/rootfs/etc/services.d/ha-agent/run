@@ -1,0 +1,7 @@
+#!/usr/bin/with-contenv bash
+# Kukii-Home ha-agent (read+write HA bridge).
+#
+# /usr/local/bin/python is the system python; Kukii-Home packages are
+# installed in the project venv created by `uv sync` at build time. Use
+# the venv python explicitly.
+exec /app/.venv/bin/python -m kukiihome_ha_agent

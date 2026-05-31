@@ -1,11 +1,11 @@
 [project]
-name = "sentihome-memory"
+name = "kukiihome-memory"
 version = "0.1.0"
 description = "Memory MCP: SQL + vector DB + object store for sessions, rules, identity, episodic"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
-    "sentihome-shared",
+    "kukiihome-shared",
     "asyncpg>=0.30.0",
     "aiosqlite>=0.20.0",
     "sqlalchemy[asyncio]>=2.0.0",
@@ -16,14 +16,14 @@ dependencies = [
 ]
 
 [project.scripts]
-sentihome-memory = "sentihome_memory.__main__:main"
+kukiihome-memory = "kukiihome_memory.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sentihome_memory"]
+packages = ["src/kukiihome_memory"]
 
 [dependency-groups]
 dev = [

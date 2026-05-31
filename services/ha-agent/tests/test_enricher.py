@@ -11,13 +11,13 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 
-from sentihome_ha_agent.enricher import (
+from kukiihome_ha_agent.enricher import (
     AlertEnricher,
     _event_unix_ts,
     _pick_best_frame_ts,
 )
-from sentihome_ha_agent.event_store import EventStore
-from sentihome_shared.preprocessor import FrameWindow
+from kukiihome_ha_agent.event_store import EventStore
+from kukiihome_shared.preprocessor import FrameWindow
 
 
 def _entity(frame_ts: float, actor: str = "alice") -> dict:

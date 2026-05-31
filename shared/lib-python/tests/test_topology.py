@@ -1,4 +1,4 @@
-"""Tests for sentihome_shared.topology (Epic 8.5)."""
+"""Tests for kukiihome_shared.topology (Epic 8.5)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ from textwrap import dedent
 
 import pytest
 import yaml
-from pydantic import ValidationError
-from sentihome_shared.topology import (
+from kukiihome_shared.topology import (
     PROFILES,
     BootstrapReport,
     PrivacyTierMax,
@@ -21,6 +20,7 @@ from sentihome_shared.topology import (
     interpolate_env,
     load_topology,
 )
+from pydantic import ValidationError
 
 # ─────────────────────────────────────────────────────────────────────
 # Pydantic model defaults + validation
@@ -146,14 +146,14 @@ def test_interpolate_env_recurses_into_dicts_and_lists(monkeypatch):
 
 
 def test_env_overrides_set_nested_field(monkeypatch):
-    monkeypatch.setenv("SENTIHOME__BUS__NATS_URL", "nats://override:4222")
+    monkeypatch.setenv("KUKIIHOME__BUS__NATS_URL", "nats://override:4222")
     out = apply_env_overrides({"bus": {"nats_url": "nats://default:4222"}})
     assert out["bus"]["nats_url"] == "nats://override:4222"
 
 
 def test_env_overrides_index_into_list(monkeypatch):
-    monkeypatch.setenv("SENTIHOME__VLM_ROUTER__BACKENDS__0__BASE_URL", "http://lan:11434")
-    monkeypatch.setenv("SENTIHOME__VLM_ROUTER__BACKENDS__0__MODEL", "qwen2.5-vl:32b")
+    monkeypatch.setenv("KUKIIHOME__VLM_ROUTER__BACKENDS__0__BASE_URL", "http://lan:11434")
+    monkeypatch.setenv("KUKIIHOME__VLM_ROUTER__BACKENDS__0__MODEL", "qwen2.5-vl:32b")
     out = apply_env_overrides(
         {
             "vlm_router": {
@@ -166,8 +166,8 @@ def test_env_overrides_index_into_list(monkeypatch):
 
 
 def test_env_overrides_coerce_scalars(monkeypatch):
-    monkeypatch.setenv("SENTIHOME__MEMORY__RULES_TOP_K", "42")
-    monkeypatch.setenv("SENTIHOME__HA_AGENT__WEBSOCKET", "false")
+    monkeypatch.setenv("KUKIIHOME__MEMORY__RULES_TOP_K", "42")
+    monkeypatch.setenv("KUKIIHOME__HA_AGENT__WEBSOCKET", "false")
     out = apply_env_overrides({})
     assert out["memory"]["rules_top_k"] == 42
     assert out["ha_agent"]["websocket"] is False
@@ -179,7 +179,7 @@ def test_env_overrides_coerce_scalars(monkeypatch):
 
 
 def _write_yaml(tmp_path: Path, body: str) -> Path:
-    p = tmp_path / "sentihome.yaml"
+    p = tmp_path / "kukiihome.yaml"
     p.write_text(dedent(body), encoding="utf-8")
     return p
 
@@ -202,7 +202,7 @@ def test_load_topology_from_explicit_path(tmp_path):
 
 def test_load_topology_layered_profile_then_user_then_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MY_TOKEN", "tok_from_env")
-    monkeypatch.setenv("SENTIHOME__MEMORY__RULES_TOP_K", "77")
+    monkeypatch.setenv("KUKIIHOME__MEMORY__RULES_TOP_K", "77")
     path = _write_yaml(
         tmp_path,
         """
@@ -328,7 +328,7 @@ def test_shipped_example_yaml_loads(monkeypatch):
     monkeypatch.setenv("CAM_PASS", "p")
     monkeypatch.setenv("HA_TOKEN", "tok")
     example = (
-        Path(__file__).resolve().parents[3] / "infrastructure" / "docker" / "sentihome.example.yaml"
+        Path(__file__).resolve().parents[3] / "infrastructure" / "docker" / "kukiihome.example.yaml"
     )
     assert example.exists(), f"missing {example}"
     # Round-trip YAML to validate structure without env-override side effects.

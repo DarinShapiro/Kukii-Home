@@ -5,14 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from sentihome_core.triage import (
+from kukiihome_core.triage import (
     SAFETY_BYPASS_EVENT_TYPES,
     BackpressureSignal,
     DedupCache,
     Tier,
     score_event,
 )
-from sentihome_shared.generated.events.trigger_event import (
+from kukiihome_shared.generated.events.trigger_event import (
     EventType,
     OnCameraAiOpinion,
     PrivacyTier,
@@ -184,7 +184,7 @@ class _FakeBus:
 
 @pytest.mark.asyncio
 async def test_triage_publishes_doorbell_to_urgent() -> None:
-    from sentihome_core.triage import Triage
+    from kukiihome_core.triage import Triage
 
     bus = _FakeBus()
     triage = Triage(bus=bus)  # type: ignore[arg-type]
@@ -195,7 +195,7 @@ async def test_triage_publishes_doorbell_to_urgent() -> None:
 
 @pytest.mark.asyncio
 async def test_triage_dedupes_within_window() -> None:
-    from sentihome_core.triage import Triage
+    from kukiihome_core.triage import Triage
 
     bus = _FakeBus()
     triage = Triage(bus=bus, dedup_window_seconds=10)  # type: ignore[arg-type]
@@ -208,7 +208,7 @@ async def test_triage_dedupes_within_window() -> None:
 
 @pytest.mark.asyncio
 async def test_triage_downgrades_under_backpressure() -> None:
-    from sentihome_core.triage import Triage
+    from kukiihome_core.triage import Triage
 
     bus = _FakeBus()
     triage = Triage(bus=bus)  # type: ignore[arg-type]
@@ -220,7 +220,7 @@ async def test_triage_downgrades_under_backpressure() -> None:
 
 @pytest.mark.asyncio
 async def test_triage_drops_when_all_full() -> None:
-    from sentihome_core.triage import Triage
+    from kukiihome_core.triage import Triage
 
     bus = _FakeBus()
     triage = Triage(bus=bus)  # type: ignore[arg-type]

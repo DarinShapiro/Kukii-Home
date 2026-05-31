@@ -1,6 +1,6 @@
 # Database migrations
 
-Alembic-managed schema migrations for SentiHome's relational store (Postgres).
+Alembic-managed schema migrations for Kukii-Home's relational store (Postgres).
 
 ## Layout
 
@@ -15,7 +15,7 @@ db-migrations/
 ## Common commands
 
 ```bash
-# Generate a new migration after editing services/memory/src/sentihome_memory/models.py
+# Generate a new migration after editing services/memory/src/kukiihome_memory/models.py
 uv run alembic -c infrastructure/db-migrations/alembic.ini \
     revision --autogenerate -m "describe the change"
 

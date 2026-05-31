@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from sentihome_ha_agent.discovery import (
+from kukiihome_ha_agent.discovery import (
     DEFAULT_COOLDOWN_SECONDS,
     build_decisions,
     group_by_device,
     pick_motions,
     pick_stream,
 )
-from sentihome_ha_agent.mcp_tools import HACameraEntity
+from kukiihome_ha_agent.mcp_tools import HACameraEntity
 
 
 def _cam(

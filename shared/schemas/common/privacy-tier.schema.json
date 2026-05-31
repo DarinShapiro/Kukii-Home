@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentihome.io/schemas/v1/common/privacy-tier.schema.json",
+  "$id": "https://kukiihome.io/schemas/v1/common/privacy-tier.schema.json",
   "title": "PrivacyTier",
   "description": "Privacy tier tag carried by every message in the system. Enforced at the model router (see §16).",
   "type": "string",

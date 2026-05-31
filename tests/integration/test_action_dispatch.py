@@ -13,21 +13,21 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sentihome_core.dispatch import (
+from kukiihome_core.dispatch import (
     ActionDispatcher,
     OccupancySnapshot,
     PolicyDisposition,
     ResidentPreferences,
 )
-from sentihome_core.rules import ResolutionOutcome
-from sentihome_notify.dispatcher import (
+from kukiihome_core.rules import ResolutionOutcome
+from kukiihome_notify.dispatcher import (
     AskFlow,
     AskOutcome,
     NotifyWorker,
     PushDispatcher,
     TTSDispatcher,
 )
-from sentihome_shared.generated.events.action_event import ActionType, Tier
+from kukiihome_shared.generated.events.action_event import ActionType, Tier
 
 pytestmark = pytest.mark.integration
 

@@ -1,11 +1,11 @@
 [project]
-name = "sentihome-preprocessor"
+name = "kukiihome-preprocessor"
 version = "0.1.0"
-description = "Recognition preprocessor for SentiHome — continuous-time inference (Epic 10). Deploys standalone on the inference box; communicates with HA-side services only via NATS + REST."
+description = "Recognition preprocessor for Kukii-Home — continuous-time inference (Epic 10). Deploys standalone on the inference box; communicates with HA-side services only via NATS + REST."
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
-    "sentihome-shared",
+    "kukiihome-shared",
     "opencv-python-headless>=4.10.0",
     "numpy>=2.0.0",
     "av>=13.0.0",
@@ -47,11 +47,11 @@ dev = [
 ]
 
 [project.scripts]
-sentihome-preprocessor = "sentihome_preprocessor.__main__:main"
+kukiihome-preprocessor = "kukiihome_preprocessor.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sentihome_preprocessor"]
+packages = ["src/kukiihome_preprocessor"]

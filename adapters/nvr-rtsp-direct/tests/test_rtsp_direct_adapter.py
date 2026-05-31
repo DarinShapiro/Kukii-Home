@@ -6,9 +6,9 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import pytest
-from sentihome_adapter_rtsp_direct import CameraConfig, RTSPDirectAdapter
-from sentihome_shared.adapter import PreprocessingMode, UnsupportedCapability
-from sentihome_shared.adapter.base import FrameWindow, MotionEvent
+from kukiihome_adapter_rtsp_direct import CameraConfig, RTSPDirectAdapter
+from kukiihome_shared.adapter import PreprocessingMode, UnsupportedCapability
+from kukiihome_shared.adapter.base import FrameWindow, MotionEvent
 
 
 class _FakeFrameBuffer:

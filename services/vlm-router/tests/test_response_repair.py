@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from sentihome_vlm_router.errors import BackendError
-from sentihome_vlm_router.response_repair import _strip_markdown, try_repair_response
+from kukiihome_vlm_router.errors import BackendError
+from kukiihome_vlm_router.response_repair import _strip_markdown, try_repair_response
 
 
 def test_strip_markdown_with_json_fence() -> None:

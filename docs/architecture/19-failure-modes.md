@@ -139,7 +139,7 @@ Degraded: "Can't confirm alarm state (HA offline), assume worst case"
 
 **Recovery:**
 
-- Watchdog restarts HA (if SentiHome has permission)
+- Watchdog restarts HA (if Kukii-Home has permission)
 - If HA won't restart: operator must handle out-of-band
 - On reconnect: full re-sync (pull current state, not stale cache)
 

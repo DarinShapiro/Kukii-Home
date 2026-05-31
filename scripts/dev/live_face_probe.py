@@ -29,12 +29,12 @@ import cv2
 import numpy as np
 from insightface.app import FaceAnalysis
 from insightface.utils import face_align
-from sentihome_preprocessor.pipelines.identity.face_pipeline import _head_region
+from kukiihome_preprocessor.pipelines.identity.face_pipeline import _head_region
 from ultralytics import YOLO
 
 RTSP = "rtsp://admin:J9v%258emo@192.168.68.89:554/cam/realmonitor?channel=1&subtype=0"
-OV_MODEL = "C:/Users/darin_jwxgczt/SentiHome/yolo11x_openvino_model"
-OUT = Path("C:/Users/darin_jwxgczt/SentiHome/face_debug")
+OV_MODEL = "C:/Users/darin_jwxgczt/Kukii-Home/yolo11x_openvino_model"
+OUT = Path("C:/Users/darin_jwxgczt/Kukii-Home/face_debug")
 REF_PHOTOS = [
     "C:/Users/darin_jwxgczt/Downloads/68989224054__B95AD3E0-00E2-4BDF-903E-49A1A5A961FC.fullsizerender.JPG",
     "C:/Users/darin_jwxgczt/Downloads/IMG_2184.JPG",
@@ -98,7 +98,7 @@ def main() -> None:
     ap.add_argument("--interval", type=float, default=1.0)
     ap.add_argument(
         "--save-dir",
-        default="C:/Users/darin_jwxgczt/SentiHome/face_debug/corpus",
+        default="C:/Users/darin_jwxgczt/Kukii-Home/face_debug/corpus",
         help="Where to save raw grabbed frames (capture mode). Reusable corpus.",
     )
     ap.add_argument(

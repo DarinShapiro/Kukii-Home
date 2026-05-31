@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from sentihome_adapter_qnap import QnapAdapter, QnapConfig
-from sentihome_shared.adapter import NVRAdapter, PreprocessingMode
-from sentihome_shared.adapter.base import AdapterError
+from kukiihome_adapter_qnap import QnapAdapter, QnapConfig
+from kukiihome_shared.adapter import NVRAdapter, PreprocessingMode
+from kukiihome_shared.adapter.base import AdapterError
 
 
 def test_qnap_adapter_is_nvr_adapter() -> None:

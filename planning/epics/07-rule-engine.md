@@ -7,7 +7,7 @@
 
 ## Description
 
-The rule engine is the heart of SentiHome's intelligence: how rules are represented, retrieved, evaluated, and created conversationally. Rules live in SentiHome (not HA). Conversational creation uses an LLM to parse intent; rule evaluation is deterministic.
+The rule engine is the heart of Kukii-Home's intelligence: how rules are represented, retrieved, evaluated, and created conversationally. Rules live in Kukii-Home (not HA). Conversational creation uses an LLM to parse intent; rule evaluation is deterministic.
 
 ## Definition of done
 

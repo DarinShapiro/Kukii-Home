@@ -1,11 +1,11 @@
 [project]
-name = "sentihome-ha-integration"
+name = "kukiihome-ha-integration"
 version = "0.1.0"
-description = "Home Assistant custom integration for SentiHome"
+description = "Home Assistant custom integration for Kukii-Home"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
-    "sentihome-shared",
+    "kukiihome-shared",
     # Note: at runtime, this package is installed into HA which provides its own
     # `homeassistant` package. We don't declare it here to avoid pulling in HA core
     # during dev builds.
@@ -18,4 +18,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["custom_components/sentihome"]
+packages = ["custom_components/kukiihome"]

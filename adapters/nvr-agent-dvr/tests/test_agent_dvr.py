@@ -6,10 +6,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from sentihome_adapter_agent_dvr import AgentDVRConfig
-from sentihome_adapter_agent_dvr.adapter import AgentDVRAdapter, _to_capability
-from sentihome_adapter_agent_dvr.webhook import AgentDVRWebhookReceiver, _classify
-from sentihome_shared.adapter import PreprocessingMode
+from kukiihome_adapter_agent_dvr import AgentDVRConfig
+from kukiihome_adapter_agent_dvr.adapter import AgentDVRAdapter, _to_capability
+from kukiihome_adapter_agent_dvr.webhook import AgentDVRWebhookReceiver, _classify
+from kukiihome_shared.adapter import PreprocessingMode
 
 pytestmark = pytest.mark.asyncio
 

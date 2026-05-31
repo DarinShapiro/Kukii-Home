@@ -20,8 +20,8 @@ import av
 import numpy as np
 
 RTSP = "rtsp://admin:J9v%258emo@192.168.68.89:554/cam/realmonitor?channel=1&subtype=0"
-OV_MODEL = "C:/Users/darin_jwxgczt/SentiHome/yolo11x_openvino_model"
-PT_MODEL = "C:/Users/darin_jwxgczt/SentiHome/yolo11x.pt"
+OV_MODEL = "C:/Users/darin_jwxgczt/Kukii-Home/yolo11x_openvino_model"
+PT_MODEL = "C:/Users/darin_jwxgczt/Kukii-Home/yolo11x.pt"
 IMGSZ = 640
 CONF = 0.5
 N = 10

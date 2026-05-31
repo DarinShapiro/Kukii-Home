@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sentihome_ha_agent.camera_loop import _compute_timings
+from kukiihome_ha_agent.camera_loop import _compute_timings
 
 
 def test_computes_all_legs_when_ha_timestamp_present():

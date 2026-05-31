@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, time, timedelta
 
 import pytest
-from sentihome_core.dispatch import (
+from kukiihome_core.dispatch import (
     AckTracker,
     ActionDispatcher,
     DeeperAssessmentLoop,
@@ -24,8 +24,8 @@ from sentihome_core.dispatch import (
     ResidentPreferences,
     TierRouter,
 )
-from sentihome_core.rules import ResolutionOutcome
-from sentihome_shared.generated.events.action_event import ActionType, Tier
+from kukiihome_core.rules import ResolutionOutcome
+from kukiihome_shared.generated.events.action_event import ActionType, Tier
 
 # ─────────────────────────────────────────────────────────────────────
 # TierRouter

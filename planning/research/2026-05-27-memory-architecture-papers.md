@@ -1,6 +1,6 @@
 # Memory architecture research — three papers (2026-05-27)
 
-Cross-reference report from a deep-research pass on three papers, evaluated against the SentiHome memory architecture decisions locked during the Epic 10 design dialogue (see `planning/epics/10-identity-recognition.md`).
+Cross-reference report from a deep-research pass on three papers, evaluated against the Kukii-Home memory architecture decisions locked during the Epic 10 design dialogue (see `planning/epics/10-identity-recognition.md`).
 
 **Papers reviewed**:
 

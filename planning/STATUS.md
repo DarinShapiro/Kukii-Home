@@ -1,4 +1,4 @@
-# SentiHome Implementation Status
+# Kukii-Home Implementation Status
 
 > **Resumption document** for agents continuing implementation work. This is a snapshot of where the code is, what's done, what's next, and the conventions established so far.
 
@@ -17,22 +17,22 @@ product the user can configure end-to-end without ever writing YAML, with a
 visible diagnostic loop for verifying the system live.
 
 **End-to-end alert path stood up.** v0.3.0 introduced the `ha-camera` adapter
-kind — instead of duplicating RTSP + motion detection, SentiHome subscribes
+kind — instead of duplicating RTSP + motion detection, Kukii-Home subscribes
 to the camera's HA motion / AI binary sensors and snapshots on event. The
 Cameras card on the Web UI started rendering inline thumbnails per camera.
 v0.3.2 made the `adapters` field actually editable in the Supervisor
 Configuration tab (v0.3.1's loose `match(.+)?` schema had hidden it). v0.3.3
 fixed snapshot capture across the add-on / HA Core container boundary by
 switching from `camera.snapshot` (writes to HA Core's `/data`, invisible to
-SentiHome) to `/api/camera_proxy/<entity>` (HTTP fetch → write to
-SentiHome's own `/data`).
+Kukii-Home) to `/api/camera_proxy/<entity>` (HTTP fetch → write to
+Kukii-Home's own `/data`).
 
 **The ONVIF snapshot trap.** v0.3.7-v0.3.9 chased a bug where Reolink
 cameras returned 21 KB of login HTML stamped as `image/jpeg`. Root cause
 diagnosed live: the camera entity was being created by HA's ONVIF
 integration, whose still-image URL hit a Reolink endpoint requiring
 camera-side auth we don't have. v0.3.9 documented the two fix paths
-(re-add the camera via HA's Reolink integration, or switch SentiHome to
+(re-add the camera via HA's Reolink integration, or switch Kukii-Home to
 `rtsp-direct`) and surfaced the actual content-type / preview to the
 Cameras card so future configuration issues diagnose themselves.
 v0.3.10 added a click-to-zoom lightbox so thumbnails are useful at a glance.
@@ -43,10 +43,10 @@ lists every HA camera, groups by device, AI-picks the substream + the
 AI-classified motion sensors (preferring `_smart_motion_human` /
 `_person_detection` over noisy `_motion_alarm` / `_cell_motion`), with a
 clickable Enable / Disable / Override card per device. Per-device overrides
-persist to `/data/sentihome/adapter_overrides.json` with a live reconciler
+persist to `/data/kukiihome/adapter_overrides.json` with a live reconciler
 (no restart). v0.3.13 did the same for notifications — discovered every
 `notify.*` HA service, rendered one checkbox per service in a Notifications
-card, persisted to `/data/sentihome/notify_overrides.json`. v0.3.12 fixed
+card, persisted to `/data/kukiihome/notify_overrides.json`. v0.3.12 fixed
 three UI bugs that surfaced once real users hit the page (redirect-after-POST
 404 under Ingress, auto-refresh clobbering forms mid-edit, alerts wiped on
 restart → now persistent on `/data`).
@@ -62,7 +62,7 @@ notification + per-camera Send test alert buttons that capture a real
 snapshot, record a synthetic `[TEST]` alert, fire the notifier, and render
 per-service results inline. v0.3.15 made notifications themselves useful —
 the add-on now fetches its own Ingress URL from Supervisor at boot, so the
-notification's tap-action lands on the SentiHome status page (not HA's
+notification's tap-action lands on the Kukii-Home status page (not HA's
 random startup page) and the snapshot image renders via HA Companion's
 auth session; friendly camera names replace slugs; `data.tag` per camera
 makes sequential alerts collapse on the phone instead of stacking.
@@ -76,8 +76,8 @@ on their phone — no handwritten YAML anywhere in that path.
 ## Quick orientation
 
 ```bash
-git clone https://github.com/DarinShapiro/SentiHome.git
-cd SentiHome
+git clone https://github.com/DarinShapiro/Kukii-Home.git
+cd Kukii-Home
 ./scripts/setup/install.sh          # first-time setup (prereqs, uv sync, pnpm install)
 ./scripts/dev/test.sh                # run unit tests (Python + TypeScript)
 ./scripts/dev/lint.sh                # ruff + prettier + eslint + tsc
@@ -107,16 +107,16 @@ cd SentiHome
 | #    | Epic                                       | Sub-issues | Key deliverables                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ---- | ------------------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | #1   | Project Foundation & Infrastructure        | 14/14      | uv workspace, pnpm workspaces, docker-compose dev+prod, CI/integration/nightly workflows, shared Python + TS libraries, schema codegen pipeline, onboarding guide                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| #16  | Event Bus & Messaging                      | 9/9        | NATS JetStream config (4 streams + 9 consumers), `sentihome_shared.bus.Bus` with schema-validated pub/sub + trace propagation, triage worker with dedup + tiered routing + backpressure load shedding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| #16  | Event Bus & Messaging                      | 9/9        | NATS JetStream config (4 streams + 9 consumers), `kukiihome_shared.bus.Bus` with schema-validated pub/sub + trace propagation, triage worker with dedup + tiered routing + backpressure load shedding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | #26  | NVR Adapter Layer                          | 19/19      | `NVRAdapter` ABC, 7 platform adapters (rtsp-direct, agent-dvr, frigate fully fleshed; blueiris partially; synology, qnap, unifi as v1.x skeletons), `AdapterRegistry` with env-driven bootstrap                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | #46  | Preprocessing & Detection                  | 21/21      | Real OpenCV MOG2 motion detection with temporal/size/zone/environmental filtering, on-camera AI corroboration, in-memory metadata cache, `Detector` facade with stubbed ML model registry                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | #68  | VLM Router & Inference                     | 13/13      | Multi-backend router (Ollama/vLLM/Cloud OpenAI-compatible), routing policy with privacy enforcement + affinity + cost/latency scoring, 3-state circuit breaker, fallback chain, telemetry, response repair                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | #82  | Memory & Storage                           | 22/22      | SQLAlchemy ORM (11 tables across 5 memory layers), Alembic migration tooling, MemoryStore facade (sessions, hybrid rule retrieval, episodic, visit ledger, identity), retention + soft-delete + grace                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | #105 | Rule Engine & Conversational Rule Creation | 11/11      | RuleEvaluator (all §10 conditions + temporal), ConflictResolver (scope+severity+suppression), heuristic NL RuleParser, DEFAULT_RULE_PACK with Tier-1 safety                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | #117 | Action Dispatch & Alerting                 | 16/16      | TierRouter (Tier 0-4) + EscalationEngine + Quiet hours/Occupancy/DND routing + last-responder mitigation + PolicyGate (auto/gated/blocked) + PreApproval + RemediationRegistry + DeeperAssessmentLoop + Explanation + AckTracker + Push/TTS/Ask notify dispatchers                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| #265 | Deployment Topology & Bootstrap Config     | 15/15      | `sentihome_shared.topology` pydantic model + YAML loader + 3 profile presets (yellow_single_box/yellow_plus_inference/distributed) + `${VAR}` interpolation + `SENTIHOME__SECTION__FIELD` env overrides + HA Supervisor `/data/options.json` adapter + concurrent `Topology.verify()` dependency-ping. Services refactored to take topology slices via `from_topology` classmethods.                                                                                                                                                                                                                                                                                                                      |
-| #281 | HA Add-on Repository Packaging             | 7/7        | `repository.json` at repo root; `ha-integration/addon/sentihome/` Supervisor manifest + multi-arch Dockerfile + s6-overlay for all six services + `cont-init.d/10-bootstrap.sh` bridging `/data/options.json` → topology; README/DOCS/CHANGELOG; placeholder icons; `addon-build.yml` CI (yaml validation + hadolint + buildx amd64 + sanity-import).                                                                                                                                                                                                                                                                                                                                                     |
-| #134 | Home Assistant Integration                 | 22/22      | `services/ha-agent`: WS + REST client with auto-reconnect, `HATools` MCP surface (get_snapshot, get_changes, get_area_resources, list_capabilities, calendar, query, illuminate/darken/set_scene/lock/unlock/call_service), `AreaRegistry` with explicit-override + HA `area_id` attribute + entity-id heuristic resolution, `HAAgentAPI` HTTP shim, `AlertLog`, `make_ha_caller` notify-dispatcher seam. `ha-integration/custom_components/sentihome/` full integration: manifest config_flow:true, `SentiHomeAPIClient`, `SentiHomeCoordinator`, 2 binary sensors, 3 sensors, image entity, 2 buttons, number entity, 3 services, 3 events, strings + en translations. `hacs.json` + `docs/install.md`. |
+| #265 | Deployment Topology & Bootstrap Config     | 15/15      | `kukiihome_shared.topology` pydantic model + YAML loader + 3 profile presets (yellow_single_box/yellow_plus_inference/distributed) + `${VAR}` interpolation + `KUKIIHOME__SECTION__FIELD` env overrides + HA Supervisor `/data/options.json` adapter + concurrent `Topology.verify()` dependency-ping. Services refactored to take topology slices via `from_topology` classmethods.                                                                                                                                                                                                                                                                                                                      |
+| #281 | HA Add-on Repository Packaging             | 7/7        | `repository.json` at repo root; `ha-integration/addon/kukiihome/` Supervisor manifest + multi-arch Dockerfile + s6-overlay for all six services + `cont-init.d/10-bootstrap.sh` bridging `/data/options.json` → topology; README/DOCS/CHANGELOG; placeholder icons; `addon-build.yml` CI (yaml validation + hadolint + buildx amd64 + sanity-import).                                                                                                                                                                                                                                                                                                                                                     |
+| #134 | Home Assistant Integration                 | 22/22      | `services/ha-agent`: WS + REST client with auto-reconnect, `HATools` MCP surface (get_snapshot, get_changes, get_area_resources, list_capabilities, calendar, query, illuminate/darken/set_scene/lock/unlock/call_service), `AreaRegistry` with explicit-override + HA `area_id` attribute + entity-id heuristic resolution, `HAAgentAPI` HTTP shim, `AlertLog`, `make_ha_caller` notify-dispatcher seam. `ha-integration/custom_components/kukiihome/` full integration: manifest config_flow:true, `Kukii-HomeAPIClient`, `Kukii-HomeCoordinator`, 2 binary sensors, 3 sensors, image entity, 2 buttons, number entity, 3 services, 3 events, strings + en translations. `hacs.json` + `docs/install.md`. |
 
 ### Open epics (in dependency order)
 
@@ -137,7 +137,7 @@ cd SentiHome
 ## Repo layout (current state)
 
 ```
-SentiHome/
+Kukii-Home/
 ├── README.md, CONTRIBUTING.md, LICENSE, CODEOWNERS
 ├── pyproject.toml          uv workspace (16 members)
 ├── package.json            pnpm workspace (3 members)
@@ -147,7 +147,7 @@ SentiHome/
 │
 ├── docs/
 │   ├── architecture/        23 sections, all stable
-│   ├── ARCHITECTURE-CLARIFICATION.md  SentiHome vs HA boundary
+│   ├── ARCHITECTURE-CLARIFICATION.md  Kukii-Home vs HA boundary
 │   └── onboarding.md
 │
 ├── services/                7 Python services
@@ -180,7 +180,7 @@ SentiHome/
 │   │   └── events/          trigger, enriched, vlm-request, vlm-response, action
 │   ├── protos/              (empty, populated as MCP contracts firm up)
 │   ├── lib-python/          (REAL — logging, tracing, config, bus, mcp, adapter base)
-│   │   └── src/sentihome_shared/
+│   │   └── src/kukiihome_shared/
 │   │       ├── adapter/     NVRAdapter ABC + dataclasses (Epic 3 contract)
 │   │       ├── bus.py       Bus class — schema-validated NATS pub/sub
 │   │       ├── config.py    pydantic + env-var config loader
@@ -234,20 +234,20 @@ SentiHome/
 - **Python 3.12+**, `uv` for everything, PEP 695 generics (`def foo[T: BaseModel](...)`)
 - `from __future__ import annotations` at the top of every module
 - Async throughout for I/O paths
-- Structured logging via `sentihome_shared.logging.get_logger(__name__)`
-- Trace context: `from sentihome_shared.tracing import trace_context, new_trace_id`
+- Structured logging via `kukiihome_shared.logging.get_logger(__name__)`
+- Trace context: `from kukiihome_shared.tracing import trace_context, new_trace_id`
 - Per-package src layout: `src/<package_name>/...`, tests in `tests/`
 - Test files named `test_<unique>.py` (not just `test_import.py` — pytest collection collides)
 - Tests in `tests/` have NO `__init__.py` (avoids cross-package name collision)
 - Ruff strict + format with line length 100; `pyproject.toml` per-file-ignores for stubs (ARG002)
 - Mypy disabled in CI for now (re-enable once services have real implementations, not just stubs)
-- Pydantic v2 for all schemas; generated models live under `shared/lib-python/src/sentihome_shared/generated/`
+- Pydantic v2 for all schemas; generated models live under `shared/lib-python/src/kukiihome_shared/generated/`
 
 ### TypeScript
 
 - Strict mode everywhere; tsconfig extends `tsconfig.base.json`
 - Lit for HA cards (interop with HA frontend); React for standalone dashboard
-- `@sentihome/shared` exposes source via `main: src/index.ts` for zero-build workspace dev; `publishConfig` overrides to `dist/` for actual publishing
+- `@kukiihome/shared` exposes source via `main: src/index.ts` for zero-build workspace dev; `publishConfig` overrides to `dist/` for actual publishing
 
 ### Git workflow
 
@@ -266,11 +266,11 @@ SentiHome/
 
 ### NVR Adapter Layer
 
-- Every adapter inherits `sentihome_shared.adapter.NVRAdapter`
+- Every adapter inherits `kukiihome_shared.adapter.NVRAdapter`
 - Required: `name`, `mode`, `list_cameras`, `get_frame_window`, `subscribe_motion_events`
 - Optional (raise `UnsupportedCapability` by default): `enrich_frame`, `get_stream_url`, `slew_ptz`, `switch_profile`
 - Lifecycle: `start()` / `stop()` (default no-ops)
-- Service-mode adapters delegate frame retrieval to the preprocessor; built-in adapters consume pre-enriched data; direct adapters are SentiHome's own preprocessing
+- Service-mode adapters delegate frame retrieval to the preprocessor; built-in adapters consume pre-enriched data; direct adapters are Kukii-Home's own preprocessing
 
 ### Event Bus
 
@@ -285,7 +285,7 @@ SentiHome/
 
 - **pnpm install:** use `--ignore-scripts` flag (suppresses `[ERR_PNPM_IGNORED_BUILDS]` for `esbuild` which doesn't need native build)
 - **Prettier:** do NOT pass `--ignore-path .gitignore` — let it use `.prettierignore` (which correctly excludes `pnpm-lock.yaml`)
-- **Generated files:** both `shared/lib-typescript/src/generated/**` and `shared/lib-python/src/sentihome_shared/generated/**` are in `.prettierignore`; ruff `extend-exclude` covers Python generated
+- **Generated files:** both `shared/lib-typescript/src/generated/**` and `shared/lib-python/src/kukiihome_shared/generated/**` are in `.prettierignore`; ruff `extend-exclude` covers Python generated
 - **Qdrant in integration.yml:** no healthcheck (image lacks wget/curl); tests are responsible for waiting on readiness via the qdrant client
 - **`docker` not installed in dev shell:** Validate compose YAML via Python `yaml.safe_load` instead of `docker compose config`
 - **`@eslint/js`:** must be in `package.json` devDependencies (the flat config imports it)
@@ -298,7 +298,7 @@ SentiHome/
 1. Read this file end-to-end.
 2. Pick the next epic from the "Open epics" table — start with #68 (VLM Router).
 3. List sub-issues:
-     gh issue list --repo DarinShapiro/SentiHome --label "epic:vlm-router" --state open
+     gh issue list --repo DarinShapiro/Kukii-Home --label "epic:vlm-router" --state open
 4. Open the source-of-truth markdown for the epic:
      planning/epics/05-vlm-router.md
 5. For each sub-issue:
@@ -315,8 +315,8 @@ SentiHome/
      ./scripts/dev/lint.sh
      uv run pytest services/ adapters/ shared/ -q
 9. Push. Wait for CI:
-     RUN_ID=$(gh run list --repo DarinShapiro/SentiHome --workflow=CI --limit 1 --json databaseId --jq '.[0].databaseId')
-     gh run watch "$RUN_ID" --repo DarinShapiro/SentiHome --exit-status
+     RUN_ID=$(gh run list --repo DarinShapiro/Kukii-Home --workflow=CI --limit 1 --json databaseId --jq '.[0].databaseId')
+     gh run watch "$RUN_ID" --repo DarinShapiro/Kukii-Home --exit-status
 10. Move to the next epic.
 ```
 
@@ -327,7 +327,7 @@ SentiHome/
 - **ONNX-based real ML inference** in `services/detector/` — facade + stubs are enough until VLM router (Epic 5) is done; real model integration happens after a few epics have shaken out the contract surface
 - **Native Agent DVR plugin** — service-mode is the v1 baseline; native mode is a v2 optimization
 - **Stereo calibration full implementation** — Epic 14 ships the data model; full UX is real-world-data-dependent (see `docs/architecture/18-hardware-sizing.md` "preliminary" status)
-- **SentiHome Plugin API open spec** — far-future, after first native plugin ships
+- **Kukii-Home Plugin API open spec** — far-future, after first native plugin ships
 - **Hardware sizing refinement** — preliminary until maintainer's household deployment produces real data
 
 These are captured in `docs/architecture/20-open-questions.md`; don't re-litigate them without strong evidence.
@@ -384,14 +384,14 @@ uv run pytest services/core/tests -q
 python scripts/dev/sync-issues.py
 
 # Inspect issue status
-gh issue list --repo DarinShapiro/SentiHome --label "epic:<slug>" --state open
-gh issue view <num> --repo DarinShapiro/SentiHome
+gh issue list --repo DarinShapiro/Kukii-Home --label "epic:<slug>" --state open
+gh issue view <num> --repo DarinShapiro/Kukii-Home
 
 # Watch CI
-RUN_ID=$(gh run list --repo DarinShapiro/SentiHome --workflow=CI --limit 1 --json databaseId --jq '.[0].databaseId')
-gh run watch "$RUN_ID" --repo DarinShapiro/SentiHome --exit-status
+RUN_ID=$(gh run list --repo DarinShapiro/Kukii-Home --workflow=CI --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN_ID" --repo DarinShapiro/Kukii-Home --exit-status
 ```
 
 ---
 
-**Next session — pick up at Epic 10 (#157 Identity & Recognition).** The repo is now HA-installable end-to-end: users paste the repo URL into Supervisor → Add-ons → Repositories, install the add-on, then install the custom integration via HACS (or manual). See `docs/install.md` for the full walk-through. Identity is the next functional gap — without it SentiHome can detect "person" but not "Sarah vs unknown person." Good luck.
+**Next session — pick up at Epic 10 (#157 Identity & Recognition).** The repo is now HA-installable end-to-end: users paste the repo URL into Supervisor → Add-ons → Repositories, install the add-on, then install the custom integration via HACS (or manual). See `docs/install.md` for the full walk-through. Identity is the next functional gap — without it Kukii-Home can detect "person" but not "Sarah vs unknown person." Good luck.

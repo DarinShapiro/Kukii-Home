@@ -1,8 +1,8 @@
 {
-  "name": "@sentihome/operator-dashboard",
+  "name": "@kukiihome/operator-dashboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Optional standalone operator dashboard for SentiHome diagnostics + AI chat synthesis",
+  "description": "Optional standalone operator dashboard for Kukii-Home diagnostics + AI chat synthesis",
   "type": "module",
   "scripts": {
     "build": "vite build",
@@ -15,7 +15,7 @@
     "lint:fix": "eslint src --fix"
   },
   "dependencies": {
-    "@sentihome/shared": "workspace:*",
+    "@kukiihome/shared": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

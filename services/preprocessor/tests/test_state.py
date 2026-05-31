@@ -7,8 +7,8 @@ defensive guard that refuses upsert of deactivation events.
 from __future__ import annotations
 
 import pytest
-from sentihome_preprocessor.state import ActorCache
-from sentihome_shared.preprocessor import ActorEnrollmentEvent
+from kukiihome_preprocessor.state import ActorCache
+from kukiihome_shared.preprocessor import ActorEnrollmentEvent
 
 
 @pytest.mark.asyncio

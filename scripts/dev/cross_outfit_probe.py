@@ -34,17 +34,17 @@ from pathlib import Path
 import cv2
 import numpy as np
 import onnxruntime as ort
-from sentihome_preprocessor.pipelines.body_id import (
+from kukiihome_preprocessor.pipelines.body_id import (
     _crop_person,
     _l2_normalize_rows,
     _preprocess,
 )
 from ultralytics import YOLO
 
-OV_MODEL = "C:/Users/darin_jwxgczt/SentiHome/yolo11x_openvino_model"
+OV_MODEL = "C:/Users/darin_jwxgczt/Kukii-Home/yolo11x_openvino_model"
 MODELS = {
-    "OSNet": ("C:/Users/darin_jwxgczt/SentiHome/models/osnet_x1_0.onnx", 256, 128),
-    "CC-ReID": ("C:/Users/darin_jwxgczt/SentiHome/models/ccreid_cal_ltcc.onnx", 384, 192),
+    "OSNet": ("C:/Users/darin_jwxgczt/Kukii-Home/models/osnet_x1_0.onnx", 256, 128),
+    "CC-ReID": ("C:/Users/darin_jwxgczt/Kukii-Home/models/ccreid_cal_ltcc.onnx", 384, 192),
 }
 
 

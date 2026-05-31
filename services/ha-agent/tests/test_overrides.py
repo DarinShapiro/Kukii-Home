@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from sentihome_ha_agent.overrides import (
+from kukiihome_ha_agent.overrides import (
     load_overrides,
     reset_device,
     save_overrides,

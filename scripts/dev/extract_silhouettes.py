@@ -22,7 +22,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-OUT = Path("C:/Users/darin_jwxgczt/SentiHome/face_debug/silhouettes")
+OUT = Path("C:/Users/darin_jwxgczt/Kukii-Home/face_debug/silhouettes")
 GAIT_H, GAIT_W = 64, 44
 
 

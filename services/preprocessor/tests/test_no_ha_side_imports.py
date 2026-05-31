@@ -2,26 +2,26 @@
 
 The recognition preprocessor runs on the inference box, a SEPARATE
 machine from the HA add-on host. The only legitimate coupling is
-via wire contracts in ``sentihome_shared``. This test walks every
+via wire contracts in ``kukiihome_shared``. This test walks every
 Python source file under ``services/preprocessor/src/`` and asserts
 that no import targets a forbidden HA-side package.
 
 What this catches:
 
-* A drive-by ``from sentihome_memory.graph import GraphClient`` that
+* A drive-by ``from kukiihome_memory.graph import GraphClient`` that
   would silently work in dev (everything's installed editable) but
   break in production where the preprocessor's container doesn't
   include the memory service code.
-* A maintainer pulling in ``sentihome_core``'s dispatch logic
+* A maintainer pulling in ``kukiihome_core``'s dispatch logic
   thinking it's reusable, accumulating coupling that locks the two
   deployments together.
 
 What this DOESN'T catch (the wire contracts are correctly shared):
 
-* ``sentihome_shared.preprocessor.contracts`` — that's the contract
-* ``sentihome_shared.bus`` — generic NATS plumbing
-* ``sentihome_shared.topology`` — read-only camera/area config
-* Anything else under ``sentihome_shared``
+* ``kukiihome_shared.preprocessor.contracts`` — that's the contract
+* ``kukiihome_shared.bus`` — generic NATS plumbing
+* ``kukiihome_shared.topology`` — read-only camera/area config
+* Anything else under ``kukiihome_shared``
 """
 
 from __future__ import annotations
@@ -31,19 +31,19 @@ from pathlib import Path
 
 import pytest
 
-_PREPROCESSOR_SRC = Path(__file__).resolve().parent.parent / "src" / "sentihome_preprocessor"
+_PREPROCESSOR_SRC = Path(__file__).resolve().parent.parent / "src" / "kukiihome_preprocessor"
 
 # These are HA-side packages. The preprocessor must NEVER import any
-# of them. ``sentihome_shared`` is the legitimate coupling point and
+# of them. ``kukiihome_shared`` is the legitimate coupling point and
 # is NOT on this list.
 _FORBIDDEN_PACKAGES = frozenset(
     [
-        "sentihome_ha_agent",
-        "sentihome_memory",
-        "sentihome_core",
-        "sentihome_notify",
-        "sentihome_vlm_router",
-        "sentihome_detector",
+        "kukiihome_ha_agent",
+        "kukiihome_memory",
+        "kukiihome_core",
+        "kukiihome_notify",
+        "kukiihome_vlm_router",
+        "kukiihome_detector",
     ]
 )
 
@@ -83,9 +83,9 @@ def test_preprocessor_file_has_no_forbidden_imports(py_file: Path):
         f"{py_file.relative_to(_PREPROCESSOR_SRC)} imports forbidden HA-side "
         f"package(s): {sorted(forbidden_hits)}.\n"
         f"The preprocessor lives on the inference box and must only "
-        f"couple to HA-side code via wire contracts in sentihome_shared. "
+        f"couple to HA-side code via wire contracts in kukiihome_shared. "
         f"If you need a new contract, add it under "
-        f"sentihome_shared.preprocessor and have both sides import from there."
+        f"kukiihome_shared.preprocessor and have both sides import from there."
     )
 
 
@@ -98,5 +98,5 @@ def test_guard_covers_a_realistic_file_set():
 
 
 def test_forbidden_list_does_not_include_shared_package():
-    """The whole point is that sentihome_shared IS allowed."""
-    assert "sentihome_shared" not in _FORBIDDEN_PACKAGES
+    """The whole point is that kukiihome_shared IS allowed."""
+    assert "kukiihome_shared" not in _FORBIDDEN_PACKAGES

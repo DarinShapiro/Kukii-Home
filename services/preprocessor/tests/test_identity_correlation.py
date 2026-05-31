@@ -16,16 +16,16 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import pytest
-from sentihome_preprocessor.pipelines.rolling_buffer import (
+from kukiihome_preprocessor.pipelines.rolling_buffer import (
     AnnotationCache,
     BufferedFrame,
     RollingBuffer,
 )
-from sentihome_preprocessor.pipelines.rtsp_frame_buffer import (
+from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import (
     _correlate_identities,
 )
-from sentihome_preprocessor.state import ActorCache
-from sentihome_shared.preprocessor import (
+from kukiihome_preprocessor.state import ActorCache
+from kukiihome_shared.preprocessor import (
     ActorEnrollmentEvent,
     ActorMatch,
     DetectionTag,
@@ -255,7 +255,7 @@ class _StubDetectorReturning:
 async def test_get_window_writes_annotated_jpeg_to_cache_when_identified():
     """Wire a buffer with a recognized person, run get_window, verify
     annotation cache got a JPEG and FrameRef.annotated_uri is set."""
-    from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
+    from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
 
     rolling = RollingBuffer(horizon_seconds=3600.0)
     await rolling.write(
@@ -291,7 +291,7 @@ async def test_get_window_writes_annotated_jpeg_to_cache_when_identified():
     # result in the cache manually, then verify the endpoint.
     # This still validates: contract shapes, annotation cache wiring,
     # serve_annotated_frame behavior.
-    from sentihome_preprocessor.pipelines.rtsp_frame_buffer import (
+    from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import (
         _correlate_identities,
         _render_annotated_jpeg,
     )
@@ -314,7 +314,7 @@ async def test_get_window_writes_annotated_jpeg_to_cache_when_identified():
 
 @pytest.mark.asyncio
 async def test_serve_annotated_frame_missing_returns_none():
-    from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
+    from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
 
     buf = RTSPFrameBuffer(
         rolling_buffer=RollingBuffer(horizon_seconds=60.0),
@@ -330,7 +330,7 @@ async def test_serve_annotated_frame_missing_returns_none():
 async def test_serve_annotated_frame_returns_none_when_no_cache():
     """Backend without an annotation cache (the default for tests)
     always returns None — the route then responds 404."""
-    from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
+    from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
 
     buf = RTSPFrameBuffer(
         rolling_buffer=RollingBuffer(horizon_seconds=60.0),

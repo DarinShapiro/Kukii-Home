@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from sentihome_preprocessor.pipelines.identity.fusion import (
+from kukiihome_preprocessor.pipelines.identity.fusion import (
     DEFAULT_ALPHA,
     DEFAULT_WEIGHTS,
     fuse_matches,
     fuse_track,
 )
-from sentihome_shared.preprocessor import ActorMatch
+from kukiihome_shared.preprocessor import ActorMatch
 
 
 def _m(actor, method, conf, track="t1", ts=1.0) -> ActorMatch:

@@ -6,7 +6,7 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       formats: ['es'],
-      fileName: 'sentihome-cards',
+      fileName: 'kukiihome-cards',
     },
     rollupOptions: {
       external: [],

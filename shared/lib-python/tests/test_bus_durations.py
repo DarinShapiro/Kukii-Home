@@ -11,7 +11,7 @@ contract without needing a live NATS.
 
 from __future__ import annotations
 
-from sentihome_shared.bus import Bus
+from kukiihome_shared.bus import Bus
 
 
 class _CapturingJS:

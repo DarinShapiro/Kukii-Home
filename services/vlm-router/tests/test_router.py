@@ -7,11 +7,11 @@ privacy-violation handling.
 from __future__ import annotations
 
 import pytest
-from sentihome_shared.generated.events.vlm_request import VLMRequest
-from sentihome_shared.generated.events.vlm_response import VLMResponse
-from sentihome_vlm_router.backends import Backend, BackendCapability, BackendConfig
-from sentihome_vlm_router.errors import AllBackendsFailedError, BackendError, PrivacyViolationError
-from sentihome_vlm_router.router import Router, RouterConfig
+from kukiihome_shared.generated.events.vlm_request import VLMRequest
+from kukiihome_shared.generated.events.vlm_response import VLMResponse
+from kukiihome_vlm_router.backends import Backend, BackendCapability, BackendConfig
+from kukiihome_vlm_router.errors import AllBackendsFailedError, BackendError, PrivacyViolationError
+from kukiihome_vlm_router.router import Router, RouterConfig
 
 pytestmark = pytest.mark.asyncio
 

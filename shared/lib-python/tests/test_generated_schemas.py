@@ -12,7 +12,7 @@ import pytest
 
 
 def test_privacy_tier_enum() -> None:
-    from sentihome_shared.generated.common.privacy_tier import PrivacyTier
+    from kukiihome_shared.generated.common.privacy_tier import PrivacyTier
 
     assert PrivacyTier.local_only.value == "local_only"
     assert PrivacyTier.cloud_eligible.value == "cloud_eligible"
@@ -20,13 +20,13 @@ def test_privacy_tier_enum() -> None:
 
 
 def test_severity_enum() -> None:
-    from sentihome_shared.generated.common.severity import Severity
+    from kukiihome_shared.generated.common.severity import Severity
 
     assert {s.value for s in Severity} == {"info", "warning", "alert"}
 
 
 def test_trigger_event_validates() -> None:
-    from sentihome_shared.generated.events.trigger_event import (
+    from kukiihome_shared.generated.events.trigger_event import (
         EventType,
         PrivacyTier,
         Source,
@@ -48,12 +48,12 @@ def test_trigger_event_validates() -> None:
 
 
 def test_trigger_event_rejects_extras() -> None:
-    from pydantic import ValidationError
-    from sentihome_shared.generated.events.trigger_event import (
+    from kukiihome_shared.generated.events.trigger_event import (
         PrivacyTier,
         Source,
         TriggerEvent,
     )
+    from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
         TriggerEvent(
@@ -67,12 +67,12 @@ def test_trigger_event_rejects_extras() -> None:
 
 
 def test_trigger_event_requires_event_id_non_empty() -> None:
-    from pydantic import ValidationError
-    from sentihome_shared.generated.events.trigger_event import (
+    from kukiihome_shared.generated.events.trigger_event import (
         PrivacyTier,
         Source,
         TriggerEvent,
     )
+    from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
         TriggerEvent(

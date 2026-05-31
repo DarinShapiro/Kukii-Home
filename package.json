@@ -1,11 +1,11 @@
 {
-  "name": "sentihome",
+  "name": "kukiihome",
   "version": "0.1.0",
   "private": true,
   "description": "Vision-intelligence and rule-engine layer for Home Assistant",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DarinShapiro/SentiHome.git"
+    "url": "git+https://github.com/DarinShapiro/Kukii-Home.git"
   },
   "license": "MIT",
   "engines": {

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sentihome_ha_agent.event_store import EventStore
+from kukiihome_ha_agent.event_store import EventStore
 
 
 def _store(tmp_path: Path) -> EventStore:

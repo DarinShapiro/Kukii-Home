@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from sentihome_detector import Detection, Detector, DetectorConfig
+from kukiihome_detector import Detection, Detector, DetectorConfig
 
 
 def _zero_frame(h: int = 480, w: int = 640) -> np.ndarray:

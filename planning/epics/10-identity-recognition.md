@@ -251,20 +251,20 @@ POST /actors/enroll                → fall-back direct enrollment (canonical pa
 The preprocessor has **no outbound NATS traffic**. NATS is only used **inbound** for one-to-many config-state broadcasts:
 
 ```
-sentihome.memory.actor.enrolled     → ActorEnrollmentEvent   (memory → preprocessor)
-sentihome.memory.actor.updated      → ActorEnrollmentEvent
-sentihome.memory.actor.deactivated  → ActorEnrollmentEvent
+kukiihome.memory.actor.enrolled     → ActorEnrollmentEvent   (memory → preprocessor)
+kukiihome.memory.actor.updated      → ActorEnrollmentEvent
+kukiihome.memory.actor.deactivated  → ActorEnrollmentEvent
 
-sentihome.ha.camera.configured      → CameraConfigEvent      (ha-agent → preprocessor)
-sentihome.ha.camera.removed         → CameraConfigEvent
+kukiihome.ha.camera.configured      → CameraConfigEvent      (ha-agent → preprocessor)
+kukiihome.ha.camera.removed         → CameraConfigEvent
 ```
 
 - **Memory → preprocessor (actor enrollment)**: memory publishes when a KnownActor changes; the preprocessor subscribes to keep its in-process identity cache fresh without an extra REST round-trip per recognition.
 - **HA-agent → preprocessor (camera config)**: ha-agent publishes when its discovery + override layer settles on a camera. The CameraConfigEvent carries a `stream_url` (either raw `rtsp://...` or HA's HLS proxy `http://.../hls/...m3u8?token=...`) plus protocol hint + token refresh hint. The preprocessor's `CameraConfigSubscriber` routes these to the `RTSPCaptureSupervisor`'s dynamic `add()`/`remove()` so capture tasks start/stop in real time. **This eliminates env-var URL handwriting** — the preprocessor learns cameras from the HA side where the credentials and integrations already live.
 
-> **Status (2026-05-27): Phase 10.3 YOLO11x detection landed.** `services/preprocessor/src/sentihome_preprocessor/pipelines/detection.py` wraps Ultralytics' YOLO (default `yolo11n.pt` for dev; `yolo11x.pt` for the inference box). The detector runs in a thread-executor so the asyncio event loop stays responsive; CUDA is auto-picked when torch sees a GPU. `RTSPFrameBuffer` accepts an optional `YOLODetector` and populates `FrameWindow.detections` from real frames when one is wired in. COCO's 80 classes collapse onto our 6-class tag vocabulary (person, vehicle, dog, cat, animal, plus "uninteresting" classes filtered out entirely). Detection is opt-in via `SENTIHOME_PREPROCESSOR_DETECTION=true` — off by default so adding ultralytics + torch (~500 MB) at runtime is a deliberate choice. End-to-end smoke tests load yolo11n.pt and run inference on synthetic frames in 131s; unit tests mock the model output and run in <1s. Face / pet / plate enrichment (ArcFace / DINOv2 / fastALPR) wires onto the same shape in Phase 10.4+ by branching on `DetectionTag.kind`.
+> **Status (2026-05-27): Phase 10.3 YOLO11x detection landed.** `services/preprocessor/src/kukiihome_preprocessor/pipelines/detection.py` wraps Ultralytics' YOLO (default `yolo11n.pt` for dev; `yolo11x.pt` for the inference box). The detector runs in a thread-executor so the asyncio event loop stays responsive; CUDA is auto-picked when torch sees a GPU. `RTSPFrameBuffer` accepts an optional `YOLODetector` and populates `FrameWindow.detections` from real frames when one is wired in. COCO's 80 classes collapse onto our 6-class tag vocabulary (person, vehicle, dog, cat, animal, plus "uninteresting" classes filtered out entirely). Detection is opt-in via `KUKIIHOME_PREPROCESSOR_DETECTION=true` — off by default so adding ultralytics + torch (~500 MB) at runtime is a deliberate choice. End-to-end smoke tests load yolo11n.pt and run inference on synthetic frames in 131s; unit tests mock the model output and run in <1s. Face / pet / plate enrichment (ArcFace / DINOv2 / fastALPR) wires onto the same shape in Phase 10.4+ by branching on `DetectionTag.kind`.
 
-> **Status (2026-05-27): Phase 10.1 + Phase 10.1.5 skeleton landed.** Wire contracts in `sentihome_shared.preprocessor` (FrameWindow, FrameRef, DetectionTag, ActorMatch, KnobAdjustment, ActorEnrollmentEvent, PreprocessorStatus — strict Pydantic, schema_version="v1"). Service in `services/preprocessor/` with FastAPI app + ActorEnrollmentSubscriber + a `FrameBufferBackend` Protocol holding either `SyntheticFrameBuffer` (CI / wire validation) or `RTSPFrameBuffer`+`RollingBuffer`+`CameraCaptureTask`s (real H.264 sub-stream NVR mode). Backend is config-driven via `SENTIHOME_PREPROCESSOR_BACKEND={synthetic|rtsp}`. `GET /frames/{camera_id}/{ts}.jpg` serves stored JPEG keyframes on demand. Per-camera PyAV tasks pull H.264 sub-streams with TCP transport + bounded exponential backoff on disconnect; JPEG-encoded keyframes held in a 5-min rolling buffer (~75 MB for 5 cameras). Real detection + recognition (YOLO11x, ArcFace, DINOv2, fastALPR) wire in Phase 10.3+ behind the unchanged `get_window` interface. Decoupling guard test enforces no HA-side imports. **108 tests green** (105 unit + 3 integration; 2 integration tests skip without ffmpeg on PATH). Dev compose stack exposes the service at `localhost:8090`. The container can now genuinely act as a mini-NVR for early dev without depending on Agent DVR being online.
+> **Status (2026-05-27): Phase 10.1 + Phase 10.1.5 skeleton landed.** Wire contracts in `kukiihome_shared.preprocessor` (FrameWindow, FrameRef, DetectionTag, ActorMatch, KnobAdjustment, ActorEnrollmentEvent, PreprocessorStatus — strict Pydantic, schema_version="v1"). Service in `services/preprocessor/` with FastAPI app + ActorEnrollmentSubscriber + a `FrameBufferBackend` Protocol holding either `SyntheticFrameBuffer` (CI / wire validation) or `RTSPFrameBuffer`+`RollingBuffer`+`CameraCaptureTask`s (real H.264 sub-stream NVR mode). Backend is config-driven via `KUKIIHOME_PREPROCESSOR_BACKEND={synthetic|rtsp}`. `GET /frames/{camera_id}/{ts}.jpg` serves stored JPEG keyframes on demand. Per-camera PyAV tasks pull H.264 sub-streams with TCP transport + bounded exponential backoff on disconnect; JPEG-encoded keyframes held in a 5-min rolling buffer (~75 MB for 5 cameras). Real detection + recognition (YOLO11x, ArcFace, DINOv2, fastALPR) wire in Phase 10.3+ behind the unchanged `get_window` interface. Decoupling guard test enforces no HA-side imports. **108 tests green** (105 unit + 3 integration; 2 integration tests skip without ffmpeg on PATH). Dev compose stack exposes the service at `localhost:8090`. The container can now genuinely act as a mini-NVR for early dev without depending on Agent DVR being online.
 
 ### Source flexibility
 
@@ -479,7 +479,7 @@ When production VLM responses fail validation, hallucinate citations, or get cor
 - "Replay this alert" in Web UI (re-run with current or experimental prompts)
 - The VLM debugger surface for manual prompt iteration
 
-**The eval corpus is the long-term IP** — months of accumulated regression cases documenting "behavior SentiHome must preserve."
+**The eval corpus is the long-term IP** — months of accumulated regression cases documenting "behavior Kukii-Home must preserve."
 
 ---
 
@@ -668,7 +668,7 @@ Replacing the prior issue stub. Issues are grouped by phase; labels include `epi
 
 - **feat(preprocessor): agent_dvr_native backend kind (pull AD's native detections)**
 - **feat(preprocessor): per-camera routing (some cams via AD-native, others via passthrough)**
-- **doc: Agent DVR setup guide for SentiHome integration**
+- **doc: Agent DVR setup guide for Kukii-Home integration**
 
 ---
 

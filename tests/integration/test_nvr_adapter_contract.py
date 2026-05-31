@@ -14,21 +14,21 @@ exercise the in-memory contract surface across all adapter packages.
 from __future__ import annotations
 
 import pytest
-from sentihome_shared.adapter import NVRAdapter, PreprocessingMode
-from sentihome_shared.adapter.base import AdapterError, CameraCapability
+from kukiihome_shared.adapter import NVRAdapter, PreprocessingMode
+from kukiihome_shared.adapter.base import AdapterError, CameraCapability
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
 def _all_adapter_classes() -> list[tuple[str, NVRAdapter]]:
     """Instantiate every adapter with default config."""
-    from sentihome_adapter_agent_dvr import AgentDVRAdapter, AgentDVRConfig
-    from sentihome_adapter_blueiris import BlueIrisAdapter, BlueIrisConfig
-    from sentihome_adapter_frigate import FrigateAdapter, FrigateConfig
-    from sentihome_adapter_qnap import QnapAdapter, QnapConfig
-    from sentihome_adapter_rtsp_direct import RTSPDirectAdapter
-    from sentihome_adapter_synology import SynologyAdapter, SynologyConfig
-    from sentihome_adapter_unifi import UnifiAdapter, UnifiConfig
+    from kukiihome_adapter_agent_dvr import AgentDVRAdapter, AgentDVRConfig
+    from kukiihome_adapter_blueiris import BlueIrisAdapter, BlueIrisConfig
+    from kukiihome_adapter_frigate import FrigateAdapter, FrigateConfig
+    from kukiihome_adapter_qnap import QnapAdapter, QnapConfig
+    from kukiihome_adapter_rtsp_direct import RTSPDirectAdapter
+    from kukiihome_adapter_synology import SynologyAdapter, SynologyConfig
+    from kukiihome_adapter_unifi import UnifiAdapter, UnifiConfig
 
     return [
         ("rtsp-direct", RTSPDirectAdapter(cameras=[])),

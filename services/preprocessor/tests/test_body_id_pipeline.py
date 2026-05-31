@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from sentihome_preprocessor.pipelines.body_id import DetectedBody
-from sentihome_preprocessor.pipelines.identity import BodyIdPipeline
-from sentihome_preprocessor.pipelines.identity.router import EnrolledCorpus
-from sentihome_preprocessor.pipelines.rolling_buffer import BufferedFrame
-from sentihome_shared.preprocessor import DetectionTag
+from kukiihome_preprocessor.pipelines.body_id import DetectedBody
+from kukiihome_preprocessor.pipelines.identity import BodyIdPipeline
+from kukiihome_preprocessor.pipelines.identity.router import EnrolledCorpus
+from kukiihome_preprocessor.pipelines.rolling_buffer import BufferedFrame
+from kukiihome_shared.preprocessor import DetectionTag
 
 
 def _real_jpeg(ts: float, w: int = 100, h: int = 100) -> BufferedFrame:

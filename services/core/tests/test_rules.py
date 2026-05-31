@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sentihome_core.rules import (
+from kukiihome_core.rules import (
     DEFAULT_RULE_PACK,
     ConflictResolver,
     RuleEvalContext,
@@ -15,7 +15,7 @@ from sentihome_core.rules import (
     record_fire,
     should_propose_suppression,
 )
-from sentihome_memory.models import RuleRecord
+from kukiihome_memory.models import RuleRecord
 
 
 def _ctx(

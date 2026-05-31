@@ -62,7 +62,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sentihome_shared.preprocessor import IdentifiedEntity
+from kukiihome_shared.preprocessor import IdentifiedEntity
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -171,7 +171,7 @@ def render_annotated_jpeg(fixture: Fixture) -> bytes:
     measures what production actually does."""
     import cv2
     import numpy as np
-    from sentihome_preprocessor.pipelines.markup import annotate_frame, encode_jpeg
+    from kukiihome_preprocessor.pipelines.markup import annotate_frame, encode_jpeg
 
     arr = np.frombuffer(fixture.raw_jpeg(), dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)

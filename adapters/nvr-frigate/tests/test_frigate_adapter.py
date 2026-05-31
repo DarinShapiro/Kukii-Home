@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 
 import pytest
-from sentihome_adapter_frigate import FrigateAdapter, FrigateConfig
-from sentihome_shared.adapter import PreprocessingMode
+from kukiihome_adapter_frigate import FrigateAdapter, FrigateConfig
+from kukiihome_shared.adapter import PreprocessingMode
 
 
 def test_frigate_adapter_identity() -> None:

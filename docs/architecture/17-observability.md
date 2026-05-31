@@ -220,7 +220,7 @@ Visible at a glance: system status, critical alerts, top recommendations.
 
 ```
 ╔═════════════════════════════════════════════════════════════════════════════╗
-║ SentiHome Status: HEALTHY / ⚠ DEGRADED / 🔴 CRITICAL                       ║
+║ Kukii-Home Status: HEALTHY / ⚠ DEGRADED / 🔴 CRITICAL                       ║
 ║ Last sync: 45s ago                                                          ║
 ╠═════════════════════════════════════════════════════════════════════════════╣
 ║                                                                             ║

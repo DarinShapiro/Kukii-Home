@@ -1,6 +1,6 @@
 """Alembic env.py — async-aware migration runner.
 
-Wires up SentiHome's models so autogenerate works.
+Wires up Kukii-Home's models so autogenerate works.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from sentihome_memory.models import Base
+from kukiihome_memory.models import Base
 
 config = context.config
 

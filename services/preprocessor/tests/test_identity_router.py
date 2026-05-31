@@ -12,13 +12,13 @@ import time
 
 import numpy as np
 import pytest
-from sentihome_preprocessor.pipelines.identity.router import (
+from kukiihome_preprocessor.pipelines.identity.router import (
     EnrolledCorpus,
     IdentityRouter,
 )
-from sentihome_preprocessor.pipelines.rolling_buffer import BufferedFrame
-from sentihome_preprocessor.state import ActorCache
-from sentihome_shared.preprocessor import (
+from kukiihome_preprocessor.pipelines.rolling_buffer import BufferedFrame
+from kukiihome_preprocessor.state import ActorCache
+from kukiihome_shared.preprocessor import (
     ActorEnrollmentEvent,
     ActorMatch,
     DetectionTag,
@@ -437,7 +437,7 @@ async def test_chain_skips_only_track_ids_face_matched_confidently():
             return True
 
         async def run(self, *, frame, detections, corpus):
-            from sentihome_shared.preprocessor import ActorMatch
+            from kukiihome_shared.preprocessor import ActorMatch
 
             self.calls.append(tuple(d.track_id for d in detections))
             # Only emit for t1.
@@ -529,7 +529,7 @@ async def test_chain_skip_does_not_affect_other_frames():
             return True
 
         async def run(self, *, frame, detections, corpus):
-            from sentihome_shared.preprocessor import ActorMatch
+            from kukiihome_shared.preprocessor import ActorMatch
 
             if frame.ts == 1.0:
                 return tuple(
@@ -574,7 +574,7 @@ async def test_chain_skip_does_not_affect_other_frames():
 async def test_identify_records_per_pipeline_timings():
     """When a StepTimings is passed, identify accumulates per-pipeline
     wall-clock under ``id.<name>`` keys (Epic 10.11.2)."""
-    from sentihome_shared.timing import StepTimings
+    from kukiihome_shared.timing import StepTimings
 
     face = _StubPipeline("face_arcface", frozenset({"person"}), delay_seconds=0.01)
     pet = _StubPipeline("pet_dinov2", frozenset({"dog"}), delay_seconds=0.01)
@@ -611,9 +611,9 @@ async def test_identify_without_timings_still_returns_matches():
 def test_concrete_pipelines_declare_capability_descriptors():
     """Each real pipeline declares the scheduling/placement descriptors
     (Epic 10.11.2) the ResourcePool + simulator will consume."""
-    from sentihome_preprocessor.pipelines.identity.body_id_pipeline import BodyIdPipeline
-    from sentihome_preprocessor.pipelines.identity.face_pipeline import FacePipeline
-    from sentihome_preprocessor.pipelines.identity.pet_pipeline import PetPipeline
+    from kukiihome_preprocessor.pipelines.identity.body_id_pipeline import BodyIdPipeline
+    from kukiihome_preprocessor.pipelines.identity.face_pipeline import FacePipeline
+    from kukiihome_preprocessor.pipelines.identity.pet_pipeline import PetPipeline
 
     for cls, modality, batchable in (
         (FacePipeline, "face", False),
@@ -635,7 +635,7 @@ def test_concrete_pipelines_declare_capability_descriptors():
 async def test_router_gpu_pool_serializes_inference():
     """With a gpu pool of size 1, two gpu pipelines on one frame run
     one-at-a-time → wall-clock ~= sum, not max."""
-    from sentihome_preprocessor.pipelines.identity.scheduling import ResourcePool
+    from kukiihome_preprocessor.pipelines.identity.scheduling import ResourcePool
 
     face = _StubPipeline(
         "face_arcface", frozenset({"person"}), delay_seconds=0.03, resource_class="gpu"

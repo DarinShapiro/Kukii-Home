@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from sentihome_preprocessor.pipelines.body_id import (
+from kukiihome_preprocessor.pipelines.body_id import (
     BodyIdConfig,
     BodyIdRecognizer,
 )
@@ -37,16 +37,16 @@ def _resolve_model_path() -> Path | None:
     """Look for a real OSNet ONNX in a few candidate locations.
 
     Order of preference:
-    1. ``SENTIHOME_TEST_OSNET_PATH`` env override (CI explicit path)
+    1. ``KUKIIHOME_TEST_OSNET_PATH`` env override (CI explicit path)
     2. The preprocessor's production-default path
     3. A dev-friendly path next to the repo
     """
     candidates = []
-    env = os.environ.get("SENTIHOME_TEST_OSNET_PATH")
+    env = os.environ.get("KUKIIHOME_TEST_OSNET_PATH")
     if env:
         candidates.append(Path(env))
-    candidates.append(Path("/data/sentihome/models/osnet_x1_0.onnx"))
-    candidates.append(Path.home() / ".cache" / "sentihome" / "osnet_x1_0.onnx")
+    candidates.append(Path("/data/kukiihome/models/osnet_x1_0.onnx"))
+    candidates.append(Path.home() / ".cache" / "kukiihome" / "osnet_x1_0.onnx")
     for c in candidates:
         if c.is_file():
             return c
@@ -66,7 +66,7 @@ pytestmark = [
         reason=(
             "No OSNet ONNX found. Run "
             "scripts/dev/export_osnet_onnx.py and set "
-            "SENTIHOME_TEST_OSNET_PATH if not at the default."
+            "KUKIIHOME_TEST_OSNET_PATH if not at the default."
         ),
     ),
 ]

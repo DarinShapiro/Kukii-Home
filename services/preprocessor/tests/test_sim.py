@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sentihome_preprocessor.pipelines.identity.sim import (
+from kukiihome_preprocessor.pipelines.identity.sim import (
     SimFrame,
     SimPipeline,
     simulate,

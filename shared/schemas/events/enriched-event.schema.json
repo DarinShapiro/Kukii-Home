@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentihome.io/schemas/v1/events/enriched-event.schema.json",
+  "$id": "https://kukiihome.io/schemas/v1/events/enriched-event.schema.json",
   "title": "EnrichedEvent",
   "description": "TriggerEvent + detector enrichment + context references. Produced by the preprocessor or built-in adapter; consumed by the triage worker before VLM call.",
   "type": "object",

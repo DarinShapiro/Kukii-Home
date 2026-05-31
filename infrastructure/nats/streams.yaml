@@ -1,4 +1,4 @@
-# SentiHome — NATS JetStream stream + consumer declarations.
+# Kukii-Home — NATS JetStream stream + consumer declarations.
 #
 # Applied at boot by services/core (or by `nats stream add` for manual setup).
 # See: docs/architecture/03-event-bus-and-queueing.md

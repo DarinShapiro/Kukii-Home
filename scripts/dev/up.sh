@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/dev/up.sh — Bring up the SentiHome dev stack.
+# scripts/dev/up.sh — Bring up the Kukii-Home dev stack.
 #
 # Usage:
 #   ./scripts/dev/up.sh            # all services

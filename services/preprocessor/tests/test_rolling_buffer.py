@@ -7,7 +7,7 @@ reads, horizon eviction, and exact-ts lookups (for the /frames route).
 from __future__ import annotations
 
 import pytest
-from sentihome_preprocessor.pipelines.rolling_buffer import (
+from kukiihome_preprocessor.pipelines.rolling_buffer import (
     BufferedFrame,
     RollingBuffer,
 )
@@ -163,7 +163,7 @@ def test_rejects_invalid_max_entries():
 
 @pytest.mark.asyncio
 async def test_annotation_cache_put_and_get():
-    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+    from kukiihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
 
     c = AnnotationCache(horizon_seconds=60.0)
     await c.put("cam_a", 100.0, b"jpeg-bytes-here")
@@ -173,7 +173,7 @@ async def test_annotation_cache_put_and_get():
 
 @pytest.mark.asyncio
 async def test_annotation_cache_get_missing_returns_none():
-    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+    from kukiihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
 
     c = AnnotationCache(horizon_seconds=60.0)
     assert await c.get("ghost", 999.0) is None
@@ -181,7 +181,7 @@ async def test_annotation_cache_get_missing_returns_none():
 
 @pytest.mark.asyncio
 async def test_annotation_cache_overwrite_replaces_value():
-    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+    from kukiihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
 
     c = AnnotationCache(horizon_seconds=60.0)
     await c.put("cam_a", 100.0, b"v1")
@@ -191,7 +191,7 @@ async def test_annotation_cache_overwrite_replaces_value():
 
 @pytest.mark.asyncio
 async def test_annotation_cache_size_and_total_bytes():
-    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+    from kukiihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
 
     c = AnnotationCache(horizon_seconds=60.0)
     await c.put("cam_a", 100.0, b"x" * 100)
@@ -201,7 +201,7 @@ async def test_annotation_cache_size_and_total_bytes():
 
 
 def test_annotation_cache_rejects_invalid_horizon():
-    from sentihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
+    from kukiihome_preprocessor.pipelines.rolling_buffer import AnnotationCache
 
     with pytest.raises(ValueError, match="horizon_seconds"):
         AnnotationCache(horizon_seconds=0)

@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sentihome_memory.graph import (
+from kukiihome_memory.graph import (
     CitedEdge,
     Event,
     GraphClient,

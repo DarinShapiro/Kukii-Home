@@ -1,8 +1,8 @@
 {
-  "name": "@sentihome/ha-cards",
+  "name": "@kukiihome/ha-cards",
   "version": "0.1.0",
   "private": true,
-  "description": "Custom Home Assistant Lovelace cards for SentiHome",
+  "description": "Custom Home Assistant Lovelace cards for Kukii-Home",
   "type": "module",
   "scripts": {
     "build": "vite build",
@@ -14,7 +14,7 @@
     "lint:fix": "eslint src --fix"
   },
   "dependencies": {
-    "@sentihome/shared": "workspace:*",
+    "@kukiihome/shared": "workspace:*",
     "lit": "^3.2.1"
   },
   "devDependencies": {

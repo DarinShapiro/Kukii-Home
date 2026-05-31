@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 import pytest
-from sentihome_ha_agent import (
+from kukiihome_ha_agent import (
     AlertLog,
     AreaRegistry,
     HAAgentAPI,
@@ -77,7 +77,7 @@ async def test_client_get_state_returns_none_on_404():
 async def test_client_call_service_raises_on_4xx():
     routes = {("POST", "/api/services/light/turn_on"): httpx.Response(400, json={"message": "bad"})}
     client = _client_with_mocks(routes)
-    from sentihome_ha_agent import HAClientError
+    from kukiihome_ha_agent import HAClientError
 
     with pytest.raises(HAClientError):
         await client.call_service("light", "turn_on", entity_id="light.porch")
@@ -311,7 +311,7 @@ async def test_tools_discover_ha_cameras_handles_stream_suffix_mismatch():
 async def test_client_fetch_camera_snapshot_returns_bytes():
     """v0.3.3: HAClient.fetch_camera_snapshot hits /api/camera_proxy and
     returns the response bytes. Used instead of the camera.snapshot
-    service because the latter writes HA-Core-side and SentiHome's
+    service because the latter writes HA-Core-side and Kukii-Home's
     /data is a different mountpoint."""
     fake_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"x" * 1000
     routes = {
@@ -325,7 +325,7 @@ async def test_client_fetch_camera_snapshot_returns_bytes():
 
 
 async def test_client_fetch_camera_snapshot_raises_on_4xx():
-    from sentihome_ha_agent import HAClientError
+    from kukiihome_ha_agent import HAClientError
 
     routes = {("GET", "/api/camera_proxy/camera.missing"): httpx.Response(404, text="not found")}
     client = _client_with_mocks(routes)
@@ -370,7 +370,7 @@ async def test_tools_list_ha_cameras_empty_when_no_cameras():
 def test_topology_accepts_ha_camera_adapter_kind():
     """v0.3.0: AdapterConfig now accepts kind='ha-camera' with
     camera_entity + motion_entities + snapshot_cooldown_seconds."""
-    from sentihome_shared.topology import AdapterConfig, Topology
+    from kukiihome_shared.topology import AdapterConfig, Topology
 
     cfg = AdapterConfig(
         name="pool-cam",
@@ -581,8 +581,8 @@ async def test_make_ha_caller_rejects_malformed_service():
 
 
 def test_ha_agent_settings_requires_token():
-    from sentihome_ha_agent import HAAgentSettings
-    from sentihome_shared.topology import HAAgentConfig, Topology
+    from kukiihome_ha_agent import HAAgentSettings
+    from kukiihome_shared.topology import HAAgentConfig, Topology
 
     topo = Topology(ha_agent=HAAgentConfig(ha_url="http://x", ha_token=""))
     with pytest.raises(ValueError):
@@ -590,8 +590,8 @@ def test_ha_agent_settings_requires_token():
 
 
 def test_ha_agent_settings_from_topology_populates_fields():
-    from sentihome_ha_agent import HAAgentSettings
-    from sentihome_shared.topology import HAAgentConfig, Topology
+    from kukiihome_ha_agent import HAAgentSettings
+    from kukiihome_shared.topology import HAAgentConfig, Topology
 
     topo = Topology(ha_agent=HAAgentConfig(ha_url="http://h", ha_token="t", websocket=False))
     s = HAAgentSettings.from_topology(topo)

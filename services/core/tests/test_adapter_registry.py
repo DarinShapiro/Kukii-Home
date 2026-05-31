@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 
 import pytest
-from sentihome_adapter_rtsp_direct import CameraConfig, RTSPDirectAdapter
-from sentihome_core.adapter_registry import AdapterRegistry, bootstrap_from_env
-from sentihome_shared.adapter import PreprocessingMode
+from kukiihome_adapter_rtsp_direct import CameraConfig, RTSPDirectAdapter
+from kukiihome_core.adapter_registry import AdapterRegistry, bootstrap_from_env
+from kukiihome_shared.adapter import PreprocessingMode
 
 pytestmark = pytest.mark.asyncio
 
@@ -64,7 +64,7 @@ async def test_camera_conflict_first_wins() -> None:
 def test_bootstrap_returns_empty_when_no_env_set(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     # Clear any env vars
     for key in list(os.environ):
-        if key.startswith("SENTIHOME_ADAPTER_"):
+        if key.startswith("KUKIIHOME_ADAPTER_"):
             monkeypatch.delenv(key, raising=False)
     reg = bootstrap_from_env()
     assert reg.adapters == []
@@ -74,19 +74,19 @@ def test_bootstrap_picks_up_rtsp_direct_from_env(monkeypatch) -> None:  # type: 
     import json
 
     config = json.dumps([{"camera_id": "envcam", "rtsp_url": "rtsp://env.example/main"}])
-    monkeypatch.setenv("SENTIHOME_ADAPTER_RTSP_DIRECT_CONFIG", config)
+    monkeypatch.setenv("KUKIIHOME_ADAPTER_RTSP_DIRECT_CONFIG", config)
     reg = bootstrap_from_env()
     assert len(reg.adapters) == 1
     assert reg.adapters[0].name == "adapter-rtsp-direct"
 
 
 def test_bootstrap_picks_up_agent_dvr_url(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setenv("SENTIHOME_ADAPTER_AGENT_DVR_URL", "http://localhost:8090")
+    monkeypatch.setenv("KUKIIHOME_ADAPTER_AGENT_DVR_URL", "http://localhost:8090")
     reg = bootstrap_from_env()
     assert any(a.name == "adapter-agent-dvr" for a in reg.adapters)
 
 
 def test_bootstrap_picks_up_frigate(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setenv("SENTIHOME_ADAPTER_FRIGATE_URL", "http://frigate.local:5000")
+    monkeypatch.setenv("KUKIIHOME_ADAPTER_FRIGATE_URL", "http://frigate.local:5000")
     reg = bootstrap_from_env()
     assert any(a.name == "adapter-frigate" for a in reg.adapters)

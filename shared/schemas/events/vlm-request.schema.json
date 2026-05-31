@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentihome.io/schemas/v1/events/vlm-request.schema.json",
+  "$id": "https://kukiihome.io/schemas/v1/events/vlm-request.schema.json",
   "title": "VLMRequest",
   "description": "Request to the VLM router. Assembled by the triage worker from EnrichedEvent + context. See §09.",
   "type": "object",

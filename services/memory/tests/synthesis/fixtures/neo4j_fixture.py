@@ -88,7 +88,7 @@ def neo4j_driver(neo4j_container):
 @pytest.fixture
 def neo4j_client(neo4j_driver):
     """A fresh Neo4jGraphClient with schema initialized + data cleared."""
-    from sentihome_memory.graph import Neo4jGraphClient
+    from kukiihome_memory.graph import Neo4jGraphClient
 
     client = Neo4jGraphClient(driver=neo4j_driver)
     client.initialize_schema()
@@ -99,6 +99,6 @@ def neo4j_client(neo4j_driver):
 @pytest.fixture
 def in_memory_client():
     """A fresh InMemoryGraphClient."""
-    from sentihome_memory.graph import InMemoryGraphClient
+    from kukiihome_memory.graph import InMemoryGraphClient
 
     return InMemoryGraphClient()

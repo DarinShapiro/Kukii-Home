@@ -6,7 +6,7 @@
  */
 
 /**
- * Per-camera capability matrix advertised by an NVR adapter. Used by SentiHome core for routing decisions (which features are available where).
+ * Per-camera capability matrix advertised by an NVR adapter. Used by Kukii-Home core for routing decisions (which features are available where).
  */
 export interface NVRCapability {
   camera_id: string;

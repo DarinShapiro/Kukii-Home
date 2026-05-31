@@ -17,7 +17,7 @@ import io
 
 import numpy as np
 import pytest
-from sentihome_preprocessor.pipelines.detection import (
+from kukiihome_preprocessor.pipelines.detection import (
     _INTERESTING_COCO_CLASSES,
     DetectionConfig,
     YOLODetector,

@@ -1,0 +1,39 @@
+acknowledge_alert:
+  name: Acknowledge alert
+  description: Mark a Kukii-Home alert as acknowledged with optional feedback.
+  fields:
+    alert_id:
+      name: Alert ID
+      required: true
+      selector:
+        text:
+    feedback:
+      name: Feedback
+      required: false
+      default: correct
+      selector:
+        select:
+          options:
+            - correct
+            - false_alarm
+            - not_sure
+            - edit_rule
+
+run_optimization:
+  name: Run optimization
+  description: Trigger Kukii-Home's feedback-driven rule optimization loop.
+
+label_person:
+  name: Label person
+  description: Tag a detected person with a known identity for retraining.
+  fields:
+    actor_id:
+      name: Actor ID
+      required: true
+      selector:
+        text:
+    name:
+      name: Display name
+      required: true
+      selector:
+        text:

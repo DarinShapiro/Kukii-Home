@@ -16,8 +16,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from pydantic import ValidationError
-from sentihome_shared.preprocessor import (
+from kukiihome_shared.preprocessor import (
     ALL_ACTOR_SUBJECTS,
     SUBJECT_ACTOR_DEACTIVATED,
     SUBJECT_ACTOR_ENROLLED,
@@ -30,6 +29,7 @@ from sentihome_shared.preprocessor import (
     KnobAdjustment,
     PreprocessorStatus,
 )
+from pydantic import ValidationError
 
 # ─── FrameWindow ─────────────────────────────────────────────────────
 
@@ -196,9 +196,9 @@ def test_preprocessor_status_roundtrips():
 def test_canonical_subject_strings_are_stable():
     """Subject strings are an external contract — pinned by test so
     a careless rename gets caught in CI."""
-    assert SUBJECT_ACTOR_ENROLLED == "sentihome.memory.actor.enrolled"
-    assert SUBJECT_ACTOR_UPDATED == "sentihome.memory.actor.updated"
-    assert SUBJECT_ACTOR_DEACTIVATED == "sentihome.memory.actor.deactivated"
+    assert SUBJECT_ACTOR_ENROLLED == "kukiihome.memory.actor.enrolled"
+    assert SUBJECT_ACTOR_UPDATED == "kukiihome.memory.actor.updated"
+    assert SUBJECT_ACTOR_DEACTIVATED == "kukiihome.memory.actor.deactivated"
     assert ALL_ACTOR_SUBJECTS == (
         SUBJECT_ACTOR_ENROLLED,
         SUBJECT_ACTOR_UPDATED,
@@ -210,7 +210,7 @@ def test_no_preprocessor_output_subject():
     """Defensively: the removed broadcast subject must not have been
     re-introduced. Confirms the corrected architecture stays
     corrected."""
-    from sentihome_shared.preprocessor import nats_subjects
+    from kukiihome_shared.preprocessor import nats_subjects
 
     public = {name for name in dir(nats_subjects) if not name.startswith("_")}
     forbidden = {"SUBJECT_PREPROCESSOR_OUTPUT"}
@@ -224,7 +224,7 @@ def test_no_preprocessor_output_subject():
 
 
 def test_camera_config_event_configured_roundtrips():
-    from sentihome_shared.preprocessor import CameraConfigEvent
+    from kukiihome_shared.preprocessor import CameraConfigEvent
 
     ev = CameraConfigEvent(
         action="configured",
@@ -239,7 +239,7 @@ def test_camera_config_event_configured_roundtrips():
 
 
 def test_camera_config_event_removed_omits_stream_url():
-    from sentihome_shared.preprocessor import CameraConfigEvent
+    from kukiihome_shared.preprocessor import CameraConfigEvent
 
     ev = CameraConfigEvent(action="removed", camera_id="front_porch")
     assert ev.stream_url is None
@@ -250,7 +250,7 @@ def test_camera_config_event_hls_refresh_lifetime():
     """HLS URLs typically carry short-lived tokens. The
     refresh_after_seconds hint tells the subscriber when to expect
     a follow-up event."""
-    from sentihome_shared.preprocessor import CameraConfigEvent
+    from kukiihome_shared.preprocessor import CameraConfigEvent
 
     ev = CameraConfigEvent(
         action="configured",
@@ -263,16 +263,16 @@ def test_camera_config_event_hls_refresh_lifetime():
 
 
 def test_camera_config_event_rejects_unknown_action():
+    from kukiihome_shared.preprocessor import CameraConfigEvent
     from pydantic import ValidationError
-    from sentihome_shared.preprocessor import CameraConfigEvent
 
     with pytest.raises(ValidationError):
         CameraConfigEvent(action="disabled", camera_id="cam_a")  # type: ignore[arg-type]
 
 
 def test_camera_config_event_rejects_unknown_protocol():
+    from kukiihome_shared.preprocessor import CameraConfigEvent
     from pydantic import ValidationError
-    from sentihome_shared.preprocessor import CameraConfigEvent
 
     with pytest.raises(ValidationError):
         CameraConfigEvent(
@@ -287,7 +287,7 @@ def test_camera_config_event_rejects_unknown_protocol():
 
 
 def test_identified_entity_roundtrips():
-    from sentihome_shared.preprocessor import IdentifiedEntity
+    from kukiihome_shared.preprocessor import IdentifiedEntity
 
     ent = IdentifiedEntity(
         frame_ts=1234.5,
@@ -308,8 +308,8 @@ def test_identified_entity_kind_constrained_to_4_classes():
     """package / animal / etc. don't have identity pipelines yet —
     contract refuses them so callers can't accidentally claim
     identities for classes we don't recognize."""
+    from kukiihome_shared.preprocessor import IdentifiedEntity
     from pydantic import ValidationError
-    from sentihome_shared.preprocessor import IdentifiedEntity
 
     with pytest.raises(ValidationError):
         IdentifiedEntity(
@@ -325,8 +325,8 @@ def test_identified_entity_kind_constrained_to_4_classes():
 
 
 def test_identified_entity_clamps_confidences():
+    from kukiihome_shared.preprocessor import IdentifiedEntity
     from pydantic import ValidationError
-    from sentihome_shared.preprocessor import IdentifiedEntity
 
     with pytest.raises(ValidationError):
         IdentifiedEntity(
@@ -351,7 +351,7 @@ def test_frame_ref_annotated_uri_defaults_none():
 
 
 def test_frame_window_with_identified_entities_roundtrips():
-    from sentihome_shared.preprocessor import IdentifiedEntity
+    from kukiihome_shared.preprocessor import IdentifiedEntity
 
     fw = FrameWindow(
         camera_id="cam_a",
@@ -383,14 +383,14 @@ def test_frame_window_with_identified_entities_roundtrips():
 
 
 def test_camera_subjects_are_stable():
-    from sentihome_shared.preprocessor import (
+    from kukiihome_shared.preprocessor import (
         ALL_CAMERA_SUBJECTS,
         SUBJECT_CAMERA_CONFIGURED,
         SUBJECT_CAMERA_REMOVED,
     )
 
-    assert SUBJECT_CAMERA_CONFIGURED == "sentihome.ha.camera.configured"
-    assert SUBJECT_CAMERA_REMOVED == "sentihome.ha.camera.removed"
+    assert SUBJECT_CAMERA_CONFIGURED == "kukiihome.ha.camera.configured"
+    assert SUBJECT_CAMERA_REMOVED == "kukiihome.ha.camera.removed"
     assert ALL_CAMERA_SUBJECTS == (
         SUBJECT_CAMERA_CONFIGURED,
         SUBJECT_CAMERA_REMOVED,

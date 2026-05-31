@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentihome.io/schemas/v1/common/severity.schema.json",
+  "$id": "https://kukiihome.io/schemas/v1/common/severity.schema.json",
   "title": "Severity",
   "description": "Rule severity level (see §10).",
   "type": "string",

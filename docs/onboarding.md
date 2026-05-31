@@ -31,8 +31,8 @@ docker --version
 ## First-time setup
 
 ```bash
-git clone https://github.com/DarinShapiro/SentiHome.git
-cd SentiHome
+git clone https://github.com/DarinShapiro/Kukii-Home.git
+cd Kukii-Home
 ./scripts/setup/install.sh
 ```
 
@@ -85,7 +85,7 @@ The installer:
 ## Repo layout
 
 ```
-SentiHome/
+Kukii-Home/
 ├── docs/                      # Architecture (21 sections) + clarifications + this guide
 ├── services/                  # Python services (one folder each)
 │   ├── core/                  # Orchestration brain (triage, rules, dispatch)
@@ -136,17 +136,17 @@ SentiHome/
 
 ```bash
 # All open issues
-gh issue list --repo DarinShapiro/SentiHome
+gh issue list --repo DarinShapiro/Kukii-Home
 
 # By epic
-gh issue list --repo DarinShapiro/SentiHome --label epic:foundation
-gh issue list --repo DarinShapiro/SentiHome --label epic:nvr-adapters
+gh issue list --repo DarinShapiro/Kukii-Home --label epic:foundation
+gh issue list --repo DarinShapiro/Kukii-Home --label epic:nvr-adapters
 
 # By component
-gh issue list --repo DarinShapiro/SentiHome --label component:core
+gh issue list --repo DarinShapiro/Kukii-Home --label component:core
 
 # By priority
-gh issue list --repo DarinShapiro/SentiHome --label priority:p0
+gh issue list --repo DarinShapiro/Kukii-Home --label priority:p0
 ```
 
 Issues are organized as epics (`type:epic` label) with sub-issues linked from each epic's task list. Pick a sub-issue, comment to claim it, and open a draft PR.
@@ -162,7 +162,7 @@ Start with:
 1. [`docs/architecture/README.md`](./architecture/README.md) — index
 2. [`docs/architecture/01-overview.md`](./architecture/01-overview.md) — vision, principles, glossary
 3. [`docs/architecture/02-high-level-architecture.md`](./architecture/02-high-level-architecture.md) — component map
-4. [`docs/ARCHITECTURE-CLARIFICATION.md`](./ARCHITECTURE-CLARIFICATION.md) — SentiHome vs. HA boundary
+4. [`docs/ARCHITECTURE-CLARIFICATION.md`](./ARCHITECTURE-CLARIFICATION.md) — Kukii-Home vs. HA boundary
 
 Then read the section relevant to the issue you're working:
 
@@ -181,8 +181,8 @@ Then read the section relevant to the issue you're working:
 
 - **Strict typing**: every function has type hints; mypy strict (re-enabled once stubs become real code)
 - **Async first**: I/O paths are async by default
-- **Logging**: `from sentihome_shared.logging import get_logger; log = get_logger(__name__)`
-- **Tracing**: every event gets a `trace_id` propagated via `sentihome_shared.tracing`
+- **Logging**: `from kukiihome_shared.logging import get_logger; log = get_logger(__name__)`
+- **Tracing**: every event gets a `trace_id` propagated via `kukiihome_shared.tracing`
 - **Tests**: `pytest` with `pytest-asyncio` in mode="auto"; tests in `tests/` adjacent to source
 - **Test markers**: `@pytest.mark.slow`, `@pytest.mark.integration`, `@pytest.mark.e2e` — fast tests run on PR, slow ones nightly
 
@@ -263,7 +263,7 @@ Or use the wrapper:
 
 ```bash
 ./scripts/dev/regenerate-schemas.sh
-git diff shared/lib-python/src/sentihome_shared/generated/
+git diff shared/lib-python/src/kukiihome_shared/generated/
 git diff shared/lib-typescript/src/generated/
 ```
 

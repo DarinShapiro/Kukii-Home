@@ -10,9 +10,9 @@ from __future__ import annotations
 import time
 
 import pytest
-from sentihome_preprocessor.pipelines.synthetic_frames import SyntheticFrameBuffer
-from sentihome_preprocessor.state import ActorCache
-from sentihome_shared.preprocessor import ActorEnrollmentEvent
+from kukiihome_preprocessor.pipelines.synthetic_frames import SyntheticFrameBuffer
+from kukiihome_preprocessor.state import ActorCache
+from kukiihome_shared.preprocessor import ActorEnrollmentEvent
 
 
 @pytest.fixture

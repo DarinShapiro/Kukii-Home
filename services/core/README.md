@@ -1,6 +1,6 @@
 # services/core/
 
-The SentiHome orchestration brain: triage worker, rule engine, action dispatcher, session manager, attention mode manager.
+The Kukii-Home orchestration brain: triage worker, rule engine, action dispatcher, session manager, attention mode manager.
 
 **Architecture:** [§02](../../docs/architecture/02-high-level-architecture.md), [§06](../../docs/architecture/06-agent-orchestration.md), [§10](../../docs/architecture/10-rule-schema-and-retrieval.md), [§15](../../docs/architecture/15-alerting-and-actions.md)
 
@@ -24,7 +24,7 @@ The SentiHome orchestration brain: triage worker, rule engine, action dispatcher
 
 ## Entry point
 
-`python -m sentihome.core` (TBD)
+`python -m kukiihome.core` (TBD)
 
 ## Status
 

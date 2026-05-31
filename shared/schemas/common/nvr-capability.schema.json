@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sentihome.io/schemas/v1/common/nvr-capability.schema.json",
+  "$id": "https://kukiihome.io/schemas/v1/common/nvr-capability.schema.json",
   "title": "NVRCapability",
-  "description": "Per-camera capability matrix advertised by an NVR adapter. Used by SentiHome core for routing decisions (which features are available where).",
+  "description": "Per-camera capability matrix advertised by an NVR adapter. Used by Kukii-Home core for routing decisions (which features are available where).",
   "type": "object",
   "required": ["camera_id", "preprocessing_mode"],
   "additionalProperties": false,

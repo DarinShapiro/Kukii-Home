@@ -7,15 +7,15 @@
 
 ## Design philosophy
 
-SentiHome is built around four separation-of-concerns principles:
+Kukii-Home is built around four separation-of-concerns principles:
 
-1. **SentiHome is the vision & rule intelligence layer; HA is the device orchestration layer.** SentiHome owns detection, reasoning, rule creation, and learning. HA owns device state truth, action execution, user experience (dashboards, mobile, automations), and ecosystem integration. They communicate via REST API and MCP: SentiHome queries HA for world context, then calls HA services to execute actions.
+1. **Kukii-Home is the vision & rule intelligence layer; HA is the device orchestration layer.** Kukii-Home owns detection, reasoning, rule creation, and learning. HA owns device state truth, action execution, user experience (dashboards, mobile, automations), and ecosystem integration. They communicate via REST API and MCP: Kukii-Home queries HA for world context, then calls HA services to execute actions.
 
-2. **Cameras are the primary perception layer.** Camera events drive the reactive pipeline. HA state enriches reasoning (world context) but is not the primary trigger — SentiHome's vision detections are. Rules live in SentiHome and are conversationally created; HA executes actions.
+2. **Cameras are the primary perception layer.** Camera events drive the reactive pipeline. HA state enriches reasoning (world context) but is not the primary trigger — Kukii-Home's vision detections are. Rules live in Kukii-Home and are conversationally created; HA executes actions.
 
 3. **LLMs are called with complete context, not incrementally.** The hot path assembles all context deterministically before a single VLM call. LLM-mediated orchestration is reserved for latency-tolerant deliberative paths. Conversational rule creation uses an LLM, but rule firing/execution is deterministic.
 
-4. **NVR is a pluggable data source, not a core dependency.** SentiHome works with any frame source via the NVR Adapter layer (§03.5): Agent DVR, Frigate, Blue Iris, Synology, QNAP, UniFi Protect, or direct RTSP from cameras (no NVR at all). The v1 default is service mode (universal RTSP compatibility); native and built-in modes are performance optimizations layered on top. Long-term vision: as SentiHome matures (v3–v4), it absorbs NVR responsibilities (motion detection, archival, clip generation) such that direct camera → HA → SentiHome becomes the recommended path and the NVR layer becomes optional.
+4. **NVR is a pluggable data source, not a core dependency.** Kukii-Home works with any frame source via the NVR Adapter layer (§03.5): Agent DVR, Frigate, Blue Iris, Synology, QNAP, UniFi Protect, or direct RTSP from cameras (no NVR at all). The v1 default is service mode (universal RTSP compatibility); native and built-in modes are performance optimizations layered on top. Long-term vision: as Kukii-Home matures (v3–v4), it absorbs NVR responsibilities (motion detection, archival, clip generation) such that direct camera → HA → Kukii-Home becomes the recommended path and the NVR layer becomes optional.
 
 ---
 
@@ -87,7 +87,7 @@ SentiHome is built around four separation-of-concerns principles:
            │ structured decision JSON
 ┌─ Rule Engine & Action Dispatch ───────────────────────────────┐
 │                                                                 │
-│  Rules (live in SentiHome):                                     │
+│  Rules (live in Kukii-Home):                                     │
 │  ├─ Matched from rule registry based on detection              │
 │  ├─ Evaluate conditions (confidence, world state from HA)      │
 │  ├─ Determine actions [notify, speak, unlock, light, ...]     │
@@ -211,12 +211,12 @@ HA agent write-side boundary:
 
 | Decision                                               | Rationale                                                                                                 |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Rules live in SentiHome, not HA                        | Conversational rule creation; rules fire based on SentiHome detections, not static automations            |
+| Rules live in Kukii-Home, not HA                        | Conversational rule creation; rules fire based on Kukii-Home detections, not static automations            |
 | HA is device orchestration layer                       | HA provides world state (query), executes actions (services), owns UX (dashboards, mobile)                |
-| SentiHome queries HA for context, calls HA services    | Clean REST API / MCP boundary; SentiHome is agnostic to device types                                      |
+| Kukii-Home queries HA for context, calls HA services    | Clean REST API / MCP boundary; Kukii-Home is agnostic to device types                                      |
 | NVR is pluggable data source via adapter layer (§03.5) | Universal compatibility (any NVR or none); v1 ships service mode; native modes added over time            |
 | Service mode is v1 baseline                            | Works with any RTSP/ONVIF source day one; native plugins are optimization, not requirement                |
-| Long-term NVR-optional vision                          | As SentiHome matures, it absorbs NVR responsibilities; direct camera → HA → SentiHome becomes recommended |
+| Long-term NVR-optional vision                          | As Kukii-Home matures, it absorbs NVR responsibilities; direct camera → HA → Kukii-Home becomes recommended |
 | Single VLM call on hot path                            | Eliminates orchestration overhead; capable VLMs reason directly                                           |
 | VLM has no HA knowledge                                | Clean separation; VLM reports observations, action dispatcher interprets + executes                       |
 | Camera events push; HA state poll                      | Cameras are latency-critical; HA state is eventually consistent                                           |

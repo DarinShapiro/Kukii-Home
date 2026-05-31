@@ -1,6 +1,6 @@
 # 15 — Alerting & Action Policy
 
-**Purpose:** How SentiHome rules are executed: rule firing → action dispatch → device control, with confidence tiers and human-in-the-loop where appropriate.
+**Purpose:** How Kukii-Home rules are executed: rule firing → action dispatch → device control, with confidence tiers and human-in-the-loop where appropriate.
 **Status:** drafting
 
 ---
@@ -28,7 +28,7 @@ HA service execution:
      (this is where user experiences the result: lights on, speaker announces, etc.)
 ```
 
-**Key:** Rules are defined and executed in SentiHome. HA executes the actions (device control, notifications, etc.). SentiHome queries HA for world context when evaluating conditions.
+**Key:** Rules are defined and executed in Kukii-Home. HA executes the actions (device control, notifications, etc.). Kukii-Home queries HA for world context when evaluating conditions.
 
 ---
 
@@ -506,7 +506,7 @@ Garage/entry displays:
 
 Integration:
   - HA can push state changes to displays
-  - SentiHome sends alerts via notify.push → HA → display
+  - Kukii-Home sends alerts via notify.push → HA → display
 ```
 
 ---

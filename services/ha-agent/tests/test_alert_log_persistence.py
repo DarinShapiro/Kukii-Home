@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sentihome_ha_agent.http_api import AlertLog
+from kukiihome_ha_agent.http_api import AlertLog
 
 
 def test_in_memory_only_when_no_path():

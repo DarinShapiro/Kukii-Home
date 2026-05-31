@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sentihome_ha_agent.camera_config_publisher import (
+from kukiihome_ha_agent.camera_config_publisher import (
     CameraConfigPublisher,
     ChainProvider,
     JsonFileProvider,
@@ -258,7 +258,7 @@ async def test_publish_configured_with_resolvable_creds():
     log: list[tuple[str, Any]] = pub._nc.publish_log  # type: ignore[attr-defined]
     assert len(log) == 1
     subject, payload = log[0]
-    assert subject == "sentihome.ha.camera.configured"
+    assert subject == "kukiihome.ha.camera.configured"
     decoded = json.loads(payload)
     assert decoded["action"] == "configured"
     assert decoded["camera_id"] == "dev_reolink_front"
@@ -290,7 +290,7 @@ async def test_publish_removed_sends_removed_event():
     log = pub._nc.publish_log  # type: ignore[attr-defined]
     assert len(log) == 1
     subject, payload = log[0]
-    assert subject == "sentihome.ha.camera.removed"
+    assert subject == "kukiihome.ha.camera.removed"
     decoded = json.loads(payload)
     assert decoded["action"] == "removed"
     assert decoded["camera_id"] == "dev_reolink_front"
@@ -326,7 +326,7 @@ class _FakeHAClient:
 
 @pytest.mark.asyncio
 async def test_stream_source_provider_returns_rtsp_when_present():
-    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+    from kukiihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
 
     client = _FakeHAClient(
         {
@@ -346,7 +346,7 @@ async def test_stream_source_provider_returns_rtsp_when_present():
 async def test_stream_source_provider_rejects_hls_url():
     """User explicitly rejected HLS in the data plane — even when HA
     exposes one we don't use it; chain falls through."""
-    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+    from kukiihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
 
     client = _FakeHAClient(
         {"camera.x": _FakeHAState({"stream_source": "http://192.168.1.20/stream/index.m3u8"})}
@@ -358,7 +358,7 @@ async def test_stream_source_provider_rejects_hls_url():
 
 @pytest.mark.asyncio
 async def test_stream_source_provider_returns_none_when_attr_missing():
-    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+    from kukiihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
 
     client = _FakeHAClient({"camera.x": _FakeHAState({"other_attr": "value"})})
     provider = StreamSourceAttrProvider(client)
@@ -370,7 +370,7 @@ async def test_stream_source_provider_returns_none_when_attr_missing():
 async def test_stream_source_provider_unknown_device_returns_none():
     """Device wasn't registered -> no entity to look up. Return
     None silently so the chain falls through."""
-    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+    from kukiihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
 
     provider = StreamSourceAttrProvider(_FakeHAClient({}))
     assert await provider.get_rtsp_url(device_id="ghost", vendor=None) is None
@@ -380,7 +380,7 @@ async def test_stream_source_provider_unknown_device_returns_none():
 async def test_stream_source_provider_handles_ha_state_read_exception():
     """HAClient raising (network blip) shouldn't kill the publisher —
     just return None and let the chain try the next provider."""
-    from sentihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
+    from kukiihome_ha_agent.camera_config_publisher import StreamSourceAttrProvider
 
     class _FailingClient:
         async def get_state(self, entity_id: str):

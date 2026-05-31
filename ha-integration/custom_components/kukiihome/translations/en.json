@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Kukii-Home",
+        "description": "Enter the host and port of your Kukii-Home add-on. Default port is 8765.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "poll_seconds": "Poll interval (seconds)"
+        }
+      },
+      "zeroconf_confirm": {
+        "title": "Kukii-Home discovered",
+        "description": "Kukii-Home add-on found at {host}:{port}. Add it to Home Assistant?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the Kukii-Home add-on at the given host:port. Is the add-on running?"
+    },
+    "abort": {
+      "already_configured": "This Kukii-Home instance is already configured.",
+      "cannot_connect": "Discovered Kukii-Home add-on isn't responding on its advertised port. Open the add-on log to investigate.",
+      "invalid_discovery_info": "Discovery payload from the add-on was malformed."
+    }
+  }
+}

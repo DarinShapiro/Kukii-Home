@@ -24,7 +24,7 @@ Usage:
     python scripts/dev/export_gait_onnx.py \\
         --repo C:/Users/darin_jwxgczt/opengait_work \\
         --weights C:/Users/.../GaitBase_DA-60000.pt \\
-        --output C:/Users/darin_jwxgczt/SentiHome/models/gaitbase_gait3d.onnx
+        --output C:/Users/darin_jwxgczt/Kukii-Home/models/gaitbase_gait3d.onnx
 """
 
 from __future__ import annotations

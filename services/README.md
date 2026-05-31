@@ -1,6 +1,6 @@
 # services/
 
-Long-running Python services that compose the SentiHome runtime. Each service is independently deployable, communicates over the event bus (NATS JetStream) or MCP, and follows the architectural boundaries laid out in [`docs/architecture/`](../docs/architecture/).
+Long-running Python services that compose the Kukii-Home runtime. Each service is independently deployable, communicates over the event bus (NATS JetStream) or MCP, and follows the architectural boundaries laid out in [`docs/architecture/`](../docs/architecture/).
 
 ## Services
 

@@ -26,7 +26,7 @@ if hasattr(sys.stdout, "buffer"):
 if hasattr(sys.stderr, "buffer"):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-REPO = "DarinShapiro/SentiHome"
+REPO = "DarinShapiro/Kukii-Home"
 EPICS_DIR = Path(__file__).parent.parent.parent / "planning" / "epics"
 
 

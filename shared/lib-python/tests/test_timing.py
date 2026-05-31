@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from sentihome_shared.timing import StepTimings
+from kukiihome_shared.timing import StepTimings
 
 
 def test_span_records_duration():

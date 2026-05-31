@@ -23,13 +23,13 @@ Usage:
     python scripts/dev/enroll_body.py \
         --actor-id alice \
         --name Alice \
-        --model /data/sentihome/models/osnet_x1_0.onnx \
+        --model /data/kukiihome/models/osnet_x1_0.onnx \
         --photo alice_body_1.jpg --photo alice_body_2.jpg
 
     # Or full-frame photos with YOLO auto-crop:
     python scripts/dev/enroll_body.py \
         --actor-id alice --name Alice \
-        --model /data/sentihome/models/osnet_x1_0.onnx \
+        --model /data/kukiihome/models/osnet_x1_0.onnx \
         --photo-dir /path/to/alice_full_frames/ \
         --auto-crop
 
@@ -50,7 +50,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from nats.aio.client import Client as NATS
-from sentihome_shared.preprocessor import (
+from kukiihome_shared.preprocessor import (
     SUBJECT_ACTOR_ENROLLED,
     ActorEnrollmentEvent,
 )
@@ -236,7 +236,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--role", default=None)
     p.add_argument(
         "--model",
-        default="/data/sentihome/models/osnet_x1_0.onnx",
+        default="/data/kukiihome/models/osnet_x1_0.onnx",
         help="Path to the OSNet ONNX (must match preprocessor's body_id_model_path).",
     )
     p.add_argument(

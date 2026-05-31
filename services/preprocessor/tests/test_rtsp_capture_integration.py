@@ -26,10 +26,10 @@ import subprocess
 import time
 
 import pytest
-from sentihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
-from sentihome_preprocessor.pipelines.rtsp_capture import CameraCaptureTask
-from sentihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
-from sentihome_preprocessor.state import ActorCache
+from kukiihome_preprocessor.pipelines.rolling_buffer import RollingBuffer
+from kukiihome_preprocessor.pipelines.rtsp_capture import CameraCaptureTask
+from kukiihome_preprocessor.pipelines.rtsp_frame_buffer import RTSPFrameBuffer
+from kukiihome_preprocessor.state import ActorCache
 
 
 def _docker_available() -> bool:

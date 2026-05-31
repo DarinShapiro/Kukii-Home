@@ -16,12 +16,12 @@ Service     | Separate preprocessor-service process    | ~150–370ms
             | (consumes RTSP from any NVR)             |
 ────────────┼──────────────────────────────────────────┼─────────────────
 Built-in    | Inside the NVR (Frigate)                 | ~50–150ms
-            | SentiHome consumes pre-enriched results  |
+            | Kukii-Home consumes pre-enriched results  |
 ────────────┼──────────────────────────────────────────┼─────────────────
 Native      | Plugin inside NVR's process (Agent DVR)  | ~25–100ms
             | Direct frame buffer access (v2+)         |
 ────────────┼──────────────────────────────────────────┼─────────────────
-Direct      | SentiHome internal (no NVR)              | ~25–100ms
+Direct      | Kukii-Home internal (no NVR)              | ~25–100ms
             | Effectively native by definition         |
 ```
 

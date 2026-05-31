@@ -1,0 +1,27 @@
+# Per-arch base images used by Supervisor's add-on builder.
+# https://developers.home-assistant.io/docs/add-ons/configuration/#optional-configuration-options
+#
+# Why debian (glibc) instead of alpine (musllinux):
+#   Heavy Python wheels — opencv-python, onnxruntime, numpy/scipy, torch
+#   — only publish manylinux (glibc) wheels. The alpine base-python
+#   images use musllinux, so any of those packages would either fail to
+#   install or have to be built from source against a minimal alpine,
+#   which is fragile + slow. Debian's a few MB heavier but every Python
+#   wheel "just works."
+#
+# These are the standard HA OS add-on base-debian images; they include
+# s6-overlay 3.x and the cont-init.d / services.d layout the rootfs/
+# directory relies on. Python is installed in the Dockerfile via apt.
+
+args:
+  ADDON_VERSION: '0.3.29'
+
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base-debian:bookworm
+  aarch64: ghcr.io/home-assistant/aarch64-base-debian:bookworm
+
+labels:
+  org.opencontainers.image.title: Kukii-Home
+  org.opencontainers.image.description: AI-powered home security and presence understanding
+  org.opencontainers.image.source: https://github.com/DarinShapiro/Kukii-Home
+  org.opencontainers.image.licenses: MIT

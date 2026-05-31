@@ -1,4 +1,4 @@
-# SentiHome — Design Notes (brainstorm snapshot)
+# Kukii-Home — Design Notes (brainstorm snapshot)
 
 Snapshot of a brainstorm session. Not final architecture — a starting point for the next conversation. Read end-to-end before extending.
 

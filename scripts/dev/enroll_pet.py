@@ -19,12 +19,12 @@ Usage:
 
     python scripts/dev/enroll_pet.py \
         --actor-id rex --name Rex --kind dog \
-        --model /data/sentihome/models/dinov2_vits14.onnx \
+        --model /data/kukiihome/models/dinov2_vits14.onnx \
         --photo rex1.jpg --photo rex2.jpg
 
     python scripts/dev/enroll_pet.py \
         --actor-id mittens --name Mittens --kind cat \
-        --model /data/sentihome/models/dinov2_vits14.onnx \
+        --model /data/kukiihome/models/dinov2_vits14.onnx \
         --photo-dir ~/mittens/ --auto-crop
 
 Connects to NATS at ``$NATS_URL`` or ``nats://localhost:4222``.
@@ -43,7 +43,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from nats.aio.client import Client as NATS
-from sentihome_shared.preprocessor import (
+from kukiihome_shared.preprocessor import (
     SUBJECT_ACTOR_ENROLLED,
     ActorEnrollmentEvent,
 )
@@ -192,7 +192,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--role", default=None)
     p.add_argument(
         "--model",
-        default="/data/sentihome/models/dinov2_vits14.onnx",
+        default="/data/kukiihome/models/dinov2_vits14.onnx",
         help="Path to the DINOv2 ONNX (must match preprocessor's pet_model_path).",
     )
     p.add_argument("--photo", action="append", default=[])

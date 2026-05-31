@@ -24,7 +24,7 @@ Bidirectional MCP server for Home Assistant. Read side (LLM-backed synthesis ove
 
 ## Important
 
-This service is the boundary between SentiHome (intelligence + rules) and HA (devices + UX). It does **not** define rules or trigger automations — SentiHome's core handles those and calls write-side tools here to execute actions.
+This service is the boundary between Kukii-Home (intelligence + rules) and HA (devices + UX). It does **not** define rules or trigger automations — Kukii-Home's core handles those and calls write-side tools here to execute actions.
 
 ## Status
 

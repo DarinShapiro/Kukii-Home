@@ -7,8 +7,8 @@ so we can assert on URL construction + graceful failure handling.
 from __future__ import annotations
 
 import httpx
-from sentihome_ha_agent.preprocessor_client import PreprocessorClient
-from sentihome_shared.preprocessor import FrameWindow
+from kukiihome_ha_agent.preprocessor_client import PreprocessorClient
+from kukiihome_shared.preprocessor import FrameWindow
 
 
 def _client_with_handler(handler) -> PreprocessorClient:

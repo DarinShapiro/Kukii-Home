@@ -7,11 +7,11 @@ fast and deterministic.
 from __future__ import annotations
 
 import pytest
-from sentihome_shared.generated.events.vlm_request import VLMRequest
-from sentihome_vlm_router.backends import Backend, BackendCapability, BackendConfig
-from sentihome_vlm_router.breaker import CircuitBreaker
-from sentihome_vlm_router.errors import PrivacyViolationError
-from sentihome_vlm_router.policy import RoutingPolicy
+from kukiihome_shared.generated.events.vlm_request import VLMRequest
+from kukiihome_vlm_router.backends import Backend, BackendCapability, BackendConfig
+from kukiihome_vlm_router.breaker import CircuitBreaker
+from kukiihome_vlm_router.errors import PrivacyViolationError
+from kukiihome_vlm_router.policy import RoutingPolicy
 
 
 class _FakeBackend(Backend):

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from sentihome_preprocessor.pipelines.pet import (
+from kukiihome_preprocessor.pipelines.pet import (
     DetectedPet,
     PetConfig,
     PetRecognizer,

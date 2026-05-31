@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from sentihome_adapter_synology import SynologyAdapter, SynologyConfig
-from sentihome_shared.adapter import NVRAdapter, PreprocessingMode
-from sentihome_shared.adapter.base import AdapterError
+from kukiihome_adapter_synology import SynologyAdapter, SynologyConfig
+from kukiihome_shared.adapter import NVRAdapter, PreprocessingMode
+from kukiihome_shared.adapter.base import AdapterError
 
 
 def test_synology_adapter_is_nvr_adapter() -> None:

@@ -18,7 +18,7 @@ assignees: ''
 
 ## Environment
 
-- SentiHome version:
+- Kukii-Home version:
 - NVR adapter mode:
 - HA version:
 - Camera count:

@@ -16,8 +16,8 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from sentihome_shared import _topology_probes as probes
-from sentihome_shared.topology import (
+from kukiihome_shared import _topology_probes as probes
+from kukiihome_shared.topology import (
     BootstrapReport,
     HAAgentConfig,
     ProbeStatus,
@@ -177,7 +177,7 @@ def test_probes_module_lazy_imports_dont_fail_at_module_load():
     probe function."""
     # If the module top-level tried to import nats, this re-import would
     # have failed during collection. The assertion is reaching this line.
-    from sentihome_shared import _topology_probes  # noqa: F401
+    from kukiihome_shared import _topology_probes  # noqa: F401
 
 
 def test_probe_topology_handles_topology_with_no_optional_clients():

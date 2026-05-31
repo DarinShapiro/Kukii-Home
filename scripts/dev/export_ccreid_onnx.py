@@ -21,7 +21,7 @@ checkpoint from its Google Drive (ltcc.pth.tar / prcc.pth.tar):
     python scripts/dev/export_ccreid_onnx.py \\
         --repo C:/Users/darin_jwxgczt/ccreid_work \\
         --weights C:/Users/darin_jwxgczt/ccreid_work/weights/ltcc.pth.tar \\
-        --output C:/Users/darin_jwxgczt/SentiHome/models/ccreid_cal_ltcc.onnx
+        --output C:/Users/darin_jwxgczt/Kukii-Home/models/ccreid_cal_ltcc.onnx
 """
 
 from __future__ import annotations

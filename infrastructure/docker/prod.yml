@@ -1,4 +1,4 @@
-# SentiHome — Production docker-compose overrides
+# Kukii-Home — Production docker-compose overrides
 #
 # Layer this on top of dev.yml for production deployment:
 #   docker compose -f infrastructure/docker/dev.yml \
@@ -10,14 +10,14 @@
 #  - Volume mounts removed (code is baked into the image, no bind mounts)
 #  - Restart policy stays unless-stopped but services use depends_on:condition:service_healthy
 #  - Resource limits applied per service
-#  - Healthchecks on SentiHome services (added once entry points implemented)
+#  - Healthchecks on Kukii-Home services (added once entry points implemented)
 #  - Image tags pinned to versions, not `latest`
 
-name: sentihome
+name: kukiihome
 
 x-python-service-prod: &python-service-prod
   environment:
-    - SENTIHOME_ENV=prod
+    - KUKIIHOME_ENV=prod
     - LOG_LEVEL=INFO
     - PYTHONUNBUFFERED=1
   volumes: [] # no bind mounts; code baked into image
@@ -33,9 +33,9 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: sentihome
+      POSTGRES_USER: kukiihome
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-      POSTGRES_DB: sentihome
+      POSTGRES_DB: kukiihome
     secrets:
       - postgres_password
     deploy:
@@ -80,7 +80,7 @@ services:
   ha-agent:
     <<: *python-service-prod
     environment:
-      - SENTIHOME_ENV=prod
+      - KUKIIHOME_ENV=prod
       - LOG_LEVEL=INFO
       - PYTHONUNBUFFERED=1
       - HA_URL=${HA_URL}

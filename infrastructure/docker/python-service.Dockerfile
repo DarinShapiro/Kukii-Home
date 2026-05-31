@@ -1,4 +1,4 @@
-# Shared Dockerfile for all SentiHome Python services.
+# Shared Dockerfile for all Kukii-Home Python services.
 # Build context is the repo root. The actual service entry point is selected
 # at runtime via the compose `command` directive.
 #

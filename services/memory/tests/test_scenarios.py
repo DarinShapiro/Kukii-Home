@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from sentihome_memory.graph import GraphClient
+from kukiihome_memory.graph import GraphClient
 from synthesis.runner import run_scenario
 from synthesis.scenarios.schema import load_scenario
 

@@ -18,7 +18,7 @@ The streams/consumers are applied at boot by `services/core` (or manually via `n
 ```bash
 # Manual application
 nats --server nats://localhost:4222 stream add EVENTS --config infrastructure/nats/streams.yaml
-# (or programmatically — see services/core/src/sentihome_core/jetstream_setup.py)
+# (or programmatically — see services/core/src/kukiihome_core/jetstream_setup.py)
 ```
 
 ## Conventions

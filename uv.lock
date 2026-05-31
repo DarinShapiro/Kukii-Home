@@ -22,23 +22,23 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "sentihome",
-    "sentihome-adapter-agent-dvr",
-    "sentihome-adapter-blueiris",
-    "sentihome-adapter-frigate",
-    "sentihome-adapter-qnap",
-    "sentihome-adapter-rtsp-direct",
-    "sentihome-adapter-synology",
-    "sentihome-adapter-unifi",
-    "sentihome-core",
-    "sentihome-detector",
-    "sentihome-ha-agent",
-    "sentihome-ha-integration",
-    "sentihome-memory",
-    "sentihome-notify",
-    "sentihome-preprocessor",
-    "sentihome-shared",
-    "sentihome-vlm-router",
+    "kukiihome",
+    "kukiihome-adapter-agent-dvr",
+    "kukiihome-adapter-blueiris",
+    "kukiihome-adapter-frigate",
+    "kukiihome-adapter-qnap",
+    "kukiihome-adapter-rtsp-direct",
+    "kukiihome-adapter-synology",
+    "kukiihome-adapter-unifi",
+    "kukiihome-core",
+    "kukiihome-detector",
+    "kukiihome-ha-agent",
+    "kukiihome-ha-integration",
+    "kukiihome-memory",
+    "kukiihome-notify",
+    "kukiihome-preprocessor",
+    "kukiihome-shared",
+    "kukiihome-vlm-router",
 ]
 
 [[package]]
@@ -1292,6 +1292,408 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0f/41/c5f71f9f00aabcc71fee8b7475e3f64747282580c2fe748961ba29b18385/kiwisolver-1.5.0-graalpy312-graalpy250_312_native-macosx_11_0_arm64.whl", hash = "sha256:f6764a4ccab3078db14a632420930f6186058750df066b8ea2a7106df91d3203", size = 138036, upload-time = "2026-03-09T13:15:36.894Z" },
     { url = "https://files.pythonhosted.org/packages/fa/06/7399a607f434119c6e1fdc8ec89a8d51ccccadf3341dee4ead6bd14caaf5/kiwisolver-1.5.0-graalpy312-graalpy250_312_native-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c31c13da98624f957b0fb1b5bae5383b2333c2c3f6793d9825dd5ce79b525cb7", size = 194295, upload-time = "2026-03-09T13:15:38.22Z" },
     { url = "https://files.pythonhosted.org/packages/b5/91/53255615acd2a1eaca307ede3c90eb550bae9c94581f8c00081b6b1c8f44/kiwisolver-1.5.0-graalpy312-graalpy250_312_native-win_amd64.whl", hash = "sha256:1f1489f769582498610e015a8ef2d36f28f505ab3096d0e16b4858a9ec214f57", size = 75987, upload-time = "2026-03-09T13:15:39.65Z" },
+]
+
+[[package]]
+name = "kukiihome"
+version = "0.1.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "datamodel-code-generator" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "datamodel-code-generator", specifier = ">=0.26.0" },
+    { name = "mypy", specifier = ">=1.11.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "pytest-cov", specifier = ">=5.0.0" },
+    { name = "ruff", specifier = ">=0.14.0" },
+]
+
+[[package]]
+name = "kukiihome-adapter-agent-dvr"
+version = "0.1.0"
+source = { editable = "adapters/nvr-agent-dvr" }
+dependencies = [
+    { name = "httpx" },
+    { name = "kukiihome-shared" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+]
+
+[[package]]
+name = "kukiihome-adapter-blueiris"
+version = "0.1.0"
+source = { editable = "adapters/nvr-blueiris" }
+dependencies = [
+    { name = "httpx" },
+    { name = "kukiihome-shared" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+]
+
+[[package]]
+name = "kukiihome-adapter-frigate"
+version = "0.1.0"
+source = { editable = "adapters/nvr-frigate" }
+dependencies = [
+    { name = "httpx" },
+    { name = "kukiihome-shared" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+]
+
+[[package]]
+name = "kukiihome-adapter-qnap"
+version = "0.1.0"
+source = { editable = "adapters/nvr-qnap" }
+dependencies = [
+    { name = "httpx" },
+    { name = "kukiihome-shared" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+]
+
+[[package]]
+name = "kukiihome-adapter-rtsp-direct"
+version = "0.1.0"
+source = { editable = "adapters/nvr-rtsp-direct" }
+dependencies = [
+    { name = "httpx" },
+    { name = "kukiihome-shared" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+]
+
+[[package]]
+name = "kukiihome-adapter-synology"
+version = "0.1.0"
+source = { editable = "adapters/nvr-synology" }
+dependencies = [
+    { name = "httpx" },
+    { name = "kukiihome-shared" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+]
+
+[[package]]
+name = "kukiihome-adapter-unifi"
+version = "0.1.0"
+source = { editable = "adapters/nvr-unifi" }
+dependencies = [
+    { name = "httpx" },
+    { name = "kukiihome-shared" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+]
+
+[[package]]
+name = "kukiihome-core"
+version = "0.1.0"
+source = { editable = "services/core" }
+dependencies = [
+    { name = "anyio" },
+    { name = "httpx" },
+    { name = "kukiihome-adapter-agent-dvr" },
+    { name = "kukiihome-adapter-frigate" },
+    { name = "kukiihome-adapter-rtsp-direct" },
+    { name = "kukiihome-memory" },
+    { name = "kukiihome-shared" },
+    { name = "nats-py" },
+    { name = "pydantic" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anyio", specifier = ">=4.6.0" },
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-adapter-agent-dvr", editable = "adapters/nvr-agent-dvr" },
+    { name = "kukiihome-adapter-frigate", editable = "adapters/nvr-frigate" },
+    { name = "kukiihome-adapter-rtsp-direct", editable = "adapters/nvr-rtsp-direct" },
+    { name = "kukiihome-memory", editable = "services/memory" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "nats-py", specifier = ">=2.9.0" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+    { name = "structlog", specifier = ">=24.4.0" },
+]
+
+[[package]]
+name = "kukiihome-detector"
+version = "0.1.0"
+source = { editable = "services/detector" }
+dependencies = [
+    { name = "kukiihome-shared" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "opencv-python-headless" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+gpu = [
+    { name = "onnxruntime-gpu" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "numpy", specifier = ">=2.0.0" },
+    { name = "onnxruntime", specifier = ">=1.20.0" },
+    { name = "onnxruntime-gpu", marker = "extra == 'gpu'", specifier = ">=1.20.0" },
+    { name = "opencv-python-headless", specifier = ">=4.10.0" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+]
+provides-extras = ["gpu"]
+
+[[package]]
+name = "kukiihome-ha-agent"
+version = "0.1.0"
+source = { editable = "services/ha-agent" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "httpx" },
+    { name = "kukiihome-shared" },
+    { name = "nats-py" },
+    { name = "pydantic" },
+    { name = "websockets" },
+    { name = "zeroconf" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = ">=3.10.0" },
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "nats-py", specifier = ">=2.9.0" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+    { name = "websockets", specifier = ">=13.0" },
+    { name = "zeroconf", specifier = ">=0.130.0" },
+]
+
+[[package]]
+name = "kukiihome-ha-integration"
+version = "0.1.0"
+source = { editable = "ha-integration" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "kukiihome-shared" },
+    { name = "voluptuous" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = ">=3.10.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "voluptuous", specifier = ">=0.15.0" },
+]
+
+[[package]]
+name = "kukiihome-memory"
+version = "0.1.0"
+source = { editable = "services/memory" }
+dependencies = [
+    { name = "aiosqlite" },
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "kukiihome-shared" },
+    { name = "neo4j" },
+    { name = "pydantic" },
+    { name = "qdrant-client" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pyyaml" },
+    { name = "testcontainers", extra = ["neo4j"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiosqlite", specifier = ">=0.20.0" },
+    { name = "alembic", specifier = ">=1.13.0" },
+    { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "neo4j", specifier = ">=6.2.0" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+    { name = "qdrant-client", specifier = ">=1.12.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "testcontainers", extras = ["neo4j"], specifier = ">=4.14.2" },
+]
+
+[[package]]
+name = "kukiihome-notify"
+version = "0.1.0"
+source = { editable = "services/notify" }
+dependencies = [
+    { name = "kukiihome-ha-agent" },
+    { name = "kukiihome-shared" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "kukiihome-ha-agent", editable = "services/ha-agent" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+]
+
+[[package]]
+name = "kukiihome-preprocessor"
+version = "0.1.0"
+source = { editable = "services/preprocessor" }
+dependencies = [
+    { name = "av" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "insightface" },
+    { name = "kukiihome-shared" },
+    { name = "nats-py" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "opencv-python-headless" },
+    { name = "openvino" },
+    { name = "pydantic" },
+    { name = "redis" },
+    { name = "ultralytics" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "av", specifier = ">=13.0.0" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "insightface", specifier = ">=0.7.3" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "nats-py", specifier = ">=2.9.0" },
+    { name = "numpy", specifier = ">=2.0.0" },
+    { name = "onnxruntime", specifier = ">=1.19.0" },
+    { name = "opencv-python-headless", specifier = ">=4.10.0" },
+    { name = "openvino", specifier = ">=2024.4.0" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+    { name = "redis", specifier = ">=5.0.0" },
+    { name = "ultralytics", specifier = ">=8.3.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+]
+
+[[package]]
+name = "kukiihome-shared"
+version = "0.1.0"
+source = { editable = "shared/lib-python" }
+dependencies = [
+    { name = "anyio" },
+    { name = "nats-py" },
+    { name = "numpy" },
+    { name = "opencv-python-headless" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anyio", specifier = ">=4.6.0" },
+    { name = "nats-py", specifier = ">=2.9.0" },
+    { name = "numpy", specifier = ">=2.0.0" },
+    { name = "opencv-python-headless", specifier = ">=4.10.0" },
+    { name = "opentelemetry-api", specifier = ">=1.27.0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.27.0" },
+    { name = "pydantic", specifier = ">=2.9.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "structlog", specifier = ">=24.4.0" },
+]
+
+[[package]]
+name = "kukiihome-vlm-router"
+version = "0.1.0"
+source = { editable = "services/vlm-router" }
+dependencies = [
+    { name = "httpx" },
+    { name = "kukiihome-shared" },
+    { name = "ollama" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-shared", editable = "shared/lib-python" },
+    { name = "ollama", specifier = ">=0.4.0" },
+    { name = "pydantic", specifier = ">=2.9.0" },
 ]
 
 [[package]]
@@ -2887,408 +3289,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/52/52/e57eceff0e342a1f50e274264ed47497b59e6a4e3118808ee58ddda7b74a/scipy-1.17.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:a77cbd07b940d326d39a1d1b37817e2ee4d79cb30e7338f3d0cddffae70fcaa2", size = 37682317, upload-time = "2026-02-23T00:22:18.513Z" },
     { url = "https://files.pythonhosted.org/packages/11/2f/b29eafe4a3fbc3d6de9662b36e028d5f039e72d345e05c250e121a230dd4/scipy-1.17.1-cp314-cp314t-win_amd64.whl", hash = "sha256:eb092099205ef62cd1782b006658db09e2fed75bffcae7cc0d44052d8aa0f484", size = 37345327, upload-time = "2026-02-23T00:22:24.442Z" },
     { url = "https://files.pythonhosted.org/packages/07/39/338d9219c4e87f3e708f18857ecd24d22a0c3094752393319553096b98af/scipy-1.17.1-cp314-cp314t-win_arm64.whl", hash = "sha256:200e1050faffacc162be6a486a984a0497866ec54149a01270adc8a59b7c7d21", size = 25489165, upload-time = "2026-02-23T00:22:29.563Z" },
-]
-
-[[package]]
-name = "sentihome"
-version = "0.1.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "datamodel-code-generator" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "datamodel-code-generator", specifier = ">=0.26.0" },
-    { name = "mypy", specifier = ">=1.11.0" },
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.24.0" },
-    { name = "pytest-cov", specifier = ">=5.0.0" },
-    { name = "ruff", specifier = ">=0.14.0" },
-]
-
-[[package]]
-name = "sentihome-adapter-agent-dvr"
-version = "0.1.0"
-source = { editable = "adapters/nvr-agent-dvr" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-]
-
-[[package]]
-name = "sentihome-adapter-blueiris"
-version = "0.1.0"
-source = { editable = "adapters/nvr-blueiris" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-]
-
-[[package]]
-name = "sentihome-adapter-frigate"
-version = "0.1.0"
-source = { editable = "adapters/nvr-frigate" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-]
-
-[[package]]
-name = "sentihome-adapter-qnap"
-version = "0.1.0"
-source = { editable = "adapters/nvr-qnap" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-]
-
-[[package]]
-name = "sentihome-adapter-rtsp-direct"
-version = "0.1.0"
-source = { editable = "adapters/nvr-rtsp-direct" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-]
-
-[[package]]
-name = "sentihome-adapter-synology"
-version = "0.1.0"
-source = { editable = "adapters/nvr-synology" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-]
-
-[[package]]
-name = "sentihome-adapter-unifi"
-version = "0.1.0"
-source = { editable = "adapters/nvr-unifi" }
-dependencies = [
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-]
-
-[[package]]
-name = "sentihome-core"
-version = "0.1.0"
-source = { editable = "services/core" }
-dependencies = [
-    { name = "anyio" },
-    { name = "httpx" },
-    { name = "nats-py" },
-    { name = "pydantic" },
-    { name = "sentihome-adapter-agent-dvr" },
-    { name = "sentihome-adapter-frigate" },
-    { name = "sentihome-adapter-rtsp-direct" },
-    { name = "sentihome-memory" },
-    { name = "sentihome-shared" },
-    { name = "structlog" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anyio", specifier = ">=4.6.0" },
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "nats-py", specifier = ">=2.9.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-adapter-agent-dvr", editable = "adapters/nvr-agent-dvr" },
-    { name = "sentihome-adapter-frigate", editable = "adapters/nvr-frigate" },
-    { name = "sentihome-adapter-rtsp-direct", editable = "adapters/nvr-rtsp-direct" },
-    { name = "sentihome-memory", editable = "services/memory" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-    { name = "structlog", specifier = ">=24.4.0" },
-]
-
-[[package]]
-name = "sentihome-detector"
-version = "0.1.0"
-source = { editable = "services/detector" }
-dependencies = [
-    { name = "numpy" },
-    { name = "onnxruntime" },
-    { name = "opencv-python-headless" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-]
-
-[package.optional-dependencies]
-gpu = [
-    { name = "onnxruntime-gpu" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=2.0.0" },
-    { name = "onnxruntime", specifier = ">=1.20.0" },
-    { name = "onnxruntime-gpu", marker = "extra == 'gpu'", specifier = ">=1.20.0" },
-    { name = "opencv-python-headless", specifier = ">=4.10.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-]
-provides-extras = ["gpu"]
-
-[[package]]
-name = "sentihome-ha-agent"
-version = "0.1.0"
-source = { editable = "services/ha-agent" }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "httpx" },
-    { name = "nats-py" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-    { name = "websockets" },
-    { name = "zeroconf" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", specifier = ">=3.10.0" },
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "nats-py", specifier = ">=2.9.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-    { name = "websockets", specifier = ">=13.0" },
-    { name = "zeroconf", specifier = ">=0.130.0" },
-]
-
-[[package]]
-name = "sentihome-ha-integration"
-version = "0.1.0"
-source = { editable = "ha-integration" }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "sentihome-shared" },
-    { name = "voluptuous" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", specifier = ">=3.10.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-    { name = "voluptuous", specifier = ">=0.15.0" },
-]
-
-[[package]]
-name = "sentihome-memory"
-version = "0.1.0"
-source = { editable = "services/memory" }
-dependencies = [
-    { name = "aiosqlite" },
-    { name = "alembic" },
-    { name = "asyncpg" },
-    { name = "neo4j" },
-    { name = "pydantic" },
-    { name = "qdrant-client" },
-    { name = "sentihome-shared" },
-    { name = "sqlalchemy", extra = ["asyncio"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pyyaml" },
-    { name = "testcontainers", extra = ["neo4j"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiosqlite", specifier = ">=0.20.0" },
-    { name = "alembic", specifier = ">=1.13.0" },
-    { name = "asyncpg", specifier = ">=0.30.0" },
-    { name = "neo4j", specifier = ">=6.2.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "qdrant-client", specifier = ">=1.12.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "testcontainers", extras = ["neo4j"], specifier = ">=4.14.2" },
-]
-
-[[package]]
-name = "sentihome-notify"
-version = "0.1.0"
-source = { editable = "services/notify" }
-dependencies = [
-    { name = "pydantic" },
-    { name = "sentihome-ha-agent" },
-    { name = "sentihome-shared" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-ha-agent", editable = "services/ha-agent" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-]
-
-[[package]]
-name = "sentihome-preprocessor"
-version = "0.1.0"
-source = { editable = "services/preprocessor" }
-dependencies = [
-    { name = "av" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "insightface" },
-    { name = "nats-py" },
-    { name = "numpy" },
-    { name = "onnxruntime" },
-    { name = "opencv-python-headless" },
-    { name = "openvino" },
-    { name = "pydantic" },
-    { name = "redis" },
-    { name = "sentihome-shared" },
-    { name = "ultralytics" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "av", specifier = ">=13.0.0" },
-    { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "insightface", specifier = ">=0.7.3" },
-    { name = "nats-py", specifier = ">=2.9.0" },
-    { name = "numpy", specifier = ">=2.0.0" },
-    { name = "onnxruntime", specifier = ">=1.19.0" },
-    { name = "opencv-python-headless", specifier = ">=4.10.0" },
-    { name = "openvino", specifier = ">=2024.4.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "redis", specifier = ">=5.0.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
-    { name = "ultralytics", specifier = ">=8.3.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.24.0" },
-]
-
-[[package]]
-name = "sentihome-shared"
-version = "0.1.0"
-source = { editable = "shared/lib-python" }
-dependencies = [
-    { name = "anyio" },
-    { name = "nats-py" },
-    { name = "numpy" },
-    { name = "opencv-python-headless" },
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-sdk" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "structlog" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anyio", specifier = ">=4.6.0" },
-    { name = "nats-py", specifier = ">=2.9.0" },
-    { name = "numpy", specifier = ">=2.0.0" },
-    { name = "opencv-python-headless", specifier = ">=4.10.0" },
-    { name = "opentelemetry-api", specifier = ">=1.27.0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.27.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "structlog", specifier = ">=24.4.0" },
-]
-
-[[package]]
-name = "sentihome-vlm-router"
-version = "0.1.0"
-source = { editable = "services/vlm-router" }
-dependencies = [
-    { name = "httpx" },
-    { name = "ollama" },
-    { name = "pydantic" },
-    { name = "sentihome-shared" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.0" },
-    { name = "ollama", specifier = ">=0.4.0" },
-    { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "sentihome-shared", editable = "shared/lib-python" },
 ]
 
 [[package]]

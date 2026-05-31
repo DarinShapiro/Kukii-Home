@@ -1,6 +1,6 @@
 # adapters/nvr-frigate/
 
-Frigate adapter. Built-in mode: leverages Frigate's own motion detection + YOLO; SentiHome adds VLM reasoning on top.
+Frigate adapter. Built-in mode: leverages Frigate's own motion detection + YOLO; Kukii-Home adds VLM reasoning on top.
 
 **Architecture:** [§03.5](../../docs/architecture/03.5-nvr-adapter-layer.md)
 

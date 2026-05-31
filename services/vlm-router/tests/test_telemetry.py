@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sentihome_vlm_router.telemetry import BackendTelemetry
+from kukiihome_vlm_router.telemetry import BackendTelemetry
 
 
 def test_empty_telemetry_defaults_clean() -> None:

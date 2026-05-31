@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
-from sentihome_memory.models import (
+from kukiihome_memory.models import (
     AuditLog,
     Base,
     CameraRecord,
@@ -23,7 +23,7 @@ from sentihome_memory.models import (
     VisitLedger,
     ZoneRecord,
 )
-from sentihome_memory.retention import DataClass, RetentionPolicy, SoftDeleteGracePeriod
+from kukiihome_memory.retention import DataClass, RetentionPolicy, SoftDeleteGracePeriod
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 pytestmark = pytest.mark.asyncio

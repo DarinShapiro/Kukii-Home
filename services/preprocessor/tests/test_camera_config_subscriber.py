@@ -12,13 +12,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from sentihome_preprocessor.camera_config_subscriber import (
+from kukiihome_preprocessor.camera_config_subscriber import (
     CallbackApplier,
     CameraConfigSubscriber,
     NoOpApplier,
     SupervisorApplier,
 )
-from sentihome_shared.preprocessor import (
+from kukiihome_shared.preprocessor import (
     SUBJECT_CAMERA_CONFIGURED,
     SUBJECT_CAMERA_REMOVED,
     CameraConfigEvent,

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sentihome_memory.graph import (
+from kukiihome_memory.graph import (
     CitedEdge,
     Event,
     GraphClient,

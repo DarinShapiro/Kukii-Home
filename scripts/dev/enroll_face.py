@@ -4,7 +4,7 @@
 Computes an ArcFace embedding from one or more reference photos of a
 person, averages them into a single canonical embedding, and
 publishes an :class:`ActorEnrollmentEvent` on the NATS subject the
-preprocessor subscribes to (``sentihome.memory.actor.enrolled``).
+preprocessor subscribes to (``kukiihome.memory.actor.enrolled``).
 The running preprocessor picks it up and starts matching live faces
 against the new embedding within seconds.
 
@@ -49,7 +49,7 @@ from pathlib import Path
 
 import numpy as np
 from nats.aio.client import Client as NATS
-from sentihome_shared.preprocessor import (
+from kukiihome_shared.preprocessor import (
     SUBJECT_ACTOR_ENROLLED,
     ActorEnrollmentEvent,
 )
