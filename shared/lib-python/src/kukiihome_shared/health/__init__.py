@@ -16,6 +16,7 @@ F-mode handlers register a :class:`HealthCheck` (detection + recovery)
 with the watchdog and consult :class:`SafeDefaultsMatrix` before acting.
 """
 
+from kukiihome_shared.health.degraded import DegradedState, SafeActionGate
 from kukiihome_shared.health.diagnostics import (
     DiagnosticEntry,
     DiagnosticLevel,
@@ -48,6 +49,7 @@ __all__ = [
     "ActionClass",
     "ComponentHealth",
     "ComponentStatus",
+    "DegradedState",
     "DiagnosticEntry",
     "DiagnosticLevel",
     "DiagnosticRing",
@@ -57,6 +59,7 @@ __all__ = [
     "HealthRegistry",
     "HealthSnapshot",
     "Permission",
+    "SafeActionGate",
     "SafeDefaultsMatrix",
     "SystemStatus",
     "TransitionCallback",

@@ -34,9 +34,11 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import structlog
 from kukiihome_shared.generated.events.action_event import ActionEvent, ActionType, Tier
+from kukiihome_shared.health import FailureMode, SafeDefaultsMatrix
 
 if TYPE_CHECKING:
     from kukiihome_shared.bus import Bus
+    from kukiihome_shared.health import DegradedState
 
     from kukiihome_core.rules import ResolutionOutcome
 
@@ -349,6 +351,39 @@ HARD_BLOCKED_SERVICES: frozenset[str] = frozenset(
     }
 )
 
+# Map HA services to the §19 safe-defaults action classes, so an active
+# failure mode (HA down, VLM down, …) can tighten a service's disposition.
+# Services with no mapping aren't constrained by the failure-mode floor.
+SERVICE_ACTION_CLASS: dict[str, str] = {
+    "light.turn_on": "lights",
+    "light.turn_off": "lights",
+    "switch.turn_on": "lights",
+    "switch.turn_off": "lights",
+    "scene.turn_on": "lights",
+    "media_player.play_media": "speaker",
+    "tts.speak": "speaker",
+    "lock.lock": "lock",
+    "alarm_control_panel.alarm_arm_home": "lock",
+    "alarm_control_panel.alarm_arm_away": "lock",
+    "alarm_control_panel.alarm_arm_night": "lock",
+    "lock.unlock": "unlock",
+    "lock.open": "unlock",
+    "alarm_control_panel.alarm_disarm": "unlock",
+    "cover.open_cover": "unlock",
+    "siren.turn_on": "siren",
+}
+
+
+def _policy_block_notify(service: str) -> dict[str, Any]:
+    """The operator-notify fallback emitted when an action is blocked."""
+    return {
+        "type": "notify",
+        "targets": ["all_residents"],
+        "message_template": (
+            f"Action {service} was suggested but is policy-blocked; manual intervention required."
+        ),
+    }
+
 
 @dataclass
 class PolicyDecision:
@@ -386,20 +421,33 @@ class PreApprovalRegistry:
 class PolicyGate:
     """Enforces autonomous action policy."""
 
-    def __init__(self, pre_approvals: PreApprovalRegistry | None = None) -> None:
+    def __init__(
+        self,
+        pre_approvals: PreApprovalRegistry | None = None,
+        *,
+        safe_defaults: SafeDefaultsMatrix | None = None,
+    ) -> None:
         self._pre = pre_approvals or PreApprovalRegistry()
+        self._safe_defaults = safe_defaults or SafeDefaultsMatrix()
 
     @property
     def pre_approvals(self) -> PreApprovalRegistry:
         return self._pre
 
     def evaluate(
-        self, action: dict[str, Any], *, ctx: dict[str, Any] | None = None
+        self,
+        action: dict[str, Any],
+        *,
+        ctx: dict[str, Any] | None = None,
+        active_failure_modes: frozenset[FailureMode] | None = None,
     ) -> PolicyDecision:
         """Decide whether an action is auto, gated, or blocked.
 
         ``action`` is the rule-engine action dict; for ``ha_service_call``
-        actions the gate inspects the requested service.
+        actions the gate inspects the requested service. When
+        ``active_failure_modes`` is supplied, the §19 safe-defaults matrix
+        is applied as a floor — a degraded system can tighten (never
+        loosen) a service's disposition.
         """
         ctx = ctx or {}
         action_type = action.get("type")
@@ -421,18 +469,16 @@ class PolicyGate:
             return PolicyDecision(PolicyDisposition.auto, "unknown_treated_as_auto")
 
         service = action.get("service", "")
+        base = self._base_service_decision(service, ctx)
+        return self._apply_failure_floor(base, service, active_failure_modes)
+
+    def _base_service_decision(self, service: str, ctx: dict[str, Any]) -> PolicyDecision:
+        """The normal (non-degraded) disposition for an HA service."""
         if service in HARD_BLOCKED_SERVICES:
             return PolicyDecision(
                 PolicyDisposition.blocked,
                 f"{service}_requires_explicit_human_action",
-                fallback_action={
-                    "type": "notify",
-                    "targets": ["all_residents"],
-                    "message_template": (
-                        f"Action {service} was suggested but is policy-blocked; "
-                        "manual intervention required."
-                    ),
-                },
+                fallback_action=_policy_block_notify(service),
             )
         if service in POLICY_GATED_SERVICES:
             pa = self._pre.find(service, ctx)
@@ -445,6 +491,48 @@ class PolicyGate:
             return PolicyDecision(PolicyDisposition.gated, "needs_user_confirmation")
         # Default auto for unknown HA services that aren't gated/blocked.
         return PolicyDecision(PolicyDisposition.auto, "service_not_restricted")
+
+    def _apply_failure_floor(
+        self,
+        base: PolicyDecision,
+        service: str,
+        active_failure_modes: frozenset[FailureMode] | None,
+    ) -> PolicyDecision:
+        """Tighten ``base`` per the §19 safe-defaults matrix for the modes
+        active right now (it can only restrict, never loosen):
+
+        * ``block`` — force blocked (+ operator notify) unless already.
+        * ``conditional`` — never auto-execute on a degraded system: a rule
+          pre-approval is honored (the rule authorizes it), but a plain
+          auto downgrades to gated (ask). Gated/blocked are left as-is.
+        * ``allow`` — unchanged.
+        """
+        if not active_failure_modes:
+            return base
+        action_class = SERVICE_ACTION_CLASS.get(service)
+        if action_class is None:
+            return base
+        perm = self._safe_defaults.permission(action_class, active_failure_modes)
+        if perm == "allow":
+            return base
+        codes = "+".join(sorted(m.code for m in active_failure_modes))
+        if perm == "block":
+            if base.disposition == PolicyDisposition.blocked:
+                return base
+            return PolicyDecision(
+                PolicyDisposition.blocked,
+                f"safe_default_block:{action_class}:{codes}",
+                fallback_action=_policy_block_notify(service),
+            )
+        # perm == "conditional"
+        if base.disposition == PolicyDisposition.auto and base.pre_approval_rule_id is not None:
+            return base  # a rule pre-authorizes -> conditional satisfied
+        if base.disposition == PolicyDisposition.auto:
+            return PolicyDecision(
+                PolicyDisposition.gated,
+                f"safe_default_conditional:{action_class}:{codes}",
+            )
+        return base
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -848,6 +936,7 @@ class ActionDispatcher:
         explanation: ExplanationGenerator | None = None,
         escalation: EscalationEngine | None = None,
         ack: AckTracker | None = None,
+        degraded_state: DegradedState | None = None,
     ) -> None:
         self._bus = bus
         self._tier_router = tier_router or TierRouter()
@@ -858,6 +947,9 @@ class ActionDispatcher:
         self._explanation = explanation or ExplanationGenerator()
         self._escalation = escalation or EscalationEngine()
         self._ack = ack or AckTracker()
+        # Optional live failure-mode set; when present, the policy gate
+        # applies the §19 safe-defaults floor to every device action.
+        self._degraded_state = degraded_state
 
     @property
     def escalation_engine(self) -> EscalationEngine:
@@ -952,7 +1044,13 @@ class ActionDispatcher:
         for raw_action in resolution.actions:
             if not raw_action:
                 continue
-            decision = self._policy.evaluate(raw_action, ctx={"event_id": event_id})
+            decision = self._policy.evaluate(
+                raw_action,
+                ctx={"event_id": event_id},
+                active_failure_modes=(
+                    self._degraded_state.active() if self._degraded_state is not None else None
+                ),
+            )
             if decision.disposition == PolicyDisposition.blocked:
                 policy_blocks.append(decision)
                 if decision.fallback_action:

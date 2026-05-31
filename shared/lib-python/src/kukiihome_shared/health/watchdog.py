@@ -23,11 +23,16 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import structlog
 
 from kukiihome_shared.health.diagnostics import DiagnosticEntry, DiagnosticLevel, DiagnosticRing
 from kukiihome_shared.health.models import ComponentHealth, ComponentStatus, HealthRegistry
+
+if TYPE_CHECKING:
+    from kukiihome_shared.health.degraded import DegradedState
+    from kukiihome_shared.health.failure_modes import FailureMode
 
 logger = structlog.get_logger(__name__)
 
@@ -56,6 +61,14 @@ class HealthCheck:
     from ``warning`` to ``critical`` (a transient blip vs. a real outage).
     Critical components escalate immediately."""
 
+    failure_mode: FailureMode | None = None
+    """The §19 failure mode this component represents (e.g. F4 for
+    home_assistant, F7 for vlm_router). When set + the watchdog has a
+    :class:`DegradedState`, a non-ok observation activates this mode and a
+    recovery clears it — so the safe-defaults gate sees what's broken.
+    ``None`` for components that don't map to an action-restricting mode
+    (e.g. the preprocessor: its loss skips enrichment, not actions)."""
+
 
 @dataclass
 class Watchdog:
@@ -70,6 +83,7 @@ class Watchdog:
     on_transition: TransitionCallback | None = None
     poll_interval_s: float = 10.0
     clock: Callable[[], float] = time.time
+    degraded_state: DegradedState | None = None
 
     _checks: list[HealthCheck] = field(default_factory=list)
     _last_status: dict[str, ComponentStatus] = field(default_factory=dict)
@@ -117,6 +131,12 @@ class Watchdog:
         # registers as a transition worth logging.
         previous = self._last_status.get(check.name, "ok")
         self._last_status[check.name] = health.status
+
+        # Reflect this component's mode in the live degraded set every
+        # observation (not just on transitions) so the safe-action gate
+        # stays correct even if a transition's callback is missed.
+        if self.degraded_state is not None and check.failure_mode is not None:
+            self.degraded_state.set_active(check.failure_mode, health.status != "ok")
 
         if health.status == "offline":
             self._consecutive_offline[check.name] = self._consecutive_offline.get(check.name, 0) + 1
