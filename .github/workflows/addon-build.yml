@@ -59,47 +59,14 @@ jobs:
           #   is a maintenance trap; the base image is already pinned.
           ignore: DL3006,DL3008,DL3018
 
-  build:
-    name: Build add-on image (amd64)
+  # Static check of the s6 run scripts — arch-independent, so it runs
+  # once here rather than per matrix leg.
+  s6-scripts:
+    name: Verify s6 run scripts point at the venv
     runs-on: ubuntu-latest
     needs: validate
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build amd64 image (matches Supervisor's local-build path)
-        run: |
-          # Supervisor uses the add-on directory as build context + reads
-          # build.yaml for BUILD_FROM. We mirror both so CI breakage
-          # matches what a real install would hit.
-          # KUKIIHOME_REF=${{ github.sha }} pins the in-image clone to
-          # the commit under test (so PR builds verify the change, not
-          # whatever's on main right now).
-          docker buildx build \
-            --platform linux/amd64 \
-            --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:bookworm \
-            --build-arg KUKIIHOME_REF=${{ github.sha }} \
-            --build-arg CACHEBUST=${{ github.sha }} \
-            --tag kukiihome-addon:ci \
-            --load \
-            ha-integration/addon/kukiihome
-      - name: Sanity-run the image
-        run: |
-          # Verify the s6 run scripts can actually start the ha-agent.
-          # Use the same venv-python path the s6 scripts use — if this
-          # changes and the run scripts don't follow, we'd ship broken
-          # images again (which we did in v0.1.3-v0.1.6).
-          # Epic 10.8.2: the image installs only kukiihome-ha-agent +
-          # the shared lib (the inference stack lives on a separate
-          # box), so import exactly what the Dockerfile installs.
-          docker run --rm kukiihome-addon:ci /bin/bash -c '
-            /app/.venv/bin/python -c "
-            import kukiihome_shared.topology
-            import kukiihome_shared.motion
-            import kukiihome_ha_agent
-            print(\"ha-agent + shared lib importable from /app/.venv/bin/python\")
-            "
-          '
       - name: Verify s6 run scripts point at the venv
         run: |
           # If a service run script uses bare `python` instead of
@@ -116,3 +83,94 @@ jobs:
             fi
           done
           echo "All s6 run scripts correctly target the venv python"
+
+  # Build amd64 + aarch64. On PRs: build + load + sanity-run (verify the
+  # image actually boots) — no push. On main / manual dispatch: also push
+  # pre-built per-arch images to GHCR so Supervisor can `docker pull`
+  # instead of building locally (#289 — cuts ARM64 install from ~15min to
+  # ~30s). Per-arch image naming (`{arch}-kukiihome-addon`) matches the HA
+  # add-on `image: ghcr.io/<owner>/{arch}-kukiihome-addon` convention.
+  build:
+    name: Build add-on image (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            build_from: ghcr.io/home-assistant/amd64-base-debian:bookworm
+          - arch: aarch64
+            platform: linux/arm64
+            build_from: ghcr.io/home-assistant/aarch64-base-debian:bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU (cross-arch emulation for aarch64)
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Compute image ref + tags
+        id: img
+        run: |
+          # GHCR repo names must be lowercase.
+          owner=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          version=$(python -c "import yaml; print(yaml.safe_load(open('ha-integration/addon/kukiihome/config.yaml'))['version'])")
+          image="ghcr.io/${owner}/${{ matrix.arch }}-kukiihome-addon"
+          # A stable local tag for the sanity-run step regardless of push.
+          local_tag="kukiihome-addon:ci-${{ matrix.arch }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            tags="${local_tag}"
+          else
+            tags="${local_tag},${image}:${version},${image}:latest"
+          fi
+          {
+            echo "image=${image}"
+            echo "version=${version}"
+            echo "local_tag=${local_tag}"
+            echo "tags=${tags}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Building ${{ matrix.arch }} -> ${tags}"
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build (and push on main) the add-on image
+        uses: docker/build-push-action@v6
+        with:
+          # Supervisor uses the add-on directory as build context + reads
+          # build.yaml for BUILD_FROM. We mirror both so CI breakage
+          # matches what a real install would hit. KUKIIHOME_REF pins the
+          # in-image clone to the commit under test.
+          context: ha-integration/addon/kukiihome
+          platforms: ${{ matrix.platform }}
+          load: true # also load locally so the sanity-run can boot it
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.img.outputs.tags }}
+          build-args: |
+            BUILD_FROM=${{ matrix.build_from }}
+            KUKIIHOME_REF=${{ github.sha }}
+            CACHEBUST=${{ github.sha }}
+      - name: Sanity-run the image (amd64 only)
+        if: matrix.arch == 'amd64'
+        run: |
+          # Verify the s6 run scripts can actually start the ha-agent
+          # using the same venv-python path the s6 scripts use — if that
+          # path changes and the run scripts don't follow, we'd ship
+          # broken images again (which we did in v0.1.3-v0.1.6).
+          # Epic 10.8.2: the image installs only kukiihome-ha-agent + the
+          # shared lib (the inference stack lives on a separate box), so
+          # import exactly what the Dockerfile installs. (aarch64 runs
+          # only under QEMU here, too slow to boot — the build succeeding
+          # is the gate for it.)
+          docker run --rm ${{ steps.img.outputs.local_tag }} /bin/bash -c '
+            /app/.venv/bin/python -c "
+            import kukiihome_shared.topology
+            import kukiihome_shared.motion
+            import kukiihome_ha_agent
+            print(\"ha-agent + shared lib importable from /app/.venv/bin/python\")
+            "
+          '
