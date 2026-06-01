@@ -121,7 +121,15 @@ schema:
   vlm_router: 'match(.+)?'
   notify: 'match(.+)?'
 
-# No `image:` — Supervisor builds locally from the Dockerfile in this dir.
-# Once we publish pre-built images to ghcr.io via the addon-build workflow,
-# this can switch back to:
-#   image: ghcr.io/darinshapiro/kukiihome-addon
+# Pre-built per-arch images, published to GHCR by the addon-build workflow
+# on every push to main (#289). Supervisor substitutes `{arch}` (amd64 /
+# aarch64) and pulls `:<version>` matching the `version:` field above —
+# so a (re)install is a ~30s `docker pull` instead of a ~15min local build.
+#
+# Phase 2 of the two-phase rollout: the v0.4.0 images are confirmed present
+# in GHCR (amd64 + aarch64, tags :0.4.0 + :latest) before enabling this.
+# IMPORTANT: every future version bump MUST land its images in GHCR (i.e.
+# the addon-build run on main must go green) BEFORE users update, or the
+# pull 404s — Supervisor does not fall back to a local build when `image:`
+# is set. To force a local build again (e.g. debugging), comment this out.
+image: ghcr.io/darinshapiro/{arch}-kukiihome-addon
