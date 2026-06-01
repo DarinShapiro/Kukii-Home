@@ -63,6 +63,33 @@ open planning/README.md
 - Reference issue number when applicable: `feat(core): add triage worker (#42)`
 - Conventional Commits prefixes: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`
 
+## Releasing the add-on
+
+The add-on uses **pre-built images** (`image:` in
+`ha-integration/addon/kukiihome/config.yaml`): Home Assistant Supervisor
+_pulls_ `ghcr.io/darinshapiro/{arch}-kukiihome-addon:<version>` instead of
+building locally, so a (re)install is ~30 s instead of ~15 min. The
+catch: Supervisor does **not** fall back to a local build when `image:`
+is set, so the version's images must exist in GHCR _before_ anyone
+updates, or the pull 404s.
+
+The `addon-build` workflow makes this safe by construction — you don't
+have to track it manually:
+
+1. Bump `version:` in `config.yaml` + `ADDON_VERSION` in `build.yaml`
+   (keep them equal) and update the add-on `CHANGELOG.md`.
+2. Push. `addon-build` builds + pushes both arch images to GHCR, then the
+   **`verify-published`** job re-pulls the manifest for the version
+   `config.yaml` declares (every arch) and **fails red if any is
+   missing**.
+3. **A green `addon-build` run on a commit means the images that
+   `config.yaml` points at are live in GHCR — i.e. it is safe to update
+   the add-on. A red run means do not update.** That check is the
+   authoritative "ready" signal; there's no separate manual step.
+
+To force a local build again (e.g. debugging a build issue), comment out
+the `image:` line — Supervisor then builds from the `Dockerfile`.
+
 ## Architecture decisions
 
 If you're proposing something that changes the architecture (vs. implementing what's documented), open an issue with the `type:adr` label first. Architecture changes are captured in [`docs/architecture/20-open-questions.md`](docs/architecture/20-open-questions.md).

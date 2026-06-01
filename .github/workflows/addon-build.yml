@@ -185,3 +185,49 @@ jobs:
             print(\"ha-agent + shared lib importable from /app/.venv/bin/python\")
             "
           '
+
+  # The "safe to update" gate. config.yaml's `image:` makes Supervisor
+  # PULL `ghcr.io/.../{arch}-kukiihome-addon:<version>` with NO fallback
+  # to a local build — so if that tag isn't actually in GHCR, a user's
+  # update 404s. This job re-pulls the manifest for the version config.yaml
+  # currently declares, for BOTH arches, AFTER the build/push. It fails red
+  # if either is missing. Net effect: a GREEN addon-build run on a commit
+  # means "the images config.yaml points at are live — safe to update";
+  # RED means "do not update." Removes the silent window between a version
+  # bump landing on main and its images existing. Runs only post-push (on a
+  # PR nothing is published yet, so there's nothing to verify).
+  verify-published:
+    name: Verify GHCR images match config.yaml version
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Manifest for config.yaml's version must exist for every arch
+        run: |
+          owner=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          version=$(python -c "import yaml; print(yaml.safe_load(open('ha-integration/addon/kukiihome/config.yaml'))['version'])")
+          # The set of arches config.yaml promises Supervisor can install.
+          arches=$(python -c "import yaml; print(' '.join(yaml.safe_load(open('ha-integration/addon/kukiihome/config.yaml'))['arch']))")
+          echo "Verifying ${arches} images for version ${version} ..."
+          fail=0
+          for arch in $arches; do
+            ref="ghcr.io/${owner}/${arch}-kukiihome-addon:${version}"
+            if docker manifest inspect "$ref" >/dev/null 2>&1; then
+              echo "  OK  $ref"
+            else
+              echo "  MISSING  $ref"
+              fail=1
+            fi
+          done
+          if [ "$fail" = "1" ]; then
+            echo "::error::config.yaml declares image:/version that is not fully published to GHCR — a user update would 404. Do not update the add-on until this is green."
+            exit 1
+          fi
+          echo "All declared-arch images for ${version} are live in GHCR — safe to update."
