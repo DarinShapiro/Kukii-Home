@@ -13,6 +13,7 @@ diagnosable from the Web UI without needing the add-on Log tab.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import html
 import json
 import logging
@@ -46,6 +47,7 @@ from kukiihome_ha_agent.config import HAAgentSettings
 from kukiihome_ha_agent.discovery import DiscoveryDecision, build_decisions
 from kukiihome_ha_agent.enricher import AlertEnricher
 from kukiihome_ha_agent.event_store import EventStore
+from kukiihome_ha_agent.health_app import attach_health_routes, build_health_service
 from kukiihome_ha_agent.http_api import AlertLog, HAAgentAPI
 from kukiihome_ha_agent.mcp_tools import HATools
 from kukiihome_ha_agent.notifier import AlertNotifier
@@ -188,6 +190,11 @@ class BootState:
     """Epic 10.6: reasoning gate subscribed to AlertLog in place of the
     notifier — reasons about each event and notifies only when warranted.
     None when KUKIIHOME_TRIAGE_REASONING=off (legacy direct-notify)."""
+    health_service: Any | None = None
+    """Epic 15: resilience watchdog + health registry for this add-on
+    process. Drives the F4 (HA down) probe and backs the /health +
+    /diagnostics endpoints (which the HA integration's health card reads).
+    Built in main(); its watchdog runs as a background task."""
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -1957,6 +1964,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     # v0.3.16 motion-switch toggle + generic-motion fallback.
     app.router.add_post("/discovery/switch_toggle", discovery_switch_toggle)
     app.router.add_post("/discovery/use_generic_motion", discovery_use_generic_motion)
+
+    # Epic 15: resilience /health + /diagnostics. The HealthService is
+    # built in _run() before this app is constructed, so it's present.
+    if boot.health_service is not None:
+        attach_health_routes(app, boot.health_service)
     return app
 
 
@@ -2274,6 +2286,14 @@ async def _run() -> None:
             hint="set KUKIIHOME_PREPROCESSOR_URL to enrich alerts with recognition",
         )
 
+    # Epic 15: build the resilience health service before the app, so
+    # _build_app can attach /health + /diagnostics. The F4 (HA down) probe
+    # reads boot.client liveness dynamically — None (pre-connect) and a
+    # disconnected client both report offline, which is correct.
+    boot.health_service = build_health_service(
+        is_connected=lambda: boot.client is not None and boot.client.is_connected,
+    )
+
     # Bring the HTTP server up FIRST. If this fails, there's a real
     # network-level problem (port in use, no interface, etc.) and there's
     # nothing the status page can do about it.
@@ -2303,9 +2323,17 @@ async def _run() -> None:
         )
     )
 
+    # Epic 15: start the resilience watchdog poll loop. Detects HA-down
+    # (F4), records transitions to the diagnostic ring, and keeps /health
+    # current. Independent of the bootstrap task; cancelled on shutdown.
+    watchdog_task = asyncio.create_task(boot.health_service.run(), name="health_watchdog")
+
     try:
         await asyncio.Event().wait()
     finally:
+        watchdog_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await watchdog_task
         for loop in boot.camera_loops:
             await loop.stop()
         for ha_loop in boot.ha_camera_loops:

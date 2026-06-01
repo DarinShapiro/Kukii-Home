@@ -148,6 +148,15 @@ class HAClient:
         """Wait until the WebSocket has authenticated + subscribed."""
         await asyncio.wait_for(self._ready.wait(), timeout=timeout)
 
+    @property
+    def is_connected(self) -> bool:
+        """True while the HA WebSocket is connected + authenticated.
+
+        Backed by the same ``_ready`` event :meth:`wait_ready` awaits: set
+        on a successful connect+auth, cleared on disconnect. The F4
+        (HA down) health probe (resilience §19) reads this each poll."""
+        return self._ready.is_set()
+
     # ─── REST: state ───────────────────────────────────────────────
 
     async def get_states(self) -> list[HAState]:
