@@ -65,6 +65,12 @@ class AppState:
     # Pure storage for Phase 10.1; real handlers in Phase 10.2+.
     applied_knobs: dict[str, KnobAdjustment] | None = None
 
+    # Optional RTSP capture supervisor (None in synthetic mode). Held so
+    # /debug/capture can surface per-camera decode/queue/drop metrics —
+    # the verifiable "nothing was dropped" surface for the decode→queue→
+    # workers capture path.
+    capture_supervisor: object | None = None
+
     def __post_init__(self) -> None:
         if self.applied_knobs is None:
             self.applied_knobs = {}
@@ -104,6 +110,36 @@ def create_app(state: AppState) -> FastAPI:
             frame_windows_served_total=state.frame_windows_served_total,
             actors_cached=await state.cache.size(),
         )
+
+    @app.get("/debug/capture")
+    async def debug_capture() -> dict[str, object]:
+        """Per-camera decode/queue/drop metrics for the RTSP capture path.
+
+        The verifiable surface for the decode→queue→workers split: shows
+        frames decoded vs buffered (the gap = what the queue shed),
+        drops split by priority (``dropped_motion`` > 0 means real
+        capacity breach, not just non-motion shedding), and live/peak
+        queue depth. Empty ``cameras`` in synthetic mode.
+        """
+        sup = state.capture_supervisor
+        if sup is None or not hasattr(sup, "state_snapshot"):
+            return {"backend": state.config.backend, "cameras": []}
+        cams = []
+        for s in sup.state_snapshot():
+            cams.append(
+                {
+                    "camera_id": s.camera_id,
+                    "connected": s.connected,
+                    "frames_decoded": s.frames_decoded_total,
+                    "frames_buffered": s.frames_captured_total,
+                    "frames_dropped": s.frames_dropped_total,
+                    "frames_dropped_motion": s.frames_dropped_motion_total,
+                    "queue_depth": s.queue_depth,
+                    "queue_peak_depth": s.queue_peak_depth,
+                    "last_error": s.last_error,
+                }
+            )
+        return {"backend": state.config.backend, "cameras": cams}
 
     @app.get("/frames/{camera_id}/{ts}.jpg")
     async def get_frame(camera_id: str, ts: float) -> Response:

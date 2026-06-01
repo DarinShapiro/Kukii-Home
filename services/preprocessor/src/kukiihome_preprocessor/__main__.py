@@ -269,6 +269,7 @@ async def _run(config: PreprocessorConfig) -> None:
         cache=cache,
         frame_buffer=frame_buffer,
         started_ts=time.time(),
+        capture_supervisor=capture_supervisor,
     )
 
     app = create_app(state)

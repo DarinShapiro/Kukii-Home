@@ -20,6 +20,7 @@ disk archival on top later).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass, field
 
@@ -29,6 +30,7 @@ import numpy as np
 import structlog
 
 from kukiihome_preprocessor.motion import MOG2MotionDetector, MotionConfig
+from kukiihome_preprocessor.pipelines.frame_queue import FrameQueue
 from kukiihome_preprocessor.pipelines.rolling_buffer import (
     BufferedFrame,
     RollingBuffer,
@@ -61,6 +63,16 @@ class CameraCaptureState:
     connected: bool = False
     last_frame_ts: float | None = None
     frames_captured_total: int = 0
+    frames_decoded_total: int = 0
+    """Frames pulled off the decoder (before queue/shed). The gap
+    between this and ``frames_captured_total`` is what the queue shed."""
+    frames_dropped_total: int = 0
+    frames_dropped_motion_total: int = 0
+    """High-value drops — motion frames shed under sustained overload.
+    Non-zero = the box can't keep up even after prioritizing; the §18
+    signal that NVDEC / more GPU is required."""
+    queue_depth: int = 0
+    queue_peak_depth: int = 0
     consecutive_failures: int = 0
     last_error: str | None = None
     started_ts: float = field(default_factory=time.time)
@@ -82,6 +94,8 @@ class CameraCaptureTask:
         buffer: RollingBuffer,
         target_interval_seconds: float = 1.0,
         motion_gating_enabled: bool = True,
+        queue_maxsize: int = 64,
+        encode_workers: int = 3,
     ) -> None:
         if not rtsp_url:
             raise ValueError(f"empty RTSP url for camera {camera_id!r}")
@@ -89,6 +103,13 @@ class CameraCaptureTask:
         self._rtsp_url = rtsp_url
         self._buffer = buffer
         self._target_interval = target_interval_seconds
+        # decode → bounded queue → parallel encode workers. The decode
+        # thread does the minimum (decode + cheap motion gate) and never
+        # blocks on the expensive JPEG-encode; that runs in the worker
+        # pool, so a burst is absorbed by the queue and caught up by the
+        # workers rather than throttling ingestion. See frame_queue.py.
+        self._queue_maxsize = queue_maxsize
+        self._encode_workers = max(1, encode_workers)
         # Per-camera MOG2 detector (NOT thread-safe across cameras,
         # but each capture task owns its own). Constructed lazily on
         # first frame so synthetic-mode tests + cameras that never
@@ -100,15 +121,29 @@ class CameraCaptureTask:
             rtsp_url_sanitized=_sanitize_url(rtsp_url),
         )
         self._task: asyncio.Task[None] | None = None
+        # decode→queue→workers machinery. Queue item is the raw
+        # (ts, bgr_ndarray, has_motion) tuple; workers do the encode.
+        self._queue: FrameQueue[tuple[float, np.ndarray, bool]] = FrameQueue(maxsize=queue_maxsize)
+        self._worker_futs: list[asyncio.Future[None]] = []
+        self._stopping = False
 
     async def start(self) -> None:
         if self._task is not None:
             return
+        self._stopping = False
+        loop = asyncio.get_running_loop()
+        # Spin up the encode-worker pool. JPEG-encode releases the GIL,
+        # so N workers genuinely parallelize across cores.
+        self._worker_futs = [
+            loop.run_in_executor(None, self._encode_worker, loop)
+            for _ in range(self._encode_workers)
+        ]
         self._task = asyncio.create_task(self._run(), name=f"rtsp-capture-{self._camera_id}")
 
     async def stop(self) -> None:
         if self._task is None:
             return
+        self._stopping = True
         self._task.cancel()
         try:
             await self._task
@@ -116,6 +151,12 @@ class CameraCaptureTask:
             pass
         finally:
             self._task = None
+        # Drain + join the worker pool so encode threads exit cleanly.
+        self._queue.close()
+        for fut in self._worker_futs:
+            with contextlib.suppress(Exception):
+                await fut
+        self._worker_futs = []
 
     # ─── internals ────────────────────────────────────────────────
 
@@ -183,13 +224,13 @@ class CameraCaptureTask:
                     last_capture_ts = now
 
                     img = frame.to_ndarray(format="bgr24")
+                    self.state.frames_decoded_total += 1
 
-                    # Motion gating BEFORE JPEG-encode + buffer write.
-                    # MOG2 needs a few frames to build its background
-                    # model — early frames return has_motion=False
-                    # regardless. That's fine: the buffer still gets
-                    # populated, just marked motion=False so YOLO
-                    # skips them (the cold-start window is brief).
+                    # Cheap motion gate stays in the DECODE thread —
+                    # shedding the right frame requires knowing its value,
+                    # so the queue must learn has_motion before it can
+                    # prioritize. MOG2 is cheap; the expensive JPEG-encode
+                    # is what we move off this thread.
                     has_motion = False
                     if self._motion_gating_enabled:
                         if self._motion is None:
@@ -197,28 +238,49 @@ class CameraCaptureTask:
                         decision = self._motion.process(img, timestamp=now)
                         has_motion = decision.has_motion
 
-                    ok, jpeg = cv2.imencode(
-                        ".jpg",
-                        img,
-                        [int(cv2.IMWRITE_JPEG_QUALITY), _JPEG_QUALITY],
+                    # Hand the raw frame to the queue and IMMEDIATELY go
+                    # back to decoding. Encode + buffer-write happen in the
+                    # worker pool. If the queue is full, it sheds the
+                    # lowest-value frame (non-motion first) — ingestion is
+                    # never throttled by downstream processing.
+                    stored = self._queue.put(
+                        (round(now, 3), img, has_motion), has_motion=has_motion
                     )
-                    if not ok:
-                        continue
-
-                    height, width = img.shape[:2]
-                    buffered = BufferedFrame(
-                        ts=round(now, 3),
-                        jpeg_bytes=jpeg.tobytes(),
-                        width=int(width),
-                        height=int(height),
-                        has_motion=has_motion,
-                    )
-                    # Hand off to the event loop's RollingBuffer.
-                    asyncio.run_coroutine_threadsafe(self._write(buffered), loop)
+                    if not stored:
+                        self.state.frames_dropped_total = self._queue.metrics.dropped_total
+                        self.state.frames_dropped_motion_total = (
+                            self._queue.metrics.dropped_motion_total
+                        )
+                    self.state.queue_depth = self._queue.metrics.depth
+                    self.state.queue_peak_depth = self._queue.metrics.peak_depth
             finally:
                 container.close()
 
         await loop.run_in_executor(None, _drive_stream)
+
+    def _encode_worker(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Drain the queue: JPEG-encode (releases the GIL → real
+        parallelism across workers) and write to the RollingBuffer.
+        Runs in a thread-pool thread; exits when the queue closes."""
+        while not self._stopping:
+            item = self._queue.get(timeout=0.5)
+            if item is None:
+                if self._stopping:
+                    break
+                continue
+            ts, img, has_motion = item
+            ok, jpeg = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), _JPEG_QUALITY])
+            if not ok:
+                continue
+            height, width = img.shape[:2]
+            buffered = BufferedFrame(
+                ts=ts,
+                jpeg_bytes=jpeg.tobytes(),
+                width=int(width),
+                height=int(height),
+                has_motion=has_motion,
+            )
+            asyncio.run_coroutine_threadsafe(self._write(buffered), loop)
 
     async def _write(self, frame: BufferedFrame) -> None:
         await self._buffer.write(self._camera_id, frame)
