@@ -113,6 +113,30 @@ These questions are still in active discussion or awaiting implementation feedba
     - **Impacts:** §12.5 (multi-camera fusion), §13 (adjacency graph), §16 (privacy tiers), §10 (rule taxonomy: `absence` / `composite`), §03.5 (ha-camera adapter as the universal fallback path)
     - **Status:** Captured for post-validation; design only, no code. Generalizes beyond Ring to any heterogeneous/low-reliability source.
 
+21. **Persistent-presence / state-transition memory — distinguishing "just arrived" from "been there for days"** — A parked car is the same pixels on day 1 and day 3; what differs is _history_. The system must reason over **state transitions** (appeared / departed / changed), not instantaneous presence — and only memory carries the prior state that makes a detection a _transition_ rather than a re-observation.
+    - **Motivating insight (from live driveway testing):** the car parked in the driveway is a non-event when it's been there for days, but its _first arrival_ is a real event — identical detections, opposite significance. "The event is the state transition, not the state."
+    - **What motion-gating already solves for free (the easy ~80%):**
+      - Car _first parks_ → arrival motion → detection fires → **event.** ✓
+      - Car _sits for days_ → no motion → detection never runs → **no event.** ✓ The steady-state non-event is suppressed at the detection layer with no memory needed.
+    - **Where motion-gating fails and memory is the ONLY answer (the ~20%):**
+      1. **Co-occurrence contamination.** A person walks by (motion fires) → the window runs → YOLO now detects _both_ the person _and_ the long-parked car. Without memory the car re-enters reasoning as if new; memory says "that vehicle's been here since Friday — background, focus on the person."
+      2. **Departure / offset.** "The car that was parked for 3 days is _gone_" is a real event, but there is **no motion at an empty spot** to trigger it. Absence has no pixels — only memory ("expected present, no longer confirmed") produces the departed event.
+      3. **Substitution.** A _different_ car takes the same spot. Identical at the "car in driveway" level; only identity (embedding / plate) + onset timestamp distinguishes "same car still here" from "new car — whose?".
+      4. **Cold reads.** Reboot, a "what's in the driveway right now?" query, the overnight digest — no motion history to lean on; the present-state baseline must be _remembered_.
+    - **The missing primitive.** No existing memory object covers this. `Event` nodes are instantaneous; `VisitLedger` tracks discrete arrive/leave _visits_ for recurring subjects, not a continuously-present object; `last_known_location` exists but only for `PetActor`. What's absent is a general **persistent-presence / scene-state layer**, e.g.
+
+      ```
+      PersistentPresence: entity(vehicle|object|person), area,
+                          present_since, last_confirmed_at, identity_ref, state
+      ```
+
+      plus a triage rule that a raw detection becomes an `Event` only on a **transition** of that state (onset → "arrived"; offset → "departed"; substitution → "replaced"); continued presence is by definition a non-event.
+
+    - **The honest hard part.** Onset is cheap (motion already gives it). **Offset and substitution are the hard ones** — they require _periodic re-confirmation_: a lightweight non-motion-driven sweep over the preprocessor's continuous buffer asking "is everything I believe is present still present, and still the same?" That recurring confirmation pass is the piece that does not exist yet (and has a real, if small, steady-state cost).
+    - **Relationship to other items:** this is the **spatial twin** of #20's temporal absence/negative-sequence idea (parks-but-never-approaches) — same shape, where the signal is a _change in expected state_, not a positive detection. It is also the baseline #15 (anomaly detection) needs: "what is normally present here" can't be judged without a remembered present-state.
+    - **Impacts:** §11 (memory model — new presence/scene-state layer), §03/§08 (triage: detection→event only on transition; the re-confirmation sweep), §10 (rule taxonomy: `absence`), §15 (anomaly/#15)
+    - **Status:** Captured for post-validation; design only, no code. Surfaced during live two-camera bring-up.
+
 ---
 
 ## Decision log (chronological record)
