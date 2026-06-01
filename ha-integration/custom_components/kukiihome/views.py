@@ -11,7 +11,7 @@ Fix: register HomeAssistantViews at /api/kukiihome/alert/<id>/*
 in HA Core. HA's standard auth middleware handles bearer-token
 auth for /api/* paths, which the Companion app DOES carry. Each
 view proxies the request through to the add-on's existing endpoint
-via the Kukii-HomeAPIClient. The browser never talks to the add-on
+via the KukiiHomeAPIClient. The browser never talks to the add-on
 directly anymore (for the per-alert flow); it talks to HA Core,
 which forwards to the add-on internally.
 
@@ -57,7 +57,7 @@ except ImportError:
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from .api_client import Kukii-HomeAPIClient
+    from .api_client import KukiiHomeAPIClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ _LOGGER = logging.getLogger(__name__)
 _SIGN_EXPIRATION = timedelta(hours=24)
 
 
-def register_alert_views(hass: HomeAssistant, client: Kukii-HomeAPIClient) -> None:
+def register_alert_views(hass: HomeAssistant, client: KukiiHomeAPIClient) -> None:
     """Register all per-alert HTTP views on HA's HTTP component.
 
     Idempotent enough for the integration's setup_entry flow — HA
@@ -148,7 +148,7 @@ class AlertPageView(HomeAssistantView):
     # the bearer token before this handler runs. Companion app has
     # the token; browser sessions have the cookie. Both work.
 
-    def __init__(self, client: Kukii-HomeAPIClient) -> None:
+    def __init__(self, client: KukiiHomeAPIClient) -> None:
         self._client = client
 
     async def get(self, request: web.Request, event_id: str) -> web.Response:
@@ -163,7 +163,7 @@ class AlertFrameView(HomeAssistantView):
     url = "/api/kukiihome/alert/{event_id}/frame.jpg"
     name = "api:kukiihome:alert:frame"
 
-    def __init__(self, client: Kukii-HomeAPIClient) -> None:
+    def __init__(self, client: KukiiHomeAPIClient) -> None:
         self._client = client
 
     async def get(self, request: web.Request, event_id: str) -> web.Response:
@@ -175,7 +175,7 @@ class AlertAnnotatedView(HomeAssistantView):
     url = "/api/kukiihome/alert/{event_id}/annotated.jpg"
     name = "api:kukiihome:alert:annotated"
 
-    def __init__(self, client: Kukii-HomeAPIClient) -> None:
+    def __init__(self, client: KukiiHomeAPIClient) -> None:
         self._client = client
 
     async def get(self, request: web.Request, event_id: str) -> web.Response:
@@ -199,7 +199,7 @@ class AlertDismissView(HomeAssistantView):
     url = "/api/kukiihome/alert/{event_id}/dismiss"
     name = "api:kukiihome:alert:dismiss"
 
-    def __init__(self, client: Kukii-HomeAPIClient) -> None:
+    def __init__(self, client: KukiiHomeAPIClient) -> None:
         self._client = client
 
     async def post(self, request: web.Request, event_id: str) -> web.Response:
@@ -219,7 +219,7 @@ class AlertFeedbackView(HomeAssistantView):
     url = "/api/kukiihome/alert/{event_id}/feedback"
     name = "api:kukiihome:alert:feedback"
 
-    def __init__(self, client: Kukii-HomeAPIClient) -> None:
+    def __init__(self, client: KukiiHomeAPIClient) -> None:
         self._client = client
 
     async def post(self, request: web.Request, event_id: str) -> web.Response:

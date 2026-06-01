@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import Kukii-HomeCoordinator
+from .coordinator import KukiiHomeCoordinator
 
 
 async def async_setup_entry(
@@ -20,16 +20,16 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: Kukii-HomeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: KukiiHomeCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
         [
-            Kukii-HomeOnlineSensor(coordinator),
-            Kukii-HomeAlertActiveSensor(coordinator),
+            KukiiHomeOnlineSensor(coordinator),
+            KukiiHomeAlertActiveSensor(coordinator),
         ]
     )
 
 
-class Kukii-HomeOnlineSensor(CoordinatorEntity, BinarySensorEntity):
+class KukiiHomeOnlineSensor(CoordinatorEntity, BinarySensorEntity):
     _attr_name = "Kukii-Home online"
     _attr_unique_id = "kukiihome_online"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
@@ -39,7 +39,7 @@ class Kukii-HomeOnlineSensor(CoordinatorEntity, BinarySensorEntity):
         return self.coordinator.last_update_success
 
 
-class Kukii-HomeAlertActiveSensor(CoordinatorEntity, BinarySensorEntity):
+class KukiiHomeAlertActiveSensor(CoordinatorEntity, BinarySensorEntity):
     _attr_name = "Kukii-Home alert active"
     _attr_unique_id = "kukiihome_alert_active"
     _attr_device_class = BinarySensorDeviceClass.PROBLEM

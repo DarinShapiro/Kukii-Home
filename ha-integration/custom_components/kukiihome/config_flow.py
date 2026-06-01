@@ -20,7 +20,7 @@ from homeassistant.components import zeroconf
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api_client import Kukii-HomeAPIClient
+from .api_client import KukiiHomeAPIClient
 from .const import (
     CONF_HOST,
     CONF_POLL_SECONDS,
@@ -32,7 +32,7 @@ from .const import (
 )
 
 
-class Kukii-HomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class KukiiHomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Kukii-Home config flow."""
 
     VERSION = 1
@@ -55,7 +55,7 @@ class Kukii-HomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             host = user_input[CONF_HOST]
             port = user_input[CONF_PORT]
             session = async_get_clientsession(self.hass)
-            client = Kukii-HomeAPIClient(host=host, port=port, session=session)
+            client = KukiiHomeAPIClient(host=host, port=port, session=session)
             if not await client.healthz():
                 errors["base"] = "cannot_connect"
             else:
@@ -113,7 +113,7 @@ class Kukii-HomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # weird container networking), don't promise the user
         # something we can't deliver.
         session = async_get_clientsession(self.hass)
-        client = Kukii-HomeAPIClient(host=host, port=port, session=session)
+        client = KukiiHomeAPIClient(host=host, port=port, session=session)
         if not await client.healthz():
             return self.async_abort(reason="cannot_connect")
 

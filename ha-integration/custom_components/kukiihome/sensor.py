@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import Kukii-HomeCoordinator
+from .coordinator import KukiiHomeCoordinator
 
 
 async def async_setup_entry(
@@ -19,7 +19,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: Kukii-HomeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: KukiiHomeCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
         [
             LatestAlertSensor(coordinator),

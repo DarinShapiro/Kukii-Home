@@ -13,7 +13,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api_client import Kukii-HomeAPIClient
+from .api_client import KukiiHomeAPIClient
 from .const import (
     CONF_HOST,
     CONF_POLL_SECONDS,
@@ -24,7 +24,7 @@ from .const import (
     SERVICE_LABEL_PERSON,
     SERVICE_RUN_OPTIMIZATION,
 )
-from .coordinator import Kukii-HomeCoordinator
+from .coordinator import KukiiHomeCoordinator
 from .views import register_alert_views
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,12 +41,12 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Kukii-Home from a config entry."""
     session = async_get_clientsession(hass)
-    client = Kukii-HomeAPIClient(
+    client = KukiiHomeAPIClient(
         host=entry.data[CONF_HOST],
         port=entry.data[CONF_PORT],
         session=session,
     )
-    coordinator = Kukii-HomeCoordinator(
+    coordinator = KukiiHomeCoordinator(
         hass,
         client=client,
         poll_seconds=entry.data.get(CONF_POLL_SECONDS, DEFAULT_POLL_SECONDS),

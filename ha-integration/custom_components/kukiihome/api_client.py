@@ -10,11 +10,11 @@ from typing import Any
 import aiohttp
 
 
-class Kukii-HomeAPIError(Exception):
+class KukiiHomeAPIError(Exception):
     """Raised on transport / 5xx failures from the ha-agent."""
 
 
-class Kukii-HomeAPIClient:
+class KukiiHomeAPIClient:
     """Minimal client over the ha-agent HTTP API (see services/ha-agent/http_api.py)."""
 
     def __init__(self, *, host: str, port: int, session: aiohttp.ClientSession) -> None:

@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import Kukii-HomeCoordinator
+from .coordinator import KukiiHomeCoordinator
 
 
 async def async_setup_entry(
@@ -23,7 +23,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: Kukii-HomeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: KukiiHomeCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([LatestAlertImage(hass, coordinator)])
 
 
@@ -32,7 +32,7 @@ class LatestAlertImage(CoordinatorEntity, ImageEntity):
     _attr_unique_id = "kukiihome_latest_alert_image"
     _attr_content_type = "image/jpeg"
 
-    def __init__(self, hass: HomeAssistant, coordinator: Kukii-HomeCoordinator) -> None:
+    def __init__(self, hass: HomeAssistant, coordinator: KukiiHomeCoordinator) -> None:
         CoordinatorEntity.__init__(self, coordinator)
         ImageEntity.__init__(self, hass)
 

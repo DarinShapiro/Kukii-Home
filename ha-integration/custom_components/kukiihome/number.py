@@ -16,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import Kukii-HomeCoordinator
+from .coordinator import KukiiHomeCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: Kukii-HomeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: KukiiHomeCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([ConfidenceThresholdNumber(coordinator)])
 
 
@@ -39,7 +39,7 @@ class ConfidenceThresholdNumber(CoordinatorEntity, NumberEntity):
     _attr_mode = NumberMode.SLIDER
     _attr_icon = "mdi:gauge"
 
-    def __init__(self, coordinator: Kukii-HomeCoordinator) -> None:
+    def __init__(self, coordinator: KukiiHomeCoordinator) -> None:
         super().__init__(coordinator)
         self._value = 0.7
 

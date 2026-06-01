@@ -9,7 +9,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api_client import Kukii-HomeAPIClient
+from .api_client import KukiiHomeAPIClient
 from .const import (
     EVENT_KUKIIHOME_ALERT,
     EVENT_KUKIIHOME_FEEDBACK_COMPLETE,
@@ -18,14 +18,14 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class Kukii-HomeCoordinator(DataUpdateCoordinator):
+class KukiiHomeCoordinator(DataUpdateCoordinator):
     """Polls the ha-agent + fires HA events for new alerts."""
 
     def __init__(
         self,
         hass: HomeAssistant,
         *,
-        client: Kukii-HomeAPIClient,
+        client: KukiiHomeAPIClient,
         poll_seconds: int,
     ) -> None:
         super().__init__(
@@ -61,5 +61,5 @@ class Kukii-HomeCoordinator(DataUpdateCoordinator):
         }
 
     @property
-    def client(self) -> Kukii-HomeAPIClient:
+    def client(self) -> KukiiHomeAPIClient:
         return self._client

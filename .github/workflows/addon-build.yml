@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'ha-integration/addon/**'
+      - 'ha-integration/custom_components/**'
       - 'services/**'
       - 'shared/lib-python/**'
       - 'adapters/**'
@@ -14,6 +15,7 @@ on:
   pull_request:
     paths:
       - 'ha-integration/addon/**'
+      - 'ha-integration/custom_components/**'
       - 'services/**'
       - 'shared/lib-python/**'
       - 'adapters/**'
@@ -33,6 +35,16 @@ jobs:
       - name: Sanity-check YAML
         run: |
           python -c "import yaml, sys; yaml.safe_load(open('ha-integration/addon/kukiihome/config.yaml')); print('config.yaml OK')"
+      - name: Compile-check the HA custom integration
+        run: |
+          # The custom_components integration is NOT in the uv workspace,
+          # so the main CI never imports it — a syntax error there ships
+          # silently (the SentiHome->Kukii-Home rename did exactly this,
+          # corrupting class identifiers into `Kukii-HomeCoordinator`).
+          # py_compile every module so an unimportable integration fails
+          # the build instead of the user's HA install.
+          python -m compileall -q ha-integration/custom_components/kukiihome/
+          echo "HA custom integration compiles"
       - name: Check required add-on files exist
         run: |
           for f in config.yaml Dockerfile README.md DOCS.md CHANGELOG.md icon.png logo.png; do
