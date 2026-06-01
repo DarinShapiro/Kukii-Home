@@ -44,6 +44,11 @@ class KukiiHomeCoordinator(DataUpdateCoordinator):
         except Exception as e:
             raise UpdateFailed(f"ha-agent unreachable: {e}") from e
 
+        # Epic 15: resilience health. Fail-soft (the client returns {} on
+        # error / older add-on) so a missing /health never fails the poll —
+        # the health sensor just reads "unknown".
+        health = await self._client.get_health()
+
         # Fire events for newly-seen alerts.
         for alert in alerts:
             alert_id = alert.get("alert_id")
@@ -58,6 +63,7 @@ class KukiiHomeCoordinator(DataUpdateCoordinator):
             "alerts": alerts,
             "capabilities": caps,
             "latest_alert": alerts[-1] if alerts else None,
+            "health": health,
         }
 
     @property

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -25,6 +25,7 @@ async def async_setup_entry(
             LatestAlertSensor(coordinator),
             RecentAlertCountSensor(coordinator),
             CapabilityCountSensor(coordinator),
+            SystemHealthSensor(coordinator),
         ]
     )
 
@@ -77,3 +78,42 @@ class CapabilityCountSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         caps = (self.coordinator.data or {}).get("capabilities") or []
         return {"domains": [c.get("domain") for c in caps]}
+
+
+class SystemHealthSensor(CoordinatorEntity, SensorEntity):
+    """Resilience system health (Epic 15) — overall + per-component.
+
+    State is the §19 rollup: ``healthy`` / ``degraded`` / ``critical``
+    (or ``unknown`` when the add-on hasn't reported /health yet). The
+    enumerated device class gives HA a clean state set. Attributes carry
+    the per-component breakdown + the degraded count, so a dashboard or
+    automation can see *what* is wrong (e.g. ``home_assistant`` offline)
+    without scraping logs."""
+
+    _attr_name = "Kukii-Home system health"
+    _attr_unique_id = "kukiihome_system_health"
+    _attr_icon = "mdi:heart-pulse"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options: ClassVar[list[str]] = ["healthy", "degraded", "critical", "unknown"]
+
+    @property
+    def native_value(self) -> str:
+        health = (self.coordinator.data or {}).get("health") or {}
+        return health.get("overall") or "unknown"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        health = (self.coordinator.data or {}).get("health") or {}
+        components = health.get("components") or []
+        return {
+            "components": [
+                {
+                    "component": c.get("component"),
+                    "status": c.get("status"),
+                    "detail": c.get("detail"),
+                    "critical": c.get("critical"),
+                }
+                for c in components
+            ],
+            "degraded_count": sum(1 for c in components if c.get("status") != "ok"),
+        }

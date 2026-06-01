@@ -39,6 +39,20 @@ class KukiiHomeAPIClient:
             body = await r.json()
             return body.get("capabilities", [])
 
+    async def get_health(self) -> dict[str, Any]:
+        """GET /health — the resilience snapshot (Epic 15).
+
+        Fail-soft: a missing endpoint (older add-on) or transport error
+        returns ``{}`` so the health sensor degrades to ``unknown`` rather
+        than failing the whole coordinator poll."""
+        try:
+            async with self._session.get(f"{self._base}/health", timeout=5) as r:
+                if r.status != 200:
+                    return {}
+                return await r.json()
+        except aiohttp.ClientError:
+            return {}
+
     async def recent_alerts(self, limit: int = 20) -> list[dict[str, Any]]:
         async with self._session.get(
             f"{self._base}/recent_alerts", params={"limit": limit}, timeout=10
