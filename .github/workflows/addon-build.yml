@@ -125,24 +125,21 @@ jobs:
       - name: Compute image ref + tags
         id: img
         run: |
-          # GHCR repo names must be lowercase.
+          # GHCR repo names must be lowercase. Tags are ALWAYS fully
+          # registry-qualified (ghcr.io/...) so that with --load on a PR
+          # they're just local refs, and with --push on main they go to
+          # GHCR — never a bare name that buildx would try to resolve
+          # against docker.io (that 401'd the first run).
           owner=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
           version=$(python -c "import yaml; print(yaml.safe_load(open('ha-integration/addon/kukiihome/config.yaml'))['version'])")
           image="ghcr.io/${owner}/${{ matrix.arch }}-kukiihome-addon"
-          # A stable local tag for the sanity-run step regardless of push.
-          local_tag="kukiihome-addon:ci-${{ matrix.arch }}"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            tags="${local_tag}"
-          else
-            tags="${local_tag},${image}:${version},${image}:latest"
-          fi
           {
             echo "image=${image}"
             echo "version=${version}"
-            echo "local_tag=${local_tag}"
-            echo "tags=${tags}"
+            echo "tags=${image}:${version},${image}:latest"
+            echo "ref=${image}:${version}"
           } >> "$GITHUB_OUTPUT"
-          echo "Building ${{ matrix.arch }} -> ${tags}"
+          echo "Building ${{ matrix.arch }} -> ${image}:${version}"
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -156,10 +153,12 @@ jobs:
           # Supervisor uses the add-on directory as build context + reads
           # build.yaml for BUILD_FROM. We mirror both so CI breakage
           # matches what a real install would hit. KUKIIHOME_REF pins the
-          # in-image clone to the commit under test.
+          # in-image clone to the commit under test. load:true keeps the
+          # built image available for the amd64 sanity-run; push only on
+          # main publishes it to GHCR.
           context: ha-integration/addon/kukiihome
           platforms: ${{ matrix.platform }}
-          load: true # also load locally so the sanity-run can boot it
+          load: true
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.img.outputs.tags }}
           build-args: |
@@ -178,7 +177,7 @@ jobs:
           # import exactly what the Dockerfile installs. (aarch64 runs
           # only under QEMU here, too slow to boot — the build succeeding
           # is the gate for it.)
-          docker run --rm ${{ steps.img.outputs.local_tag }} /bin/bash -c '
+          docker run --rm ${{ steps.img.outputs.ref }} /bin/bash -c '
             /app/.venv/bin/python -c "
             import kukiihome_shared.topology
             import kukiihome_shared.motion
