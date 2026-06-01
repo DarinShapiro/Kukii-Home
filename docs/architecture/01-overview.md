@@ -33,7 +33,7 @@ Not for: non-technical users, renters without LAN access, those demanding zero-c
 
 ### Canonical scenarios
 
-| Scenario                             | Kukii-Home advantage                                                                                                       |
+| Scenario                             | Kukii-Home advantage                                                                                                      |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | **Pool safety (S15, S20)**           | Continuous monitoring + immediate drowning detection (< 15s). Not safe to rely on periodic human checks.                  |
 | **Unexpected visitor (S1)**          | Knows which residents are home, whether guest is expected, whether face matches known profiles. Explains why alert fired. |
@@ -194,7 +194,7 @@ The goal is not autonomous agents that lock doors and call police. The goal is a
 | **AttentionMode**        | Sustained high-cadence monitoring for life-safety (e.g., "pool occupied" → 4fps continuous). Bypasses normal event queuing.                   |
 | **Episodic memory**      | Curated, significant records of past sessions/events. Queryable by SQL (structured) or semantic search (vector).                              |
 | **Gallery entry**        | Raw biometric data (face embedding, plate, pet face). May be linked to a KnownActor.                                                          |
-| **Home Assistant (HA)**  | Smart home hub running automations, integrations, AI add-ons. Kukii-Home's source of truth for device state.                                   |
+| **Home Assistant (HA)**  | Smart home hub running automations, integrations, AI add-ons. Kukii-Home's source of truth for device state.                                  |
 | **Identity resolution**  | Probabilistic claim about who a detected person/vehicle is. Includes confidence + evidence sources + alternatives.                            |
 | **KnownActor**           | A recognized entity (resident, service worker, pet, vehicle) with access profiles, behavioral models, and visit history.                      |
 | **MemoryMCP**            | MCP server providing read/write access to all memory layers (rules, sessions, episodic, identity).                                            |

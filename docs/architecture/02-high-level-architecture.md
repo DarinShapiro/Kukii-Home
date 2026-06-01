@@ -209,16 +209,16 @@ HA agent write-side boundary:
 
 ## Key design decisions (summary)
 
-| Decision                                               | Rationale                                                                                                 |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Rules live in Kukii-Home, not HA                        | Conversational rule creation; rules fire based on Kukii-Home detections, not static automations            |
-| HA is device orchestration layer                       | HA provides world state (query), executes actions (services), owns UX (dashboards, mobile)                |
-| Kukii-Home queries HA for context, calls HA services    | Clean REST API / MCP boundary; Kukii-Home is agnostic to device types                                      |
-| NVR is pluggable data source via adapter layer (§03.5) | Universal compatibility (any NVR or none); v1 ships service mode; native modes added over time            |
-| Service mode is v1 baseline                            | Works with any RTSP/ONVIF source day one; native plugins are optimization, not requirement                |
+| Decision                                               | Rationale                                                                                                   |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Rules live in Kukii-Home, not HA                       | Conversational rule creation; rules fire based on Kukii-Home detections, not static automations             |
+| HA is device orchestration layer                       | HA provides world state (query), executes actions (services), owns UX (dashboards, mobile)                  |
+| Kukii-Home queries HA for context, calls HA services   | Clean REST API / MCP boundary; Kukii-Home is agnostic to device types                                       |
+| NVR is pluggable data source via adapter layer (§03.5) | Universal compatibility (any NVR or none); v1 ships service mode; native modes added over time              |
+| Service mode is v1 baseline                            | Works with any RTSP/ONVIF source day one; native plugins are optimization, not requirement                  |
 | Long-term NVR-optional vision                          | As Kukii-Home matures, it absorbs NVR responsibilities; direct camera → HA → Kukii-Home becomes recommended |
-| Single VLM call on hot path                            | Eliminates orchestration overhead; capable VLMs reason directly                                           |
-| VLM has no HA knowledge                                | Clean separation; VLM reports observations, action dispatcher interprets + executes                       |
-| Camera events push; HA state poll                      | Cameras are latency-critical; HA state is eventually consistent                                           |
-| Five memory layers                                     | Different lifetimes and access patterns require different stores                                          |
-| Policy gate at action dispatcher                       | Single enforcement point; no policy logic scattered in pipeline                                           |
+| Single VLM call on hot path                            | Eliminates orchestration overhead; capable VLMs reason directly                                             |
+| VLM has no HA knowledge                                | Clean separation; VLM reports observations, action dispatcher interprets + executes                         |
+| Camera events push; HA state poll                      | Cameras are latency-critical; HA state is eventually consistent                                             |
+| Five memory layers                                     | Different lifetimes and access patterns require different stores                                            |
+| Policy gate at action dispatcher                       | Single enforcement point; no policy logic scattered in pipeline                                             |

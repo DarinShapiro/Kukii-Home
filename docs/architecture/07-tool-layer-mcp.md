@@ -34,7 +34,7 @@ HA is a living platform with access to two layers of value:
 
 **Layer 2 — Third-party service integrations.** HA connects to a vast ecosystem of external services. Kukii-Home gains access to all of them through the single HA agent interface, with no separate integrations required:
 
-| Service category     | Examples                                                 | Kukii-Home use                                                              |
+| Service category     | Examples                                                 | Kukii-Home use                                                             |
 | -------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------- |
 | Calendars            | Google Calendar, Apple, Outlook, CalDAV                  | Proactive context priming, guest expectations, scheduled preparations      |
 | Weather              | OpenWeatherMap, Met.no, AccuWeather                      | Camera quality expectations, outdoor activity context, pre-actions         |
