@@ -2,10 +2,20 @@
 
 > **Resumption document** for agents continuing implementation work. This is a snapshot of where the code is, what's done, what's next, and the conventions established so far.
 
-**Last updated:** 2026-05-31 (identity DAG: CC-ReID + gait pipelines wired live + durable-modality fusion; project renamed SentiHome → Kukii-Home; add-on v0.4.0)
+**Last updated:** 2026-05-31 (Epic 15 resilience started: backbone + F4/F7 detection + safe-defaults floor + watchdog/​health endpoint; identity DAG CC-ReID + gait live; add-on v0.4.0)
 **Branch:** `main`
 **CI status:** ✅ green
-**Tests:** ~970 unit passing (Python) + 5 (TypeScript) + integration test suite scaffolded
+**Tests:** ~1030 unit passing (Python) + 5 (TypeScript) + integration test suite scaffolded
+
+> **⚠️ Known broken (pre-existing, flagged):** the HA custom integration
+> (`ha-integration/custom_components/kukiihome/`) is currently
+> **unimportable** — the SentiHome→Kukii-Home rename (`c6e85fb`) blind-
+> replaced Python class identifiers, producing invalid names like
+> `Kukii-HomeCoordinator` (hyphen). All 10 .py files fail `py_compile`.
+> Main CI misses it (the HA-sandbox integration isn't in the uv
+> workspace). The add-on itself runs fine; only the companion
+> integration that creates HA entities is affected. Fix flagged as a
+> separate task.
 
 > **Naming:** The project was renamed **SentiHome → Kukii-Home** on 2026-05-31.
 > Identifier token is `kukiihome` everywhere (Python modules `kukiihome_*`, HA
@@ -15,6 +25,42 @@
 > The on-disk working directory is still `...\SentiHome` (not renamed).
 
 ---
+
+## Milestone: Epic 15 Resilience — backbone + detection + degraded-action floor + health endpoint (2026-05-31)
+
+Epic #238 (Failure Modes & Resilience, §19) is **underway** — the framework
++ the first two failure modes + the live health endpoint are in. Built as a
+dependency-free shared library so every service reports + degrades uniformly.
+
+- **Backbone** (`kukiihome_shared.health`): `ComponentHealth`/`HealthSnapshot`
+  + `HealthRegistry` (rollup: critical only when a critical-class component is
+  offline); `FailureMode` (F1-F10) + `SafeDefaultsMatrix` (the §19 table,
+  verbatim); `DiagnosticRing` (queryable last-100 trail); `Watchdog`
+  (probe → report → record transitions → operator-alert hook, persistent-
+  failure escalation, injected clock).
+- **Active-mode machinery**: `DegradedState` (thread-safe active set) +
+  `SafeActionGate`; a `HealthCheck` that declares a `failure_mode` flips it
+  active on a non-ok observation and clears it on recovery.
+- **Two real detection probes**: **F7 (VLM down)** maps the vlm-router
+  per-backend `CircuitBreaker` states → health; **F4 (HA down)** maps the
+  ha-agent WebSocket `is_connected` → health (critical-class).
+- **Safe-defaults floor in the dispatcher**: `PolicyGate.evaluate` takes the
+  active modes + tightens (never loosens) each device action — HA-down blocks
+  device control, VLM-down makes locks conditional; notifications still flow.
+- **Live health endpoint**: the ha-agent runs the watchdog as a background
+  task and serves `GET /health` + `GET /diagnostics`. (The HA-integration
+  health *sensor* is deferred behind the integration syntax-error fix above.)
+
+So an HA outage now flows end-to-end: F4 active → device actions blocked →
+`/health` reports `critical` → diagnostic recorded. ~80 new tests. Commits:
+`d84b536` (backbone), `c456b15` (F4/F7 + dispatcher floor), `4933bd8`
+(watchdog wiring + /health).
+
+**Remaining in #238:** F1-F3 (camera/RTSP/NVR), F5 (bus), F6 (GPU), F8-F10
+probes; notify-class safe-defaults; the HA health sensor (after the
+integration fix); chaos-test harness. The backbone + patterns are in place —
+each remaining mode is a `HealthCheck` + (where it restricts actions) a
+matrix row that already exists.
 
 ## Milestone: identity DAG — clothing-robust + temporal recognition live (2026-05-31)
 
