@@ -37,7 +37,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 import cv2
@@ -101,6 +101,20 @@ _INTERESTING_COCO_CLASSES: dict[str, str] = {
 # once the feedback-loop subsystem lands.
 _DEFAULT_CONFIDENCE_MIN = 0.5
 
+# Per-class confidence floors. Animals read much lower than people on
+# steep/distant cameras (a top-down dog scores ~0.34 where a standing
+# person reads 0.74-0.86 on the same frame), so a single 0.5 floor tuned
+# for people makes pets *invisible* — the motion gate drops the dog before
+# recognition ever sees a crop, and S16 (dog in yard / escaped pet) fails
+# outright. These floors are applied per detection AFTER inference, so the
+# model still runs at the lowest floor and we filter up per class.
+# Mapped-kind keyed (see _INTERESTING_COCO_CLASSES values), not COCO names.
+_DEFAULT_PER_CLASS_CONFIDENCE: dict[str, float] = {
+    "dog": 0.25,
+    "cat": 0.25,
+    "animal": 0.25,
+}
+
 
 @dataclass
 class DetectionConfig:
@@ -113,6 +127,18 @@ class DetectionConfig:
     when ``backend == "openvino"``."""
 
     confidence_min: float = _DEFAULT_CONFIDENCE_MIN
+    """Default confidence floor for any class without a per-class override
+    in :attr:`per_class_confidence`. Also the floor handed to the model at
+    inference time (the minimum across all classes), so a lower per-class
+    floor still receives candidate boxes to filter."""
+
+    per_class_confidence: dict[str, float] = field(
+        default_factory=lambda: dict(_DEFAULT_PER_CLASS_CONFIDENCE)
+    )
+    """Mapped-kind → confidence floor overrides (e.g. ``{"dog": 0.25}``).
+    Keyed by the DetectionTag.kind we emit, not COCO names. A class absent
+    here uses :attr:`confidence_min`."""
+
     iou_min: float = 0.45
     """NMS IoU threshold. 0.45 is YOLO's default."""
 
@@ -152,6 +178,14 @@ class YOLODetector:
         self._config = config or DetectionConfig()
         self._model: YOLO | None = None
         self._load_lock = asyncio.Lock()
+
+    def _inference_floor(self) -> float:
+        """The conf handed to the model: the *minimum* across the default
+        floor and every per-class override, so lower-floor classes (dog at
+        0.25) still receive candidate boxes. Per-class filtering then
+        happens in :func:`_results_to_tags`."""
+        floors = [self._config.confidence_min, *self._config.per_class_confidence.values()]
+        return min(floors)
 
     async def detect(self, jpeg_bytes: bytes, frame_ts: float) -> tuple[DetectionTag, ...]:
         """Run detection on one JPEG-encoded frame.
@@ -262,13 +296,13 @@ class YOLODetector:
         model = self._ensure_model()
         results = model.predict(
             img,
-            conf=self._config.confidence_min,
+            conf=self._inference_floor(),
             iou=self._config.iou_min,
             imgsz=self._config.image_size,
             device=self._resolve_device(),
             verbose=False,
         )
-        return _results_to_tags(results, img.shape, frame_ts)
+        return _results_to_tags(results, img.shape, frame_ts, self._config)
 
     def _detect_batch_sync(self, frames: list[tuple[bytes, float]]) -> tuple[DetectionTag, ...]:
         images: list[np.ndarray] = []
@@ -290,7 +324,7 @@ class YOLODetector:
         # window a fresh tracker (windows are independent queries).
         results = model.track(
             images,
-            conf=self._config.confidence_min,
+            conf=self._inference_floor(),
             iou=self._config.iou_min,
             imgsz=self._config.image_size,
             device=self._resolve_device(),
@@ -299,7 +333,7 @@ class YOLODetector:
         )
         out: list[DetectionTag] = []
         for result, ts in zip(results, timestamps, strict=False):
-            out.extend(_results_to_tags([result], images[0].shape, ts))
+            out.extend(_results_to_tags([result], images[0].shape, ts, self._config))
         return tuple(out)
 
 
@@ -326,7 +360,10 @@ def _jpeg_to_bgr(jpeg_bytes: bytes) -> np.ndarray | None:
 
 
 def _results_to_tags(
-    results: list, frame_shape: tuple[int, ...], frame_ts: float
+    results: list,
+    frame_shape: tuple[int, ...],
+    frame_ts: float,
+    config: DetectionConfig | None = None,
 ) -> tuple[DetectionTag, ...]:
     """Map Ultralytics ``Results`` → :class:`DetectionTag` tuple.
 
@@ -339,9 +376,19 @@ def _results_to_tags(
     out entirely. We could pass them through under an "unknown" kind
     but that pollutes downstream tag_sets without adding signal at
     this phase.
+
+    Per-class confidence floors (``config.per_class_confidence``) are
+    applied here: each detection's mapped kind looks up its floor
+    (falling back to ``config.confidence_min``) and is dropped if below.
+    The model already ran at the *minimum* floor, so low-floor classes
+    (dog/cat) survive inference and are kept here while a noisy
+    moderate-confidence ``person`` is still held to 0.5.
     """
     if not results:
         return ()
+    cfg = config or DetectionConfig()
+    default_floor = cfg.confidence_min
+    per_class = cfg.per_class_confidence
     h, w = frame_shape[:2]
     out: list[DetectionTag] = []
     for res in results:
@@ -363,6 +410,9 @@ def _results_to_tags(
             mapped = _INTERESTING_COCO_CLASSES.get(class_name)
             if mapped is None:
                 continue
+            conf_i = float(confs[i])
+            if conf_i < per_class.get(mapped, default_floor):
+                continue
             x1, y1, x2, y2 = xyxy[i].tolist()
             if ids is not None:
                 track_id = str(int(ids[i]))
@@ -376,7 +426,7 @@ def _results_to_tags(
             out.append(
                 DetectionTag(
                     kind=mapped,
-                    confidence=round(float(confs[i]), 3),
+                    confidence=round(conf_i, 3),
                     bbox=(
                         round(x1 / w, 4),
                         round(y1 / h, 4),

@@ -172,6 +172,56 @@ def test_results_to_tags_handles_no_boxes():
     assert tags == ()
 
 
+# ─── Per-class confidence floors ────────────────────────────────────
+
+
+def test_per_class_floor_keeps_low_conf_dog_drops_low_conf_person():
+    """A 0.34 dog (the real top-down score) must survive the 0.25 dog
+    floor, while a 0.34 person is dropped by the 0.5 default floor. This
+    is the fix for the dog being invisible to the pet pipeline (S16)."""
+    result = _FakeResult(
+        names=_FAKE_NAMES,
+        boxes=_FakeBoxes(
+            xyxy=[[0, 0, 100, 100], [200, 200, 300, 300]],
+            conf=[0.34, 0.34],
+            cls=[16, 0],  # dog @ 0.34 (kept), person @ 0.34 (dropped)
+        ),
+    )
+    tags = _results_to_tags(
+        [result], frame_shape=(480, 640, 3), frame_ts=0, config=DetectionConfig()
+    )
+    kinds = {t.kind for t in tags}
+    assert kinds == {"dog"}
+
+
+def test_per_class_floor_still_drops_very_low_dog():
+    """A dog below even the 0.25 floor is dropped — the floor is real,
+    not 'keep all animals'."""
+    result = _FakeResult(
+        names=_FAKE_NAMES,
+        boxes=_FakeBoxes(xyxy=[[0, 0, 100, 100]], conf=[0.18], cls=[16]),
+    )
+    tags = _results_to_tags(
+        [result], frame_shape=(480, 640, 3), frame_ts=0, config=DetectionConfig()
+    )
+    assert tags == ()
+
+
+def test_inference_floor_is_min_across_all_classes():
+    """The conf handed to the model must be the lowest floor, else
+    low-floor classes never receive candidate boxes to filter."""
+    det = YOLODetector(
+        DetectionConfig(confidence_min=0.5, per_class_confidence={"dog": 0.25})
+    )
+    assert det._inference_floor() == 0.25
+
+
+def test_default_per_class_includes_animals():
+    c = DetectionConfig()
+    assert c.per_class_confidence.get("dog") == 0.25
+    assert c.per_class_confidence.get("cat") == 0.25
+
+
 # ─── _jpeg_to_bgr: the decode path ──────────────────────────────────
 
 

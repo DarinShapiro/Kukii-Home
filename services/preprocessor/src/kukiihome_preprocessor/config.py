@@ -36,6 +36,23 @@ def _env_list(name: str, default: list[str]) -> list[str]:
     return [s.strip() for s in raw.split(",") if s.strip()]
 
 
+def _env_float_map(name: str, default: dict[str, float]) -> dict[str, float]:
+    """Parse ``key:val,key2:val2`` into a float map. Empty/unset → default."""
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return dict(default)
+    out: dict[str, float] = {}
+    for pair in raw.split(","):
+        if ":" not in pair:
+            continue
+        k, v = pair.split(":", 1)
+        try:
+            out[k.strip()] = float(v.strip())
+        except ValueError:
+            continue
+    return out or dict(default)
+
+
 @dataclass(frozen=True)
 class PreprocessorConfig:
     """Frozen runtime config snapshot.
@@ -139,6 +156,17 @@ class PreprocessorConfig:
 
     detection_device: str | None = None
     """``"cuda:0"`` / ``"cpu"`` / None (auto-pick)."""
+
+    detection_per_class_confidence: dict[str, float] = field(
+        default_factory=lambda: {"dog": 0.25, "cat": 0.25, "animal": 0.25}
+    )
+    """Per-(mapped-kind) confidence floor overrides. Animals read much
+    lower than people on steep/distant cameras (a top-down dog ~0.34 vs a
+    person 0.74-0.86), so a single people-tuned 0.5 floor makes pets
+    invisible — the gate drops the dog before recognition sees a crop, and
+    S16 (escaped pet / dog in yard) fails. Keyed by DetectionTag.kind, not
+    COCO name. Env override: KUKIIHOME_PREPROCESSOR_DETECTION_PER_CLASS_CONF
+    as ``dog:0.25,cat:0.3``."""
 
     # ─── Face recognition (Phase 10.4) ─────────────────────────────
     face_recognition_enabled: bool = False
@@ -294,7 +322,11 @@ def load_from_env() -> PreprocessorConfig:
         detection_backend=os.environ.get("KUKIIHOME_PREPROCESSOR_DETECTION_BACKEND", "pytorch"),
         detection_weights=os.environ.get("KUKIIHOME_PREPROCESSOR_DETECTION_WEIGHTS", "yolo11x.pt"),
         detection_confidence_min=_env_float("KUKIIHOME_PREPROCESSOR_DETECTION_CONF_MIN", 0.5),
-        detection_image_size=_env_int("KUKIIHOME_PREPROCESSOR_DETECTION_IMG_SIZE", 640),
+        detection_image_size=_env_int("KUKIIHOME_PREPROCESSOR_DETECTION_IMG_SIZE", 1280),
+        detection_per_class_confidence=_env_float_map(
+            "KUKIIHOME_PREPROCESSOR_DETECTION_PER_CLASS_CONF",
+            {"dog": 0.25, "cat": 0.25, "animal": 0.25},
+        ),
         detection_device=os.environ.get("KUKIIHOME_PREPROCESSOR_DETECTION_DEVICE") or None,
         face_recognition_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_FACE", "false").lower()
         in ("1", "true", "yes", "on"),

@@ -213,6 +213,7 @@ def _build_backend(
                     backend=config.detection_backend,  # type: ignore[arg-type]
                     weights=config.detection_weights,
                     confidence_min=config.detection_confidence_min,
+                    per_class_confidence=config.detection_per_class_confidence,
                     image_size=config.detection_image_size,
                     device=config.detection_device,
                 )
