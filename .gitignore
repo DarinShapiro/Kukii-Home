@@ -112,3 +112,4 @@ datasets/
 face_debug/
 fw_*.json
 kernel.errors.txt
+.scratch/
