@@ -63,6 +63,20 @@ from eval_metrics import separability
 
 MODELS_ROOT = "models"
 
+# CLIP/SigLIP use their own normalization, NOT ImageNet. Feeding a CLIP
+# model ImageNet-normalized input silently degrades it — exactly the kind
+# of preprocessing mismatch we suspect bit CC-ReID. So CLIP-family models
+# get this preprocess explicitly.
+_CLIP_MEAN = np.array([0.48145466, 0.4578275, 0.40821073], dtype=np.float32)
+_CLIP_STD = np.array([0.26862954, 0.26130258, 0.27577711], dtype=np.float32)
+
+
+def _clip_preprocess(crop_bgr: np.ndarray, height: int, width: int) -> np.ndarray:
+    resized = cv2.resize(crop_bgr, (width, height), interpolation=cv2.INTER_CUBIC)
+    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    normed = (rgb.astype(np.float32) / 255.0 - _CLIP_MEAN) / _CLIP_STD
+    return np.transpose(normed, (2, 0, 1))
+
 
 @dataclass
 class ModelSpec:
@@ -74,13 +88,24 @@ class ModelSpec:
 
 
 def _default_models() -> list[ModelSpec]:
-    return [
+    """Every model that has an ONNX on disk gets benched. Missing files are
+    skipped with a notice (so a partial export set still runs)."""
+    specs = [
+        # ReID-trained body embedders.
         ModelSpec("osnet", f"{MODELS_ROOT}/osnet_x1_0.onnx", 256, 128),
         ModelSpec("ccreid", f"{MODELS_ROOT}/ccreid_cal_ltcc.onnx", 384, 192),
-        # DINOv2 is a general visual embedder, not ReID-trained — included
-        # as a wildcard baseline (does a generic embedder separate people?).
-        ModelSpec("dinov2", f"{MODELS_ROOT}/dinov2_vits14.onnx", 224, 224),
+        # General self-supervised embedders (ImageNet-normalized) — the
+        # survey's cross-domain generalizers. dinov2 vits already beats
+        # ccreid; vitl is the stronger variant.
+        ModelSpec("dinov2_s", f"{MODELS_ROOT}/dinov2_vits14.onnx", 224, 224),
+        ModelSpec("dinov2_l", f"{MODELS_ROOT}/dinov2_vitl.onnx", 518, 518),
+        # Language-aligned (CLIP normalization) — survey's pick for stable
+        # cross-domain ReID on unseen cameras.
+        ModelSpec(
+            "openclip_b32", f"{MODELS_ROOT}/openclip_vitb32.onnx", 224, 224, _clip_preprocess
+        ),
     ]
+    return [s for s in specs if Path(s.onnx_path).is_file()]
 
 
 # ─── crop extraction (cached) ──────────────────────────────────────────

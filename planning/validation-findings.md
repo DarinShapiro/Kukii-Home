@@ -110,3 +110,35 @@ export/preprocessing bug from domain) before trusting it.
    transformer ReID) for a wide field comparison.
 4. Gait probe on the pool dense walks (durable modality #2, still untested
    on real footage).
+
+## Update — 5-model bench (2026-06, OpenCLIP + DINOv2-L added)
+
+Exported + benched three more embedders (research shortlist). Pool cam,
+CPU, single subject (genuine-consistency, NOT separability — see trap below):
+
+| model        | embed/crop | size     | dim  | genuine   |
+| ------------ | ---------- | -------- | ---- | --------- |
+| openclip_b32 | 112 ms     | 352 MB   | 512  | **0.895** |
+| osnet        | **24 ms**  | **9 MB** | 512  | 0.639     |
+| dinov2_s     | 167 ms     | 88 MB    | 384  | 0.552     |
+| dinov2_l     | 12073 ms   | 1218 MB  | 1024 | 0.488     |
+| ccreid       | 547 ms     | 94 MB    | 4096 | 0.468     |
+
+Findings:
+
+- **OpenCLIP 0.895 is striking but UNCONFIRMED.** With one subject, a high
+  genuine-mean is exactly what an over-smooth embedder produces — CLIP is
+  known to rate any two same-context images as similar. Cannot distinguish
+  "great recognizer" from "everything looks alike" without an imposter.
+  OpenCLIP is the model where the single-subject trap bites hardest →
+  flagged as PROMISING, not proven. The 2nd subject is decisive here.
+- **DINOv2-L: rejected.** ~12 s/crop (500× OSNet), 1.2 GB, AND lower
+  accuracy than DINOv2-S. Bigger is worse here; off the candidate list.
+- **OSNet remains the value champion** (0.639 @ 24 ms / 9 MB). Even if
+  OpenCLIP proves better, OSNet is ~5× faster + 40× smaller — stays in
+  contention for the edge box on accuracy-per-ms.
+- **CC-ReID still last on accuracy, 2nd-worst on speed** (5th confirmation).
+
+Next: capture a 2nd subject → re-run for real separability + fusion sweep.
+This is what tells us if OpenCLIP's 0.895 is real discrimination or just
+context-smoothing.
