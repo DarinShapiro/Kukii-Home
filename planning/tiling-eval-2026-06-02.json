@@ -1,0 +1,29 @@
+{
+  "corpus": "pool_rex_0922_dog",
+  "class": "dog",
+  "conf_floor": 0.12,
+  "tile": 1280,
+  "overlap": 0.2,
+  "locate_frames": 96,
+  "locate_dog_detection_rate": 0.031,
+  "selection_basis": "full-frame dog-positive frames",
+  "frames_evaluated": 3,
+  "full_frame": {
+    "method": "full_frame@1280",
+    "frames": 3,
+    "dog_frames_detected": 3,
+    "dog_detection_rate": 1.0,
+    "dog_max_conf": 0.261,
+    "dog_mean_conf_when_seen": 0.247,
+    "avg_ms": 4034.6
+  },
+  "tiled": {
+    "method": "tiled@native",
+    "frames": 3,
+    "dog_frames_detected": 0,
+    "dog_detection_rate": 0.0,
+    "dog_max_conf": 0.0,
+    "dog_mean_conf_when_seen": 0.0,
+    "avg_ms": 36952.2
+  }
+}

@@ -215,3 +215,57 @@ tiling needs track-id merging across tile boundaries, which can't be
 validated on the current glare/sparse-dog footage. Build + validate it on
 clean footage. (Detect-on-4K-then-crop-from-4K, the maintainer's
 principle, == tiled detection.)
+
+## Update — tiled detection MEASURED: it made the dog WORSE (context loss)
+
+Built tiled detection (`pipelines/tiling.py`: overlapping native-res tiles
+→ batched inference → cross-seam NMS → `IoUTracker` for track-ids) and
+measured it head-to-head against full-frame@1280 on the dog clip
+(`scripts/dev/tiling_eval.py`). **The result inverted the hypothesis:**
+
+| method            | dog frames detected | dog max conf |
+| ----------------- | ------------------- | ------------ |
+| full_frame@1280   | **3 / 3**           | **0.26**     |
+| tiled@native      | **0 / 3**           | 0.00         |
+
+Tiling — the thing that gives the dog *more* pixels — **failed to detect it
+at all**, including at conf=0.05.
+
+**Root cause (diagnosed, not guessed): context loss, not resolution or
+seam-splitting.** On `frame_0620` the dog is 218×166px, centered at
+(2829, 464), and falls *entirely inside* one tile (2048,0)–(3328,1280) — no
+seam split. In that native tile the dog is 218px (≈3× the ~73px it shrinks
+to when the full 3840 frame is letterboxed to imgsz=1280). Despite 3× the
+pixels, YOLO at conf=0.05 on that isolated tile finds person/chair/umbrella
+but **no dog**. The identical dog at 73px in the *full scene* is detected as
+"dog" at 0.26. The only variable is surrounding context: cropping away the
+deck/pool/adjacent-person removed the scene prior the detector leans on for
+an ambiguous top-down, glare-washed animal. (The tile path itself is
+correct — it detects the person in that tile at 0.47 — so this is a real
+phenomenon, not a bug.)
+
+**Consequences:**
+
+1. **The dog fix is `imgsz=1280` + per-class floor, NOT tiling.** At 1280 the
+   dog reads 0.26; the new per-class floor (dog=0.25, vs person 0.5) lets it
+   pass the gate. Both are shipped — S16 (dog in yard) is no longer failing
+   by config on this footage. Tiling is *not* needed here and regresses it.
+2. **Bigger pixels ≠ better detection.** Tiling's premise (native pixels
+   recover small objects) is real only when resolution is the binding
+   constraint. For this dog at this distance it was never the constraint —
+   glare + top-down ambiguity is, and context-removal makes that worse.
+3. **If tiling is ever used, it must AUGMENT full-frame, never replace it** —
+   run both and merge (full-frame keeps context for mid-size objects; tiles
+   add genuinely-tiny ones that 1280 drops below the floor). `detect_tiled`
+   is currently tiles-only; a hybrid union+merge is the correct shape, and
+   still has to beat full-frame on a clip with a *truly distant* subject
+   before it earns a place. Unproven on this corpus.
+4. **Vindicates measure-first.** Tiling was built but deliberately NOT wired
+   into `YOLODetector` as a default mode. Good: the data says enabling it
+   here would have *lost* the dog. Re-test on clean permanent-mount footage
+   with a genuinely small/distant subject before trusting it.
+
+The tiling code + `IoUTracker` (track-id merge across tiles, the flagged
+barrier) are unit-tested and kept — the mechanism is sound and ready for the
+hybrid + clean-footage test. What's rejected is the assumption that
+tiles-only beats full-frame for *this* footage.
