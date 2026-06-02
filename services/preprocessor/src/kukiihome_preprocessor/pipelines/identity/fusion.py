@@ -47,18 +47,25 @@ from dataclasses import dataclass, field
 from kukiihome_shared.preprocessor import ActorMatch
 
 # Per-modality reliability weights for identity fusion. Tunable; these
-# are sane priors, not learned. Higher = more trusted as an identity
-# signal. The body modalities split by DURABILITY (see Epic 10.10 /
-# 10.11): OSNet is clothing-dependent + transient (low); CC-ReID and
-# gait are clothes-invariant durable traits (high, below face).
+# are priors, refined by measurement (see planning/validation-findings.md).
+# Higher = more trusted as an identity signal.
+#
+# NOTE on ccreid_cal: its weight was 0.85 on the THEORY that CC-ReID is a
+# durable clothes-invariant anchor above OSNet. Live validation (2026-06-01,
+# 4 independent measurements incl. a real cross-outfit shirt+hat test)
+# showed the OPPOSITE on this footage: CC-ReID lost to OSNet on accuracy in
+# every test AND cost ~13x more compute. Until the artifact is validated
+# (likely a preprocessing/export bug — see findings), it is weighted 0.0 so
+# a broken model cannot inflate fused confidence via noisy-OR. Restore once
+# CC-ReID is shown to earn it on a multi-subject separability test.
 DEFAULT_WEIGHTS: dict[str, float] = {
     "face_arcface": 1.0,
     "plate_lpr": 1.0,
     "pet_dinov2": 0.9,
-    "ccreid_cal": 0.85,  # durable: clothes-invariant body shape (10.11.5)
-    "gait_opengait": 0.8,  # durable: walking dynamics, distance-robust (10.11.6)
-    "body_id_osnet": 0.6,  # transient: clothing appearance, same-visit carry
+    "gait_opengait": 0.8,  # durable: walking dynamics, distance-robust (untested on real footage)
+    "body_id_osnet": 0.6,  # the validated body anchor (best accuracy + cheapest, 2026-06-01)
     "height_calib": 0.3,  # soft prior (Epic 10.11.7)
+    "ccreid_cal": 0.0,  # DISABLED pending validation — underperformed OSNet in every live test
 }
 DEFAULT_ALPHA = 0.5
 """Weight for a modality not in DEFAULT_WEIGHTS — trusted modestly so

@@ -84,36 +84,46 @@ async def test_corpus_projects_body_shape_and_gait_slices():
     assert corpus.slice("body") == {}
 
 
-# ─── fusion durability ──────────────────────────────────────────────
+# ─── fusion weights (evidence-based; see planning/validation-findings.md) ──
 
 
-def test_durable_modalities_weighted_above_transient_body():
-    assert DEFAULT_WEIGHTS["ccreid_cal"] > DEFAULT_WEIGHTS["body_id_osnet"]
+def test_gait_weighted_above_transient_body():
+    """Gait remains a durable anchor above transient OSNet body-ID."""
     assert DEFAULT_WEIGHTS["gait_opengait"] > DEFAULT_WEIGHTS["body_id_osnet"]
-    assert DEFAULT_WEIGHTS["ccreid_cal"] <= DEFAULT_WEIGHTS["face_arcface"]
+    assert DEFAULT_WEIGHTS["gait_opengait"] <= DEFAULT_WEIGHTS["face_arcface"]
 
 
-def test_ccreid_fuses_higher_than_osnet_at_equal_sim():
-    """A clothes-invariant CC-ReID vote should outweigh an OSNet vote of
-    the same cosine — durability is encoded in the alpha."""
-    sim = 0.7
-    ccreid = fuse_track(
+def test_ccreid_disabled_pending_validation():
+    """CC-ReID is weighted 0.0: live validation (2026-06-01) showed it
+    underperformed OSNet on accuracy in every test AND cost ~13x more
+    compute. A 0.0 weight means a CC-ReID vote cannot inflate fused
+    confidence. Restore once it's validated on a multi-subject test."""
+    assert DEFAULT_WEIGHTS["ccreid_cal"] == 0.0
+    # A CC-ReID-only match therefore fuses to ~0 confidence (1 - (1-0*sim)).
+    fm = fuse_track(
         [
             ActorMatch(
-                actor_id="a", confidence=sim, match_method="ccreid_cal", frame_ts=1.0, track_id="t1"
+                actor_id="a", confidence=0.9, match_method="ccreid_cal", frame_ts=1.0, track_id="t1"
             )
         ]
     )
-    osnet = fuse_track(
+    assert fm is not None
+    assert fm.confidence == 0.0
+
+
+def test_osnet_is_the_validated_body_anchor():
+    """OSNet earns a real fused contribution; it's the body anchor that
+    validated on real footage (best accuracy + cheapest compute)."""
+    fm = fuse_track(
         [
             ActorMatch(
                 actor_id="a",
-                confidence=sim,
+                confidence=0.7,
                 match_method="body_id_osnet",
                 frame_ts=1.0,
                 track_id="t1",
             )
         ]
     )
-    assert ccreid is not None and osnet is not None
-    assert ccreid.confidence > osnet.confidence
+    assert fm is not None
+    assert fm.confidence > 0.0
