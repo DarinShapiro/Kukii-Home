@@ -142,3 +142,39 @@ Findings:
 Next: capture a 2nd subject → re-run for real separability + fusion sweep.
 This is what tells us if OpenCLIP's 0.895 is real discrimination or just
 context-smoothing.
+
+## Update — pet-ID (DINOv2) walkthrough with dog (2026-06)
+
+Captured a dog walkthrough on the pool cam (`pool_rex_*_dog`, 1208 frames,
+4K) to validate DINOv2 pet-ID (`pet_dinov2`) — its actual production role,
+never before tested on real footage.
+
+**Result: pet-ID could not be measured — blocked one layer upstream by
+detection.**
+
+- **Dog IS in the footage** (visually confirmed; one annotated frame shows
+  `person 0.74` + `dog 0.34`).
+- **But YOLO11x barely detects the dog**: a single marginal hit at 0.34
+  conf; a DENSE scan (~242 frames at conf≥0.20) harvested ~0 usable dog
+  crops. A standing person reads 0.74–0.86 on the same camera; a low,
+  top-down dog reads ~0.34 or nothing.
+- **Couldn't get ≥2 dog crops** → DINOv2 pet self-consistency untestable.
+
+**Findings (actionable):**
+
+1. **Pet detection, not pet recognition, is the bottleneck on this camera.**
+   The default `conf=0.5` motion-gate would MISS the dog entirely
+   (0.34 < 0.5) → recognition never receives a crop. **S16 (dog in yard /
+   escaped pet) would fail outright as currently configured.**
+2. **Fix: per-class detection thresholds** — `dog`/`cat` at ~0.25 vs
+   `person` at 0.5. Without this, pets are invisible to the pool cam.
+3. **Camera-geometry finding:** the pool cam's steep top-down angle is
+   hostile to dog detection (small + foreshortened from above). Pet-ID
+   wants a lower/side-angle camera; placement matters for S16.
+4. **DINOv2 pet-ID stays an unvalidated assumption** (as CC-ReID was) — but
+   the first thing to fix is detection. No point benchmarking the embedder
+   until detection reliably yields crops.
+
+Next: lower the dog/cat detection threshold + re-capture (ideally a
+side-angle view of the dog), THEN test DINOv2 pet-ID. A neighbor's dog
+would give the imposter for real pet separability.
