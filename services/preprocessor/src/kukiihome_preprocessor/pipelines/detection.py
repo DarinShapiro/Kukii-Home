@@ -116,8 +116,12 @@ class DetectionConfig:
     iou_min: float = 0.45
     """NMS IoU threshold. 0.45 is YOLO's default."""
 
-    image_size: int = 640
-    """Square input size YOLO resizes to. 640 is COCO standard."""
+    image_size: int = 1280
+    """Square input size YOLO letterboxes to before detecting — the
+    detail floor. 640 (COCO standard) on a 4K feed is a ~6x downsample
+    that loses small/distant objects; 1280 recovers most of it. The
+    full-res answer is tiled detection (deferred — needs track-id merge
+    validation). See config.PreprocessorConfig.detection_image_size."""
 
     device: str | None = None
     """For pytorch backend: ``"cuda:0"`` / ``"cpu"`` / ``None`` (auto).

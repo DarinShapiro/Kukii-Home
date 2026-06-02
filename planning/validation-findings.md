@@ -178,3 +178,40 @@ detection.**
 Next: lower the dog/cat detection threshold + re-capture (ideally a
 side-angle view of the dog), THEN test DINOv2 pet-ID. A neighbor's dog
 would give the imposter for real pet separability.
+
+## Update — detection was downsampling 4K to 640 (root cause of the dog miss)
+
+Two corrections to the pet-detection finding above, both from the maintainer:
+
+1. **The detector ran at `imgsz=640` on a 3840x2160 feed — a ~6x
+   downsample.** A distant top-down dog (~150px in 4K) shrank to ~25px
+   before YOLO ever saw it, well below its small-object floor. This — not
+   the model — is the dominant cause of the 0.34 score. The earlier
+   "YOLO11x can't detect the dog / consider replacing it" line was
+   **premature**: it was a resolution-config bug, caught before any model
+   swap. (Crop side was already correct — `_crop_person` crops from the
+   full-res frame, so only detection leaked 4K detail.)
+2. **The pool cam was shooting THROUGH a glass deck rail (temporary
+   placement), causing glare that washes out detail.** Permanent mount on
+   the clean side of the rail should materially improve image quality.
+
+**Consequence — re-validate on clean footage:** every pool-cam number in
+this doc (CC-ReID, OpenCLIP 0.895, OSNet enrollment, the dog) was measured
+on glare-degraded footage AND/OR 640-downsampled detection. They remain
+directionally useful but must be re-confirmed once (a) the camera is
+permanently mounted (no glare) and (b) detection runs at full res.
+
+**Fixed now:** `detection_image_size` default 640 -> 1280 (config +
+DetectionConfig), still env-configurable, raise toward 1920+ on the GPU
+box. The crop path already uses full-res.
+
+**Deferred (proper full-res answer): TILED detection.** "Never downsample
+the 4K" is only literally true with tiling — slice the 4K frame into
+overlapping native-res tiles, detect per-tile (a distant dog gets full
+pixels), merge boxes. Crank-imgsz is the crude version; tiling is correct.
+NOT shipped yet because it interacts with the `model.track()` path that
+produces the track_ids the identity/correlation pipeline depends on:
+tiling needs track-id merging across tile boundaries, which can't be
+validated on the current glare/sparse-dog footage. Build + validate it on
+clean footage. (Detect-on-4K-then-crop-from-4K, the maintainer's
+principle, == tiled detection.)

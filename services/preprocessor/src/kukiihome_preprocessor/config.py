@@ -122,7 +122,21 @@ class PreprocessorConfig:
     whole detection pipeline."""
 
     detection_confidence_min: float = 0.5
-    detection_image_size: int = 640
+    detection_image_size: int = 1280
+    """YOLO letterboxes the frame to this square size BEFORE detecting,
+    so it sets the detail floor. 640 (the old default) on a 3840x2160
+    feed is a ~6x downsample — a distant/small object (a dog at the far
+    deck) shrinks below the detector's small-object floor and is missed
+    or scored ~0.3. We never want to throw away the 4K we paid to capture
+    (decision 2026-06-01: never trade quality for compute). 1280 recovers
+    most of it at a sane single-shot cost; the proper full-res answer is
+    TILED detection (slice 4K into native-res tiles, detect per-tile,
+    merge) — deferred until it can be validated WITH track-id merging on
+    clean footage (see planning/validation-findings.md). Raise toward
+    1920+ on the GPU box. The crop side already uses the full-res frame
+    (body_id._crop_person multiplies the bbox by full w,h), so only this
+    detection downsample was leaking 4K detail."""
+
     detection_device: str | None = None
     """``"cuda:0"`` / ``"cpu"`` / None (auto-pick)."""
 
