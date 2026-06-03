@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from kukiihome_ha_agent.review_page import parse_label_form, render_review_html
+from kukiihome_ha_agent.review_page import (
+    parse_label_form,
+    parse_merge_form,
+    parse_reject_form,
+    render_review_html,
+)
 
 
 def _track(track_id, kind="person", status="unresolved", **kw):
@@ -61,6 +66,49 @@ def test_html_is_escaped():
 def test_flash_rendered():
     html = render_review_html([], [], configured=True, flash="Labelled Alice")
     assert "Labelled Alice" in html
+
+
+def test_resolved_card_has_reject_form():
+    html = render_review_html(
+        [_track("t2", status="resolved", subject_name="Alice", confidence=0.89)],
+        [], configured=True,
+    )
+    assert "action='review/reject'" in html
+    assert "✗ not them" in html
+    assert "name='track_id' value='t2'" in html
+
+
+def _subj(sid, name, kind="person"):
+    return {"subject_id": sid, "kind": kind, "display_name": name, "species": None,
+            "owner_id": None, "modalities": ["body"], "appearances": 1}
+
+
+def test_merge_form_shown_with_two_subjects():
+    html = render_review_html(
+        [], [_subj("alice", "Alice"), _subj("bob", "Bob")], configured=True,
+    )
+    assert "action='review/merge'" in html
+    assert "name='from_id'" in html and "name='into_id'" in html
+
+
+def test_merge_form_hidden_with_one_subject():
+    html = render_review_html([], [_subj("alice", "Alice")], configured=True)
+    assert "action='review/merge'" not in html
+
+
+def test_parse_reject_form():
+    assert parse_reject_form({"event_id": "e", "track_id": "t"}) == {
+        "event_id": "e", "track_id": "t",
+    }
+    assert parse_reject_form({"event_id": "e"}) is None
+
+
+def test_parse_merge_form():
+    assert parse_merge_form({"from_id": "a", "into_id": "b"}) == {
+        "from_id": "a", "into_id": "b",
+    }
+    assert parse_merge_form({"from_id": "a", "into_id": "a"}) is None  # self-merge
+    assert parse_merge_form({"from_id": "a"}) is None
 
 
 def test_parse_label_form():

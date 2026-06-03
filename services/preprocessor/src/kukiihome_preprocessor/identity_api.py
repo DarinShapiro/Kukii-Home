@@ -43,6 +43,16 @@ class ResolveRequest(BaseModel):
     event_id: str | None = None      # None = re-resolve every embedded event
 
 
+class RejectRequest(BaseModel):
+    event_id: str
+    track_id: str
+
+
+class MergeRequest(BaseModel):
+    from_id: str
+    into_id: str
+
+
 def _summary_dict(s: TrackSummary) -> dict:
     return {
         "event_id": s.event_id,
@@ -118,7 +128,11 @@ def register_identity_routes(app: FastAPI, state: AppState) -> None:
         )
         if not enrolled:
             raise HTTPException(status_code=400, detail="track has no embeddings to enroll")
+        # An explicit label overrides any prior verdict on THIS track (e.g. a
+        # reject from fixing a false-merge) so it re-resolves to the new subject.
+        identity.clear_track_resolutions(req.event_id, req.track_id)
         matched = identity.resolve_all(detections)
+        await _refresh_live_cache(state, identity, subject_id)
         logger.info(
             "identity.labelled", subject_id=subject_id, modalities=enrolled, matched=matched,
         )
@@ -133,6 +147,42 @@ def register_identity_routes(app: FastAPI, state: AppState) -> None:
         else:
             matched = identity.resolve_all(detections)
         return JSONResponse({"matched": matched})
+
+    @app.post("/identity/reject")
+    async def reject(req: RejectRequest) -> JSONResponse:
+        """Split-to-unknown: drop a wrong resolution → track returns to the
+        queue (the fix for an over-merged track)."""
+        n = identity.reject_track(req.event_id, req.track_id)
+        return JSONResponse({"rejected": n})
+
+    @app.post("/identity/subjects/merge")
+    async def merge(req: MergeRequest) -> JSONResponse:
+        """Merge two labels that are the same subject."""
+        try:
+            ok = identity.merge_subjects(req.from_id, req.into_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        if not ok:
+            raise HTTPException(status_code=404, detail="unknown subject or self-merge")
+        matched = identity.resolve_all(detections)
+        # keep the live cache consistent: drop the merged-away actor, refresh the survivor.
+        cache = getattr(state, "cache", None)
+        if cache is not None:
+            await cache.remove(req.from_id)
+        await _refresh_live_cache(state, identity, req.into_id)
+        return JSONResponse({"ok": True, "matched": matched})
+
+
+async def _refresh_live_cache(state: AppState, identity, subject_id: str) -> None:
+    """Fold a subject's current templates into the in-process recognition
+    cache so the live ``/frame_window`` path matches it immediately. No-op if
+    the app has no cache (shouldn't happen in the wired service)."""
+    cache = getattr(state, "cache", None)
+    if cache is None:
+        return
+    event = identity.build_enrollment_event(subject_id)
+    if event is not None:
+        await cache.upsert(event)
 
 
 def _crop_jpeg(event_store_dir: str, event_id: str, src: dict) -> bytes | None:

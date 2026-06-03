@@ -53,6 +53,17 @@ _METHOD_MODALITY: dict[str, str] = {
     "height_calib": "height",
 }
 
+# modality → the ActorEnrollmentEvent field that carries its template. The
+# inverse of the router's _MODALITY_SOURCE — used to fold a labelled subject
+# into the live recognition cache.
+_MODALITY_EVENT_ATTR: dict[str, str] = {
+    "body": "body_embedding",
+    "body_shape": "body_shape_embedding",
+    "gait": "gait_embedding",
+    "face": "face_embedding",
+    "pet": "pet_dinov2_centroid",
+}
+
 # Detection kinds → the subject kind the operator labels them as.
 _PET_DET_KINDS = frozenset({"dog", "cat"})
 
@@ -91,8 +102,18 @@ CREATE TABLE IF NOT EXISTS resolutions (
     resolved_ts  REAL NOT NULL,
     UNIQUE(event_id, track_id, frame_ts, modality)
 );
+CREATE TABLE IF NOT EXISTS template_provenance (
+    subject_id  TEXT NOT NULL,
+    modality    TEXT NOT NULL,
+    event_id    TEXT NOT NULL,
+    track_id    TEXT NOT NULL,
+    frame_count INTEGER NOT NULL,
+    added_ts    REAL NOT NULL,
+    PRIMARY KEY (subject_id, modality, event_id, track_id)
+);
 CREATE INDEX IF NOT EXISTS idx_res_event   ON resolutions(event_id, track_id);
 CREATE INDEX IF NOT EXISTS idx_res_subject ON resolutions(subject_id);
+CREATE INDEX IF NOT EXISTS idx_prov_subject ON template_provenance(subject_id);
 """
 
 
@@ -285,6 +306,16 @@ class IdentityStore:
                 (subject_id, modality, int(template.shape[0]),
                  np.ascontiguousarray(template, dtype="<f4").tobytes(), len(vecs), now),
             )
+            # Provenance: which track built this template (for undo + merge
+            # re-averaging). Idempotent on (subject, modality, event, track).
+            self._conn.execute(
+                """INSERT INTO template_provenance
+                     (subject_id, modality, event_id, track_id, frame_count, added_ts)
+                   VALUES (?,?,?,?,?,?)
+                   ON CONFLICT(subject_id, modality, event_id, track_id) DO UPDATE SET
+                     frame_count=excluded.frame_count, added_ts=excluded.added_ts""",
+                (subject_id, modality, event_id, track_id, len(vecs), now),
+            )
             enrolled.append(modality)
         self._conn.commit()
         return enrolled
@@ -329,6 +360,132 @@ class IdentityStore:
             templates.setdefault(r["modality"], {})[r["subject_id"]] = emb
             names[r["subject_id"]] = r["display_name"]
         return EnrolledCorpus(templates=templates, actor_names=names)
+
+    def build_enrollment_event(self, subject_id: str):
+        """An :class:`ActorEnrollmentEvent` carrying the subject's current
+        templates — to fold a freshly-labelled subject into the **live**
+        recognition cache so the next ``/frame_window`` enrich can match it.
+
+        The canonical cross-service enrollment path stays memory→NATS (the
+        preprocessor has no outbound NATS by design); this is the in-process,
+        single-box update that makes a label take effect immediately on the
+        live path. Returns ``None`` for an unknown subject."""
+        from kukiihome_shared.preprocessor import ActorEnrollmentEvent
+
+        s = self._conn.execute(
+            "SELECT * FROM subjects WHERE subject_id=?", (subject_id,)
+        ).fetchone()
+        if s is None:
+            return None
+        kwargs: dict[str, object] = {}
+        for r in self._conn.execute(
+            "SELECT modality, dim, embedding FROM subject_templates WHERE subject_id=?",
+            (subject_id,),
+        ).fetchall():
+            attr = _MODALITY_EVENT_ATTR.get(r["modality"])
+            if not attr:
+                continue
+            emb = np.frombuffer(r["embedding"], dtype="<f4")
+            if emb.shape[0] != r["dim"]:
+                continue
+            kwargs[attr] = tuple(float(x) for x in emb)
+        return ActorEnrollmentEvent(
+            actor_id=subject_id, action="enrolled", name=s["display_name"], **kwargs
+        )
+
+    # ── corrections (merge / split) ─────────────────────────────────────
+
+    def clear_track_resolutions(self, event_id: str, track_id: str) -> int:
+        """Delete a track's resolution rows so the next resolve recomputes it
+        fresh. Called when (re)labelling a track: an explicit human label is
+        authoritative, so it must override a prior ``rejected``/``confirmed``
+        verdict that ``persist_resolutions`` would otherwise preserve."""
+        cur = self._conn.execute(
+            "DELETE FROM resolutions WHERE event_id=? AND track_id=?", (event_id, track_id)
+        )
+        self._conn.commit()
+        return cur.rowcount
+
+    def reject_track(self, event_id: str, track_id: str) -> int:
+        """Mark a track's resolutions ``rejected`` → it drops back to the
+        unresolved queue. The split-to-unknown correction: when a track was
+        wrongly merged onto a subject (the OSNet 0.96 false-merge), reject it,
+        then re-label it as its true identity. Returns rows affected."""
+        cur = self._conn.execute(
+            "UPDATE resolutions SET verdict='rejected' WHERE event_id=? AND track_id=?",
+            (event_id, track_id),
+        )
+        self._conn.commit()
+        return cur.rowcount
+
+    def merge_subjects(self, from_id: str, into_id: str) -> bool:
+        """Merge ``from_id`` into ``into_id``: repoint its resolutions, fold its
+        templates into ``into`` (per-modality mean of the two, renormalized),
+        move provenance, deactivate ``from``. The merge correction: two labels
+        that are actually the same person/pet. Rejects cross-kind merges and
+        self-merges. Returns False if either subject is unknown."""
+        if from_id == into_id:
+            return False
+        a = self._conn.execute(
+            "SELECT kind FROM subjects WHERE subject_id=?", (from_id,)
+        ).fetchone()
+        b = self._conn.execute(
+            "SELECT kind FROM subjects WHERE subject_id=?", (into_id,)
+        ).fetchone()
+        if a is None or b is None:
+            return False
+        if a["kind"] != b["kind"]:
+            raise ValueError("cannot merge a person with a pet")
+
+        # Repoint, tolerating collisions where `into` already has a row for the
+        # same key (UNIQUE on resolutions; PK on provenance): keep `into`'s,
+        # drop `from`'s leftovers.
+        self._conn.execute(
+            "UPDATE OR IGNORE resolutions SET subject_id=? WHERE subject_id=?", (into_id, from_id)
+        )
+        self._conn.execute("DELETE FROM resolutions WHERE subject_id=?", (from_id,))
+        now = time.time()
+        for r in self._conn.execute(
+            "SELECT modality, dim, embedding, source_track_n FROM subject_templates "
+            "WHERE subject_id=?",
+            (from_id,),
+        ).fetchall():
+            emb_from = np.frombuffer(r["embedding"], dtype="<f4")
+            if emb_from.shape[0] != r["dim"]:
+                continue
+            existing = self._conn.execute(
+                "SELECT dim, embedding, source_track_n FROM subject_templates "
+                "WHERE subject_id=? AND modality=?",
+                (into_id, r["modality"]),
+            ).fetchone()
+            if existing and existing["dim"] == r["dim"]:
+                emb_into = np.frombuffer(existing["embedding"], dtype="<f4")
+                merged = _unit((emb_from + emb_into).astype(np.float32))
+                n = existing["source_track_n"] + r["source_track_n"]
+            else:
+                merged = emb_from
+                n = r["source_track_n"]
+            self._conn.execute(
+                """INSERT INTO subject_templates
+                     (subject_id, modality, dim, embedding, source_track_n, updated_ts)
+                   VALUES (?,?,?,?,?,?)
+                   ON CONFLICT(subject_id, modality) DO UPDATE SET
+                     dim=excluded.dim, embedding=excluded.embedding,
+                     source_track_n=excluded.source_track_n, updated_ts=excluded.updated_ts""",
+                (into_id, r["modality"], int(merged.shape[0]),
+                 np.ascontiguousarray(merged, dtype="<f4").tobytes(), n, now),
+            )
+        self._conn.execute(
+            "UPDATE OR IGNORE template_provenance SET subject_id=? WHERE subject_id=?",
+            (into_id, from_id),
+        )
+        self._conn.execute("DELETE FROM template_provenance WHERE subject_id=?", (from_id,))
+        self._conn.execute("DELETE FROM subject_templates WHERE subject_id=?", (from_id,))
+        self._conn.execute(
+            "UPDATE subjects SET active=0, updated_ts=? WHERE subject_id=?", (now, from_id)
+        )
+        self._conn.commit()
+        return True
 
     # ── resolution ──────────────────────────────────────────────────────
 

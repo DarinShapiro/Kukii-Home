@@ -156,3 +156,130 @@ def test_api_thumb_404_without_frame_on_disk(client):
     # event_store_dir points at a non-existent tree → crop returns 404, not 500.
     r = client.get("/identity/tracks/e1/t1/thumb.jpg")
     assert r.status_code == 404
+
+
+# ─── Feature 2: label folds into the live recognition cache ──────────
+
+
+def test_build_enrollment_event_carries_templates(tmp_path):
+    ds, idn = _seed(tmp_path / "det.db")
+    sid = idn.upsert_subject(display_name="Alice", kind="person")
+    idn.enroll_from_track(ds, subject_id=sid, event_id="e1", track_id="t1")
+    ev = idn.build_enrollment_event(sid)
+    assert ev is not None
+    assert ev.actor_id == "alice" and ev.action == "enrolled" and ev.name == "Alice"
+    assert ev.body_embedding is not None and len(ev.body_embedding) == 4
+    assert ev.pet_dinov2_centroid is None
+    assert idn.build_enrollment_event("ghost") is None
+
+
+def test_api_label_updates_live_cache(client):
+    import asyncio
+
+    client.post("/identity/label", json={"event_id": "e1", "track_id": "t1", "name": "Alice"})
+    cache = client.app.state.app_state.cache
+    actors = asyncio.run(cache.snapshot())
+    alice = next((a for a in actors if a.actor_id == "alice"), None)
+    assert alice is not None and alice.body_embedding is not None
+
+
+# ─── Feature 3: merge / split corrections ───────────────────────────
+
+
+def test_reject_track_returns_to_queue(tmp_path):
+    ds, idn = _seed(tmp_path / "det.db")
+    sid = idn.upsert_subject(display_name="Alice", kind="person")
+    idn.enroll_from_track(ds, subject_id=sid, event_id="e1", track_id="t1")
+    idn.resolve_all(ds)
+    assert {t.track_id for t in idn.track_summaries(status="resolved")} == {"t1"}
+
+    n = idn.reject_track("e1", "t1")
+    assert n >= 1
+    assert {t.track_id for t in idn.track_summaries(status="resolved")} == set()
+    assert "t1" in {t.track_id for t in idn.track_summaries(status="unresolved")}
+    # appearance no longer counts a rejected resolution
+    assert {s.display_name: s.appearances for s in idn.list_subjects()}["Alice"] == 0
+
+
+def test_merge_repoints_and_deactivates(tmp_path):
+    from kukiihome_shared.preprocessor import ActorMatch
+
+    ds, idn = _seed(tmp_path / "det.db")
+    a = idn.upsert_subject(display_name="Alice", kind="person")
+    idn.enroll_from_track(ds, subject_id=a, event_id="e1", track_id="t1")
+    b = idn.upsert_subject(display_name="Bob", kind="person")
+    idn.enroll_from_track(ds, subject_id=b, event_id="e1", track_id="t1")
+    idn.persist_resolutions(
+        (ActorMatch(actor_id="bob", confidence=0.8, match_method="body_id_osnet",
+                    frame_ts=5.0, track_id="t1"),),
+        camera_id="pool", event_id="e1",
+    )
+
+    assert idn.merge_subjects("bob", "alice") is True
+    assert {s.display_name for s in idn.list_subjects()} == {"Alice"}  # bob deactivated
+    row = idn._conn.execute(
+        "SELECT subject_id FROM resolutions WHERE track_id='t1'"
+    ).fetchone()
+    assert row["subject_id"] == "alice"  # repointed
+    assert idn._conn.execute(
+        "SELECT COUNT(*) FROM subject_templates WHERE subject_id='bob'"
+    ).fetchone()[0] == 0  # bob's templates folded away
+
+
+def test_merge_guards(tmp_path):
+    ds, idn = _seed(tmp_path / "det.db")
+    a = idn.upsert_subject(display_name="Alice", kind="person")
+    idn.enroll_from_track(ds, subject_id=a, event_id="e1", track_id="t1")
+    r = idn.upsert_subject(display_name="Rex", kind="pet")
+    idn.enroll_from_track(ds, subject_id=r, event_id="e1", track_id="d1")
+    with pytest.raises(ValueError):
+        idn.merge_subjects("rex", "alice")          # cross-kind
+    assert idn.merge_subjects("alice", "alice") is False  # self
+    assert idn.merge_subjects("ghost", "alice") is False  # unknown
+
+
+def _d1(client):
+    return next(
+        t for t in client.get("/identity/tracks").json()["tracks"] if t["track_id"] == "d1"
+    )
+
+
+def test_relabel_after_reject_overrides(client):
+    """A label must override a prior reject on the same track — otherwise the
+    'rejected' verdict (which persist_resolutions preserves) would leave the
+    track stuck unresolved forever. The mechanism behind the false-merge fix:
+    reject the wrong resolution, then label the track with the right identity."""
+    client.post("/identity/label", json={"event_id": "e1", "track_id": "d1", "name": "Rex"})
+    assert _d1(client)["status"] == "resolved" and _d1(client)["subject_name"] == "Rex"
+
+    client.post("/identity/reject", json={"event_id": "e1", "track_id": "d1"})
+    assert _d1(client)["status"] == "unresolved"  # rejected → back in the queue
+
+    # re-label — must clear the rejection and resolve again (would stay
+    # 'unresolved' without clear_track_resolutions).
+    client.post("/identity/label", json={"event_id": "e1", "track_id": "d1", "name": "Rex"})
+    assert _d1(client)["status"] == "resolved" and _d1(client)["subject_name"] == "Rex"
+
+
+def test_api_reject_and_merge_endpoints(client):
+    client.post("/identity/label", json={"event_id": "e1", "track_id": "t1", "name": "Alice"})
+    assert any(
+        t["status"] == "resolved"
+        for t in client.get("/identity/tracks").json()["tracks"] if t["track_id"] == "t1"
+    )
+    r = client.post("/identity/reject", json={"event_id": "e1", "track_id": "t1"})
+    assert r.status_code == 200 and r.json()["rejected"] >= 1
+    assert all(
+        t["status"] == "unresolved"
+        for t in client.get("/identity/tracks").json()["tracks"] if t["track_id"] == "t1"
+    )
+
+    # cross-kind merge rejected (400); unknown subject 404.
+    client.post("/identity/label", json={"event_id": "e1", "track_id": "t1", "name": "Alice"})
+    client.post("/identity/label", json={"event_id": "e1", "track_id": "d1", "name": "Rex"})
+    assert client.post(
+        "/identity/subjects/merge", json={"from_id": "rex", "into_id": "alice"}
+    ).status_code == 400
+    assert client.post(
+        "/identity/subjects/merge", json={"from_id": "ghost", "into_id": "alice"}
+    ).status_code == 404

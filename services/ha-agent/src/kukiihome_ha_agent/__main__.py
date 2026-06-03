@@ -63,7 +63,12 @@ from kukiihome_ha_agent.overrides import (
 )
 from kukiihome_ha_agent.preprocessor_client import PreprocessorClient
 from kukiihome_ha_agent.reconciler import Reconciler
-from kukiihome_ha_agent.review_page import parse_label_form, render_review_html
+from kukiihome_ha_agent.review_page import (
+    parse_label_form,
+    parse_merge_form,
+    parse_reject_form,
+    render_review_html,
+)
 from kukiihome_ha_agent.supervisor import (
     get_ingress_url_prefix,
     get_panel_url_base,
@@ -1955,8 +1960,12 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         flash = None
         if "labeled" in q:
             flash = f"Labelled “{q.get('labeled')}” — resolved {q.get('n', '0')} appearance(s)."
+        elif "rejected" in q:
+            flash = "Cleared — track returned to the queue. Re-label it as the right one."
+        elif "merged" in q:
+            flash = "Merged — the two labels are now one subject."
         elif "err" in q:
-            flash = "Could not label that track (preprocessor unreachable or rejected it)."
+            flash = "That action failed (preprocessor unreachable or rejected it)."
         return web.Response(
             text=render_review_html(
                 tracks, subjects, configured=configured, flash=flash, version=__version__
@@ -1991,11 +2000,31 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         loc = f"../review?labeled={quote(payload['name'])}&n={result.get('matched', 0)}"
         raise web.HTTPSeeOther(location=loc)
 
+    async def review_reject(request: web.Request) -> web.Response:
+        client = boot.preprocessor_client
+        form = await request.post()
+        parsed = parse_reject_form({k: str(v) for k, v in form.items()})
+        if client is None or parsed is None:
+            raise web.HTTPSeeOther(location="../review?err=1")
+        await client.reject_track(parsed["event_id"], parsed["track_id"])
+        raise web.HTTPSeeOther(location="../review?rejected=1")
+
+    async def review_merge(request: web.Request) -> web.Response:
+        client = boot.preprocessor_client
+        form = await request.post()
+        parsed = parse_merge_form({k: str(v) for k, v in form.items()})
+        if client is None or parsed is None:
+            raise web.HTTPSeeOther(location="../review?err=1")
+        result = await client.merge_subjects(parsed["from_id"], parsed["into_id"])
+        raise web.HTTPSeeOther(location="../review?merged=1" if result else "../review?err=1")
+
     app = web.Application()
     app.router.add_get("/", status_page)
     app.router.add_get("/review", review_page)
     app.router.add_get("/review/thumb/{event_id}/{track_id}.jpg", review_thumb)
     app.router.add_post("/review/label", review_label)
+    app.router.add_post("/review/reject", review_reject)
+    app.router.add_post("/review/merge", review_merge)
     app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
     app.router.add_get("/alerts/{alert_id}/snapshot", snapshot_for_alert)
     app.router.add_get("/alerts/{alert_id}", debug_alert)

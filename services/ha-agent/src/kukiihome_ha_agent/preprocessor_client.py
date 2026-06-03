@@ -121,6 +121,18 @@ class PreprocessorClient:
     async def resolve_identity(self, *, event_id: str | None = None) -> dict | None:
         return await self._post_json("/identity/resolve", {"event_id": event_id})
 
+    async def reject_track(self, event_id: str, track_id: str) -> dict | None:
+        """Split-to-unknown: clear a track's (wrong) resolution."""
+        return await self._post_json(
+            "/identity/reject", {"event_id": event_id, "track_id": track_id}
+        )
+
+    async def merge_subjects(self, from_id: str, into_id: str) -> dict | None:
+        """Merge two labels that are the same subject (``from`` → ``into``)."""
+        return await self._post_json(
+            "/identity/subjects/merge", {"from_id": from_id, "into_id": into_id}
+        )
+
     async def fetch_track_thumb(self, event_id: str, track_id: str) -> bytes | None:
         """GET the cropped track thumbnail bytes for the Review page to re-serve."""
         try:

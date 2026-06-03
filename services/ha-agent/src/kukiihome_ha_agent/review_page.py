@@ -55,6 +55,16 @@ form.label button{background:#2e6ad1;border:0;color:#fff;border-radius:6px;
 .chip{background:#161a21;border:1px solid #262c36;border-radius:20px;padding:6px 12px;
   font-size:13px}
 .empty{color:#7e8a9a;padding:24px 0}
+form.reject{padding:0 12px 12px}
+form.reject button{background:transparent;border:1px solid #5a3340;color:#e69aae;
+  border-radius:6px;padding:5px 9px;font-size:12px;cursor:pointer;width:100%}
+form.merge{display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;
+  background:#13171e;border:1px solid #262c36;border-radius:8px;padding:10px 12px}
+form.merge select{background:#0c0f14;border:1px solid #2a3140;color:#e6e6e6;
+  border-radius:6px;padding:5px 8px;font-size:13px}
+form.merge button{background:#3a2f6a;border:0;color:#fff;border-radius:6px;
+  padding:6px 12px;font-size:13px;cursor:pointer}
+form.merge span{color:#9aa7b8;font-size:13px}
 """
 
 
@@ -86,6 +96,12 @@ def _track_card(t: dict) -> str:
         action = (
             f"<div class='meta'><span class='{cls}'>✓ {_e(t.get('subject_name') or '?')}"
             f"{_e(conf_txt)}</span></div>"
+            # split-to-unknown: wrong merge → back to the queue, then re-label.
+            "<form class='reject' method='post' action='review/reject'>"
+            f"<input type='hidden' name='event_id' value='{eid}'>"
+            f"<input type='hidden' name='track_id' value='{tid}'>"
+            "<button type='submit' title='Not them — return to queue'>✗ not them</button>"
+            "</form>"
         )
     else:
         action = (
@@ -114,6 +130,26 @@ def _subject_chip(s: dict) -> str:
     return f"<span class='chip'>{glyph} <b>{name}</b>{extra} · {_e(mods)} · {seen} seen</span>"
 
 
+def _merge_form(subjects: list[dict]) -> str:
+    """Merge two same-subject labels. Only shown with ≥2 subjects of the same
+    kind (cross-kind merges are rejected server-side anyway)."""
+    if len(subjects) < 2:
+        return ""
+    opts = "".join(
+        f"<option value='{_e(s.get('subject_id'))}'>{_e(s.get('display_name'))}</option>"
+        for s in subjects
+    )
+    return (
+        "<form class='merge' method='post' action='review/merge'>"
+        "<span>Same subject? Merge</span>"
+        f"<select name='from_id'>{opts}</select>"
+        "<span>→</span>"
+        f"<select name='into_id'>{opts}</select>"
+        "<button type='submit'>Merge</button>"
+        "</form>"
+    )
+
+
 def render_review_html(
     tracks: list[dict],
     subjects: list[dict],
@@ -138,6 +174,7 @@ def render_review_html(
         resolved = [t for t in tracks if t.get("status") == "resolved"]
         subj_html = (
             "<div class='chips'>" + "".join(_subject_chip(s) for s in subjects) + "</div>"
+            + _merge_form(subjects)
             if subjects else "<div class='empty'>No one enrolled yet.</div>"
         )
         body = (
@@ -184,3 +221,19 @@ def parse_label_form(form: dict[str, str]) -> dict[str, Any] | None:
     if form.get("species"):
         payload["species"] = form["species"]
     return payload
+
+
+def parse_reject_form(form: dict[str, str]) -> dict[str, str] | None:
+    event_id = (form.get("event_id") or "").strip()
+    track_id = (form.get("track_id") or "").strip()
+    if not (event_id and track_id):
+        return None
+    return {"event_id": event_id, "track_id": track_id}
+
+
+def parse_merge_form(form: dict[str, str]) -> dict[str, str] | None:
+    from_id = (form.get("from_id") or "").strip()
+    into_id = (form.get("into_id") or "").strip()
+    if not (from_id and into_id) or from_id == into_id:
+        return None
+    return {"from_id": from_id, "into_id": into_id}
