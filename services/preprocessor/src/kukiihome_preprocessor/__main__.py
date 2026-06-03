@@ -103,133 +103,15 @@ def _build_backend(
             buffer=rolling, motion_config=motion_config, motion_source=config.motion_source
         )
 
-        # Build identity pipelines + router. Face is the only one
-        # today; body-ID / pet / plate slot in by registering more
-        # IdentityPipeline implementations here.
-        identity_pipelines = []
-        if config.face_recognition_enabled:
-            # Lazy import: insightface + onnxruntime are heavyweight.
-            # Pay the cost only when face recognition is on.
-            from kukiihome_preprocessor.pipelines.face import (
-                FaceConfig,
-                FaceRecognizer,
-            )
-            from kukiihome_preprocessor.pipelines.identity import FacePipeline
+        # Build the detector + identity DAG via the shared factory (same
+        # construction the offline enrichment worker uses — no drift).
+        from kukiihome_preprocessor.pipelines.builders import (
+            build_detector,
+            build_identity_router,
+        )
 
-            face_recognizer = FaceRecognizer(
-                FaceConfig(
-                    model_pack=config.face_model_pack,
-                    match_threshold=config.face_match_threshold,
-                    det_confidence_min=config.face_det_confidence_min,
-                    det_size=config.face_det_size,
-                    providers=tuple(config.face_providers),
-                )
-            )
-            identity_pipelines.append(FacePipeline(face_recognizer))
-
-        if config.body_id_enabled:
-            # Lazy import: onnxruntime is heavy, body_id only loaded
-            # when opted in.
-            from kukiihome_preprocessor.pipelines.body_id import (
-                BodyIdConfig,
-                BodyIdRecognizer,
-            )
-            from kukiihome_preprocessor.pipelines.identity import BodyIdPipeline
-
-            body_id_recognizer = BodyIdRecognizer(
-                BodyIdConfig(
-                    model_path=config.body_id_model_path,
-                    match_threshold=config.body_id_match_threshold,
-                    providers=tuple(config.body_id_providers),
-                )
-            )
-            identity_pipelines.append(BodyIdPipeline(body_id_recognizer))
-
-        if config.ccreid_enabled:
-            # CC-ReID reuses BodyIdRecognizer (a generic person-crop
-            # embedder), configured for the CAL/AIM input size. Lazy
-            # import for the same reason as body_id.
-            from kukiihome_preprocessor.pipelines.body_id import (
-                BodyIdConfig,
-                BodyIdRecognizer,
-            )
-            from kukiihome_preprocessor.pipelines.identity import CCReIDPipeline
-
-            ccreid_recognizer = BodyIdRecognizer(
-                BodyIdConfig(
-                    model_path=config.ccreid_model_path,
-                    match_threshold=config.ccreid_match_threshold,
-                    input_height=config.ccreid_input_height,
-                    input_width=config.ccreid_input_width,
-                    providers=tuple(config.ccreid_providers),
-                )
-            )
-            identity_pipelines.append(CCReIDPipeline(ccreid_recognizer))
-
-        if config.pet_enabled:
-            from kukiihome_preprocessor.pipelines.identity import PetPipeline
-            from kukiihome_preprocessor.pipelines.pet import (
-                PetConfig,
-                PetRecognizer,
-            )
-
-            pet_recognizer = PetRecognizer(
-                PetConfig(
-                    model_path=config.pet_model_path,
-                    match_threshold=config.pet_match_threshold,
-                    providers=tuple(config.pet_providers),
-                )
-            )
-            identity_pipelines.append(PetPipeline(pet_recognizer))
-
-        if config.gait_enabled:
-            # Gait is a TEMPORAL pipeline (per-track sequence). Heavy:
-            # pulls in ultralytics (YOLO-seg) + onnxruntime — lazy import.
-            from kukiihome_preprocessor.pipelines.gait import (
-                GaitConfig,
-                GaitRecognizer,
-            )
-            from kukiihome_preprocessor.pipelines.identity import GaitPipeline
-
-            gait_recognizer = GaitRecognizer(
-                GaitConfig(
-                    model_path=config.gait_model_path,
-                    seg_weights=config.gait_seg_weights,
-                    match_threshold=config.gait_match_threshold,
-                    min_frames=config.gait_min_frames,
-                    seg_device=config.gait_seg_device,
-                    providers=tuple(config.gait_providers),
-                )
-            )
-            identity_pipelines.append(GaitPipeline(gait_recognizer))
-
-        identity_router = None
-        if identity_pipelines:
-            from kukiihome_preprocessor.pipelines.identity import IdentityRouter
-
-            identity_router = IdentityRouter(identity_pipelines)
-            logger.info("identity_router.built", pipelines=identity_router.pipeline_names)
-
-        detector = None
-        if config.detection_enabled:
-            # Lazy import: only pay the ultralytics + torch cost when
-            # actually running detection. Synthetic-mode runs and
-            # detection-off RTSP runs skip this entirely.
-            from kukiihome_preprocessor.pipelines.detection import (
-                DetectionConfig,
-                YOLODetector,
-            )
-
-            detector = YOLODetector(
-                DetectionConfig(
-                    backend=config.detection_backend,  # type: ignore[arg-type]
-                    weights=config.detection_weights,
-                    confidence_min=config.detection_confidence_min,
-                    per_class_confidence=config.detection_per_class_confidence,
-                    image_size=config.detection_image_size,
-                    device=config.detection_device,
-                )
-            )
+        identity_router = build_identity_router(config)
+        detector = build_detector(config)
 
         frame_buffer = RTSPFrameBuffer(
             rolling_buffer=rolling,
