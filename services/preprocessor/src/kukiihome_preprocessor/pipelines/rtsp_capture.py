@@ -94,6 +94,7 @@ class CameraCaptureTask:
         buffer: RollingBuffer,
         target_interval_seconds: float = 1.0,
         motion_gating_enabled: bool = True,
+        motion_config: MotionConfig | None = None,
         queue_maxsize: int = 64,
         encode_workers: int = 3,
     ) -> None:
@@ -115,6 +116,7 @@ class CameraCaptureTask:
         # first frame so synthetic-mode tests + cameras that never
         # connect don't pay the OpenCV init cost.
         self._motion_gating_enabled = motion_gating_enabled
+        self._motion_config = motion_config or MotionConfig()
         self._motion: MOG2MotionDetector | None = None
         self.state = CameraCaptureState(
             camera_id=camera_id,
@@ -234,7 +236,7 @@ class CameraCaptureTask:
                     has_motion = False
                     if self._motion_gating_enabled:
                         if self._motion is None:
-                            self._motion = MOG2MotionDetector(MotionConfig())
+                            self._motion = MOG2MotionDetector(self._motion_config)
                         decision = self._motion.process(img, timestamp=now)
                         has_motion = decision.has_motion
 
@@ -302,8 +304,11 @@ class RTSPCaptureSupervisor:
     from the NATS callback path is safe.
     """
 
-    def __init__(self, *, buffer: RollingBuffer) -> None:
+    def __init__(
+        self, *, buffer: RollingBuffer, motion_config: MotionConfig | None = None
+    ) -> None:
         self._buffer = buffer
+        self._motion_config = motion_config
         self._tasks: dict[str, CameraCaptureTask] = {}
         self._lock = asyncio.Lock()
 
@@ -340,6 +345,7 @@ class RTSPCaptureSupervisor:
                 camera_id=camera_id,
                 rtsp_url=rtsp_url,
                 buffer=self._buffer,
+                motion_config=self._motion_config,
             )
             self._tasks[camera_id] = new_task
 

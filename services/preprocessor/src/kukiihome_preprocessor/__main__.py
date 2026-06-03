@@ -90,7 +90,16 @@ def _build_backend(
         annotation_cache = AnnotationCache(
             horizon_seconds=config.rtsp_buffer_horizon_seconds,
         )
-        supervisor = RTSPCaptureSupervisor(buffer=rolling)
+        # Motion gate tuned for the deployment: downscale + higher variance
+        # threshold so sunlit water shimmer / sparkle doesn't manufacture
+        # phantom motion (the pool false-trigger).
+        from kukiihome_preprocessor.motion import MotionConfig
+
+        motion_config = MotionConfig(
+            var_threshold=config.motion_var_threshold,
+            min_object_size_px=config.motion_min_object_size_px,
+        )
+        supervisor = RTSPCaptureSupervisor(buffer=rolling, motion_config=motion_config)
 
         # Build identity pipelines + router. Face is the only one
         # today; body-ID / pet / plate slot in by registering more

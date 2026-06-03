@@ -157,6 +157,19 @@ class PreprocessorConfig:
     detection_device: str | None = None
     """``"cuda:0"`` / ``"cpu"`` / None (auto-pick)."""
 
+    # ─── Motion gate (the 24/7 trigger) — tuned at NATIVE resolution ──
+    motion_var_threshold: float = 50.0
+    """MOG2 variance threshold. The shared default (16) is too sensitive for
+    bright sunlit water — pool shimmer/sun glints clear it and manufacture
+    continuous phantom motion. Swept on real pool water (native 4K): 50 cuts
+    empty-water false-triggers 12%->1% while keeping person recall ~61% (raising
+    min_object_size past 800 instead destroys recall). NEVER paired with
+    downscaling. Re-validate on the live 16Mbps stream — sharper sparkle may
+    want a touch higher."""
+    motion_min_object_size_px: int = 800
+    """Min connected motion-region area (native 4K pixels) to count as real.
+    Filters shimmer speckle; a person is far larger. Tuned empirically."""
+
     # ─── Motion-event recorder (autonomous durable sink) ───────────
     events_enabled: bool = False
     """When True (rtsp backend), the EventRecorder runs: motion triggers an
@@ -345,6 +358,8 @@ def load_from_env() -> PreprocessorConfig:
             {"dog": 0.25, "cat": 0.25, "animal": 0.25},
         ),
         detection_device=os.environ.get("KUKIIHOME_PREPROCESSOR_DETECTION_DEVICE") or None,
+        motion_var_threshold=_env_float("KUKIIHOME_PREPROCESSOR_MOTION_VAR_THRESHOLD", 40.0),
+        motion_min_object_size_px=_env_int("KUKIIHOME_PREPROCESSOR_MOTION_MIN_OBJECT_SIZE", 800),
         events_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_EVENTS", "false").lower()
         in ("1", "true", "yes", "on"),
         event_store_dir=os.environ.get("KUKIIHOME_PREPROCESSOR_EVENT_STORE_DIR", "events"),

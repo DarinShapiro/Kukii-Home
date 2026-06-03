@@ -53,7 +53,10 @@ class MotionConfig:
     history: int = 500
 
     # MOG2 variance threshold. Higher = less sensitive to slight changes
-    # (good for filtering lighting flicker).
+    # (good for filtering lighting flicker AND water shimmer / sun sparkle).
+    # Tuned per-camera; bright water scenes need a higher value than the
+    # MOG2 stock 16. NOTE: shimmer is suppressed via this threshold + size
+    # + morphology at NATIVE resolution — we never downscale.
     var_threshold: float = 16.0
 
     # Image-space exclusion zones (e.g., a swaying tree). Each is
