@@ -169,6 +169,11 @@ class PreprocessorConfig:
     motion_min_object_size_px: int = 800
     """Min connected motion-region area (native 4K pixels) to count as real.
     Filters shimmer speckle; a person is far larger. Tuned empirically."""
+    motion_source: str = "mog2"
+    """Gate signal: "mog2" (our background-subtractor) or "camera" (the
+    camera's own motion events via DahuaMotionWatcher). The camera detector
+    cleanly ignores benign movers (drifting pool hose, water) that MOG2
+    false-triggers on. "camera" is Dahua-specific for now (see #291)."""
 
     # ─── Motion-event recorder (autonomous durable sink) ───────────
     events_enabled: bool = False
@@ -360,6 +365,7 @@ def load_from_env() -> PreprocessorConfig:
         detection_device=os.environ.get("KUKIIHOME_PREPROCESSOR_DETECTION_DEVICE") or None,
         motion_var_threshold=_env_float("KUKIIHOME_PREPROCESSOR_MOTION_VAR_THRESHOLD", 40.0),
         motion_min_object_size_px=_env_int("KUKIIHOME_PREPROCESSOR_MOTION_MIN_OBJECT_SIZE", 800),
+        motion_source=os.environ.get("KUKIIHOME_PREPROCESSOR_MOTION_SOURCE", "mog2"),
         events_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_EVENTS", "false").lower()
         in ("1", "true", "yes", "on"),
         event_store_dir=os.environ.get("KUKIIHOME_PREPROCESSOR_EVENT_STORE_DIR", "events"),

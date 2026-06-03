@@ -99,7 +99,9 @@ def _build_backend(
             var_threshold=config.motion_var_threshold,
             min_object_size_px=config.motion_min_object_size_px,
         )
-        supervisor = RTSPCaptureSupervisor(buffer=rolling, motion_config=motion_config)
+        supervisor = RTSPCaptureSupervisor(
+            buffer=rolling, motion_config=motion_config, motion_source=config.motion_source
+        )
 
         # Build identity pipelines + router. Face is the only one
         # today; body-ID / pet / plate slot in by registering more

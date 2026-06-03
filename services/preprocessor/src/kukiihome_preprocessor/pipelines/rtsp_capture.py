@@ -29,6 +29,7 @@ import cv2
 import numpy as np
 import structlog
 
+from kukiihome_preprocessor.camera_motion import DahuaMotionWatcher, event_url_from_rtsp
 from kukiihome_preprocessor.motion import MOG2MotionDetector, MotionConfig
 from kukiihome_preprocessor.pipelines.frame_queue import FrameQueue
 from kukiihome_preprocessor.pipelines.rolling_buffer import (
@@ -95,6 +96,7 @@ class CameraCaptureTask:
         target_interval_seconds: float = 1.0,
         motion_gating_enabled: bool = True,
         motion_config: MotionConfig | None = None,
+        motion_watcher: DahuaMotionWatcher | None = None,
         queue_maxsize: int = 64,
         encode_workers: int = 3,
     ) -> None:
@@ -118,6 +120,10 @@ class CameraCaptureTask:
         self._motion_gating_enabled = motion_gating_enabled
         self._motion_config = motion_config or MotionConfig()
         self._motion: MOG2MotionDetector | None = None
+        # When a camera-native motion watcher is provided, it REPLACES MOG2 as
+        # the gate (the camera's detector cleanly ignores benign movers like a
+        # drifting pool hose that MOG2 false-triggers on). See camera_motion.py.
+        self._motion_watcher = motion_watcher
         self.state = CameraCaptureState(
             camera_id=camera_id,
             rtsp_url_sanitized=_sanitize_url(rtsp_url),
@@ -133,6 +139,8 @@ class CameraCaptureTask:
         if self._task is not None:
             return
         self._stopping = False
+        if self._motion_watcher is not None:
+            self._motion_watcher.start()
         loop = asyncio.get_running_loop()
         # Spin up the encode-worker pool. JPEG-encode releases the GIL,
         # so N workers genuinely parallelize across cores.
@@ -153,6 +161,8 @@ class CameraCaptureTask:
             pass
         finally:
             self._task = None
+        if self._motion_watcher is not None:
+            self._motion_watcher.stop()
         # Drain + join the worker pool so encode threads exit cleanly.
         self._queue.close()
         for fut in self._worker_futs:
@@ -234,7 +244,11 @@ class CameraCaptureTask:
                     # prioritize. MOG2 is cheap; the expensive JPEG-encode
                     # is what we move off this thread.
                     has_motion = False
-                    if self._motion_gating_enabled:
+                    if self._motion_watcher is not None:
+                        # Camera-native gate: the camera's detector decides the
+                        # motion window; we just read its current state.
+                        has_motion = self._motion_watcher.active
+                    elif self._motion_gating_enabled:
                         if self._motion is None:
                             self._motion = MOG2MotionDetector(self._motion_config)
                         decision = self._motion.process(img, timestamp=now)
@@ -305,10 +319,17 @@ class RTSPCaptureSupervisor:
     """
 
     def __init__(
-        self, *, buffer: RollingBuffer, motion_config: MotionConfig | None = None
+        self,
+        *,
+        buffer: RollingBuffer,
+        motion_config: MotionConfig | None = None,
+        motion_source: str = "mog2",
     ) -> None:
         self._buffer = buffer
         self._motion_config = motion_config
+        # "mog2" (our background-subtractor) or "camera" (the camera's own
+        # motion events, via DahuaMotionWatcher — cleaner on benign movers).
+        self._motion_source = motion_source
         self._tasks: dict[str, CameraCaptureTask] = {}
         self._lock = asyncio.Lock()
 
@@ -341,11 +362,16 @@ class RTSPCaptureSupervisor:
         """
         async with self._lock:
             existing = self._tasks.pop(camera_id, None)
+            watcher = None
+            if self._motion_source == "camera":
+                ev_url, user, pw = event_url_from_rtsp(rtsp_url)
+                watcher = DahuaMotionWatcher(event_url=ev_url, user=user, password=pw)
             new_task = CameraCaptureTask(
                 camera_id=camera_id,
                 rtsp_url=rtsp_url,
                 buffer=self._buffer,
                 motion_config=self._motion_config,
+                motion_watcher=watcher,
             )
             self._tasks[camera_id] = new_task
 
