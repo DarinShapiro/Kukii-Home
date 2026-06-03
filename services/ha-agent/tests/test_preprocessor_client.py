@@ -137,3 +137,42 @@ async def test_fetch_frame_image_none_for_empty_uri():
     client = _client_with_handler(lambda r: httpx.Response(200, content=b"x"))
     assert await client.fetch_frame_image("") is None
     await client.close()
+
+
+# ─── POST resilience: stale keep-alive retry (Build #292 fix) ────────
+
+
+def test_post_retries_once_on_transport_error():
+    """A transport error (stale pooled connection the server idle-closed) is
+    retried once on a fresh connection — the fix for 'label failed' while the
+    page (GETs, which httpx auto-retries) loaded fine."""
+    import asyncio
+
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.RemoteProtocolError("server disconnected", request=request)
+        return httpx.Response(200, json={"subject_id": "alice", "matched": 3})
+
+    c = _client_with_handler(handler)
+    result = asyncio.run(c.label_track({"event_id": "e1", "track_id": "t1", "name": "Alice"}))
+    assert calls["n"] == 2  # retried once
+    assert result == {"subject_id": "alice", "matched": 3}
+
+
+def test_post_does_not_retry_real_4xx():
+    """A genuine 4xx is a real rejection, not a blip — no retry, returns None."""
+    import asyncio
+
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(400, json={"detail": "bad"})
+
+    c = _client_with_handler(handler)
+    result = asyncio.run(c.reject_track("e1", "t1"))
+    assert calls["n"] == 1  # no retry
+    assert result is None

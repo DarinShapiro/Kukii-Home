@@ -37,9 +37,19 @@ class PreprocessorClient:
     ``http://192.168.68.50:8090`` or ``http://inference.local:8090``).
     """
 
-    def __init__(self, base_url: str, *, timeout: float = 8.0) -> None:
+    def __init__(self, base_url: str, *, timeout: float = 20.0) -> None:
         self._base = base_url.rstrip("/")
-        self._http = httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=3.0))
+        # keepalive_expiry kept *below* uvicorn's ~5s idle-close so we never
+        # reuse a connection the server already dropped. Without this, a POST
+        # on a stale pooled connection fails (httpx won't auto-retry a
+        # non-idempotent request) while GETs silently recover — which surfaced
+        # as "label failed but the page loads fine." Paired with a one-shot
+        # retry in _post_json. timeout is generous: identity writes are fast,
+        # but a weak HA host over LAN shouldn't false-fail on a blip.
+        self._http = httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout, connect=5.0),
+            limits=httpx.Limits(keepalive_expiry=2.0),
+        )
 
     async def close(self) -> None:
         await self._http.aclose()
@@ -160,21 +170,32 @@ class PreprocessorClient:
             return None
 
     async def _post_json(self, path: str, payload: dict) -> dict | None:
-        try:
-            resp = await self._http.post(f"{self._base}{path}", json=payload)
-        except httpx.HTTPError as e:
-            logger.info("preprocessor_client.post_failed", path=path, error=str(e))
-            return None
-        if resp.status_code >= 400:
-            logger.warning(
-                "preprocessor_client.post_http_error",
-                path=path, status=resp.status_code, body=resp.text[:200],
-            )
-            return None
-        try:
-            return resp.json()
-        except Exception:
-            return None
+        # One retry on a transport error: closes the stale-keep-alive race for
+        # POSTs (a pooled connection the server idle-closed). Safe to retry —
+        # the identity writes (label/reject/resolve) are idempotent. A genuine
+        # 4xx/5xx is NOT retried (it's a real rejection, not a blip).
+        last_err: Exception | None = None
+        for _attempt in range(2):
+            try:
+                resp = await self._http.post(f"{self._base}{path}", json=payload)
+            except httpx.TransportError as e:
+                last_err = e
+                continue
+            except httpx.HTTPError as e:
+                logger.info("preprocessor_client.post_failed", path=path, error=str(e))
+                return None
+            if resp.status_code >= 400:
+                logger.warning(
+                    "preprocessor_client.post_http_error",
+                    path=path, status=resp.status_code, body=resp.text[:200],
+                )
+                return None
+            try:
+                return resp.json()
+            except Exception:
+                return None
+        logger.info("preprocessor_client.post_failed", path=path, error=str(last_err))
+        return None
 
     async def fetch_frame_image(self, uri: str) -> bytes | None:
         """Fetch annotated/raw frame bytes for a FrameRef URI.
