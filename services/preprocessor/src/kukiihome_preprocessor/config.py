@@ -184,7 +184,13 @@ class PreprocessorConfig:
     events. Off by default so synthetic/CI runs don't write to disk."""
     event_store_dir: str = "events"
     event_pre_roll_s: float = 10.0
-    event_post_roll_s: float = 30.0
+    event_post_roll_s: float = 10.0
+    """Held open after motion stops, to keep analyzing a subject who goes
+    still. Trimmed 30->10 once motion moved to camera-native gating: the
+    camera's own anti-dither (Dahua Dejitter, now 5s) already holds motion
+    briefly past movement, so a long post-roll just stacked redundant padding
+    (a 30s walk became a 130s/124-frame event). 10s still covers a brief
+    stationary stare; raise it for cameras/areas where subjects loiter still."""
     event_max_duration_s: float = 180.0
     event_poll_interval_s: float = 1.0
     event_enrich: bool = True
