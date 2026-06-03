@@ -57,6 +57,13 @@ class EventRecorderConfig:
     an event past what the rolling buffer can still serve at close time."""
     poll_interval_s: float = 1.0
     store_dir: Path = field(default_factory=lambda: Path("events"))
+    enrich: bool = True
+    """Run detection+identity on the full window at close. On a CPU-only box
+    this is RUINOUS — enriching ~80 4K frames serially took ~27 min and
+    saturated the thread pool, starving the capture loop (stream resets +
+    spurious reconnect events). Set False on CPU: frames are still persisted
+    durably and can be enriched offline / on the GPU box. The durable sink is
+    the must-have; enrichment is the nice-to-have."""
 
 
 @dataclass
@@ -218,7 +225,10 @@ class EventRecorder:
         # STEP 2 — enrich the FULL window (every frame, incl. the stationary
         # subject) and merge detections into the manifest. Best-effort: the
         # frames are already durable, so an enrich failure/slowness never
-        # loses data.
+        # loses data. Skipped entirely on CPU (see EventRecorderConfig.enrich)
+        # because a multi-minute serial enrich starves the capture loop.
+        if not self._cfg.enrich:
+            return
         try:
             fw = await self._frame_buffer.get_window(
                 camera_id=cam, ts_start=window_start, ts_end=window_end,

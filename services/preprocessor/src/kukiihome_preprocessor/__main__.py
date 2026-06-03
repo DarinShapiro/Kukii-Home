@@ -295,6 +295,7 @@ async def _run(config: PreprocessorConfig) -> None:
                 max_duration_s=config.event_max_duration_s,
                 poll_interval_s=config.event_poll_interval_s,
                 store_dir=Path(config.event_store_dir),
+                enrich=config.event_enrich,
             ),
         )
         event_recorder_task = asyncio.create_task(recorder.run(stop=event_recorder_stop))

@@ -127,6 +127,23 @@ async def test_persists_frames_and_manifest(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_enrich_disabled_persists_but_skips_detection(tmp_path):
+    # enrich=False (CPU mode): frames persisted durably, but NO get_window
+    # enrich call (which would starve capture on CPU).
+    frames = [_frame(t, motion=(100 <= t <= 103)) for t in range(85, 141)]
+    rec, fb = _recorder(tmp_path, frames, enrich=False)
+    await rec._tick("pool", now=104)
+    await rec._tick("pool", now=140)
+    await rec.drain()
+    assert rec.events_written == 1          # still persisted
+    assert fb.calls == []                   # but never enriched
+    ev = next((tmp_path / "pool").glob("pool_*"))
+    manifest = json.loads((ev / "event.json").read_text())
+    assert manifest["enriched"] is False
+    assert len(list(ev.glob("frame_*.jpg"))) == manifest["frame_count"]
+
+
+@pytest.mark.asyncio
 async def test_no_motion_no_event(tmp_path):
     frames = [_frame(t, motion=False) for t in range(0, 60)]
     rec, fb = _recorder(tmp_path, frames)

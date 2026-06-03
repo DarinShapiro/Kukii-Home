@@ -169,6 +169,10 @@ class PreprocessorConfig:
     event_post_roll_s: float = 30.0
     event_max_duration_s: float = 180.0
     event_poll_interval_s: float = 1.0
+    event_enrich: bool = True
+    """Run detection+identity inline at event close. Set False on CPU-only
+    hosts — the serial full-window enrich starves capture. Frames persist
+    regardless; enrich offline or on the GPU box."""
 
     detection_per_class_confidence: dict[str, float] = field(
         default_factory=lambda: {"dog": 0.25, "cat": 0.25, "animal": 0.25}
@@ -348,6 +352,8 @@ def load_from_env() -> PreprocessorConfig:
         event_post_roll_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_POST_ROLL_S", 30.0),
         event_max_duration_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_MAX_DURATION_S", 180.0),
         event_poll_interval_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_POLL_INTERVAL_S", 1.0),
+        event_enrich=os.environ.get("KUKIIHOME_PREPROCESSOR_EVENT_ENRICH", "true").lower()
+        in ("1", "true", "yes", "on"),
         face_recognition_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_FACE", "false").lower()
         in ("1", "true", "yes", "on"),
         face_model_pack=os.environ.get("KUKIIHOME_PREPROCESSOR_FACE_MODEL_PACK", "buffalo_s"),
