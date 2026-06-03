@@ -24,6 +24,7 @@ pipelines.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 
@@ -265,6 +266,39 @@ async def _run(config: PreprocessorConfig) -> None:
         await capture_supervisor.start()
         await _bootstrap_rtsp_from_env(config, capture_supervisor)
 
+    # Autonomous motion-event recorder (durable sink). Only for the rtsp
+    # backend (synthetic has no rolling buffer / motion), and only when
+    # enabled. Runs as a background task; gathered/cancelled on shutdown.
+    event_recorder_task: asyncio.Task | None = None
+    event_recorder_stop = asyncio.Event()
+    if (
+        config.events_enabled
+        and capture_supervisor is not None
+        and hasattr(frame_buffer, "rolling_buffer")
+    ):
+        from pathlib import Path
+
+        from kukiihome_preprocessor.pipelines.event_recorder import (
+            EventRecorder,
+            EventRecorderConfig,
+        )
+
+        recorder = EventRecorder(
+            rolling_buffer=frame_buffer.rolling_buffer,
+            frame_buffer=frame_buffer,
+            cache=cache,
+            cameras=config.cameras,
+            node_id=config.node_id,
+            config=EventRecorderConfig(
+                pre_roll_s=config.event_pre_roll_s,
+                post_roll_s=config.event_post_roll_s,
+                max_duration_s=config.event_max_duration_s,
+                poll_interval_s=config.event_poll_interval_s,
+                store_dir=Path(config.event_store_dir),
+            ),
+        )
+        event_recorder_task = asyncio.create_task(recorder.run(stop=event_recorder_stop))
+
     state = AppState(
         config=config,
         cache=cache,
@@ -297,6 +331,10 @@ async def _run(config: PreprocessorConfig) -> None:
     try:
         await server.serve()
     finally:
+        if event_recorder_task is not None:
+            event_recorder_stop.set()
+            with contextlib.suppress(asyncio.CancelledError, TimeoutError):
+                await asyncio.wait_for(event_recorder_task, timeout=5.0)
         if capture_supervisor is not None:
             await capture_supervisor.stop()
         await camera_subscriber.close()

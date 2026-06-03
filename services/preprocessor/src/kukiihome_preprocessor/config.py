@@ -157,6 +157,19 @@ class PreprocessorConfig:
     detection_device: str | None = None
     """``"cuda:0"`` / ``"cpu"`` / None (auto-pick)."""
 
+    # ─── Motion-event recorder (autonomous durable sink) ───────────
+    events_enabled: bool = False
+    """When True (rtsp backend), the EventRecorder runs: motion triggers an
+    autonomous [trigger-pre_roll, last_motion+post_roll] window, enriches the
+    FULL window (incl. stationary frames), and persists it to event_store_dir.
+    Closes the gap where the ephemeral rolling buffer dropped un-pulled
+    events. Off by default so synthetic/CI runs don't write to disk."""
+    event_store_dir: str = "events"
+    event_pre_roll_s: float = 10.0
+    event_post_roll_s: float = 30.0
+    event_max_duration_s: float = 180.0
+    event_poll_interval_s: float = 1.0
+
     detection_per_class_confidence: dict[str, float] = field(
         default_factory=lambda: {"dog": 0.25, "cat": 0.25, "animal": 0.25}
     )
@@ -328,6 +341,13 @@ def load_from_env() -> PreprocessorConfig:
             {"dog": 0.25, "cat": 0.25, "animal": 0.25},
         ),
         detection_device=os.environ.get("KUKIIHOME_PREPROCESSOR_DETECTION_DEVICE") or None,
+        events_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_EVENTS", "false").lower()
+        in ("1", "true", "yes", "on"),
+        event_store_dir=os.environ.get("KUKIIHOME_PREPROCESSOR_EVENT_STORE_DIR", "events"),
+        event_pre_roll_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_PRE_ROLL_S", 10.0),
+        event_post_roll_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_POST_ROLL_S", 30.0),
+        event_max_duration_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_MAX_DURATION_S", 180.0),
+        event_poll_interval_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_POLL_INTERVAL_S", 1.0),
         face_recognition_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_FACE", "false").lower()
         in ("1", "true", "yes", "on"),
         face_model_pack=os.environ.get("KUKIIHOME_PREPROCESSOR_FACE_MODEL_PACK", "buffalo_s"),

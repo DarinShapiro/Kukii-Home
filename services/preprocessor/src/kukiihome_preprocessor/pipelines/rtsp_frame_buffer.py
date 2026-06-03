@@ -123,6 +123,13 @@ class RTSPFrameBuffer:
         annotated version via ``/frames/{cam}/{ts}/annotated.jpg``.
         ``None`` (default for unit tests): no annotation rendering."""
 
+    @property
+    def rolling_buffer(self) -> RollingBuffer:
+        """The underlying rolling buffer. Exposed so the EventRecorder can
+        poll ``has_motion`` and read raw JPEG bytes (neither of which the
+        FrameWindow API surfaces)."""
+        return self._buffer
+
     async def serve_annotated_frame(self, camera_id: str, ts: float) -> bytes | None:
         """Read a previously-rendered annotated JPEG out of the
         annotation cache. Returns the bytes for the
@@ -150,6 +157,7 @@ class RTSPFrameBuffer:
         ts_end: float,
         enrich: bool,
         cache: ActorCache,
+        enrich_motion_only: bool | None = None,
     ) -> FrameWindow:
         """Pull buffered keyframes in ``[ts_start, ts_end]``.
 
@@ -194,11 +202,13 @@ class RTSPFrameBuffer:
             # response's FrameRef list; they just don't carry
             # detections. Callers needing forensic / replay analysis
             # override via enrich_motion_only=False at construction.
-            candidates = (
-                [f for f in buffered if f.has_motion]
-                if self._enrich_motion_only
-                else list(buffered)
+            # Per-call override wins over the instance default. The event
+            # recorder passes enrich_motion_only=False so a person who goes
+            # still inside the [t-10, t+30] window is still analyzed.
+            motion_only = (
+                self._enrich_motion_only if enrich_motion_only is None else enrich_motion_only
             )
+            candidates = [f for f in buffered if f.has_motion] if motion_only else list(buffered)
             if candidates:
                 with timings.span("detect"):
                     detections = await self._detector.detect_batch(
