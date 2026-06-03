@@ -42,9 +42,10 @@ def enrich_event(model, names, event_dir: Path, store: DetectionStore, imgsz: in
         captured_ts=manifest.get("window_end") or manifest.get("created_at") or time.time(),
     )
     ts_by_name = {fi["name"]: fi["ts"] for fi in manifest.get("frame_index", [])}
-    rows: list[DetectionRow] = []
     floor = min([DEFAULT_FLOOR, *PER_CLASS.values()])
-    for fp in sorted(event_dir.glob("frame_*.jpg")):
+    frame_paths = sorted(event_dir.glob("frame_*.jpg"))
+    total = 0
+    for idx, fp in enumerate(frame_paths):
         im = cv2.imread(str(fp))
         if im is None:
             continue
@@ -52,6 +53,7 @@ def enrich_event(model, names, event_dir: Path, store: DetectionStore, imgsz: in
         name = fp.name
         fts = ts_by_name.get(name, 0.0)
         r = model.predict(im, imgsz=imgsz, conf=floor, verbose=False)[0]
+        frame_rows: list[DetectionRow] = []
         for i in range(len(r.boxes.cls)):
             coco = names[int(r.boxes.cls[i])]
             kind = COCO_MAP.get(coco)
@@ -62,15 +64,23 @@ def enrich_event(model, names, event_dir: Path, store: DetectionStore, imgsz: in
                 continue
             x1, y1, x2, y2 = (float(v) for v in r.boxes.xyxy[i].tolist())
             tid = str(int(r.boxes.id[i])) if getattr(r.boxes, "id", None) is not None else None
-            rows.append(DetectionRow(
+            frame_rows.append(DetectionRow(
                 event_id=eid, camera_id=manifest["camera_id"], frame_ts=fts, frame_name=name,
                 kind=kind, confidence=round(conf, 3),
                 bbox=(round(x1 / w, 4), round(y1 / h, 4), round(x2 / w, 4), round(y2 / h, 4)),
                 track_id=tid,
             ))
-    store.add_detections(rows)
+        # Commit INCREMENTALLY (per frame) so the store fills + partial queries
+        # work + a crash doesn't lose the whole event. The detections table is
+        # the streaming answer; mark_enriched flips the event to "done" at the end.
+        if frame_rows:
+            store.add_detections(frame_rows)
+            total += len(frame_rows)
+        if (idx + 1) % 20 == 0:
+            print(f"  {eid}: {idx + 1}/{len(frame_paths)} frames, {total} detections so far",
+                  flush=True)
     store.mark_enriched(eid, time.time())
-    return len(rows)
+    return total
 
 
 def main() -> None:
