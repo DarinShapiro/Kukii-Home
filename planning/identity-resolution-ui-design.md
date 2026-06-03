@@ -49,8 +49,18 @@ the honest accounting.
 | body | BodyIdPipeline | ✅ | per-frame | person (`KnownActor`) | ✅ |
 | **pet** | PetPipeline | ✅ | **per-frame** (DINOv2 crop) | **pet (`KnownPet`)** | ✅ |
 | **gait** | GaitPipeline | ✅ | **per-track sequence** | person (`KnownActor`) | ✅ (worker E4 pending) |
-| face | FacePipeline | ❌ | per-frame | person | later |
+| **face** | FacePipeline | ✅ | **per-frame** (head-region SCRFD+ArcFace) | person (`KnownActor`) | ✅ |
 | body_shape | CCReIDPipeline | ❌ | per-frame | person | later |
+
+**Face embed (added 2026-06-03):** `FacePipeline.embed()` — the durable anchor.
+Detection scoped to the head region (top of the person box, native res, as in
+`run`); the face inherits the person's `track_id`; the **largest** face in the
+region wins when several land in it. Face only flows where a face is actually
+visible (frontal-ish, not top-down) — absent faces just mean that track has no
+face row that frame; body still embeds. Resolves via the `face` slice at the
+ArcFace 0.5 threshold; folds into the live cache (`face_embedding`) like the
+others. Wired in code (preprocessor) — needs no add-on change, since the
+Review UI is modality-agnostic.
 
 **Two wrinkles that aren't "copy body-ID":**
 

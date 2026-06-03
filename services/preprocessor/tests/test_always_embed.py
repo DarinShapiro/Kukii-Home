@@ -16,10 +16,12 @@ import numpy as np
 import pytest
 from kukiihome_preprocessor.detection_store import DetectionStore, EmbeddingRow
 from kukiihome_preprocessor.pipelines.body_id import DetectedBody
+from kukiihome_preprocessor.pipelines.face import DetectedFace
 from kukiihome_preprocessor.pipelines.gait import DetectedGait
 from kukiihome_preprocessor.pipelines.identity import (
     BodyIdPipeline,
     EnrolledCorpus,
+    FacePipeline,
     GaitPipeline,
     PetPipeline,
     collect_embeddings,
@@ -262,6 +264,76 @@ async def test_collect_embeddings_routes_person_and_pet(tmp_path):
         [body, pet], frame=_real_jpeg(1.0), detections=(_person("p1"), _dog("d1")),
     )
     assert {te.modality for te in out} == {"body", "pet"}
+
+
+# ─── face: per-frame embed (the durable anchor) ─────────────────────
+
+
+class _StubFaceRecognizer:
+    def __init__(self, faces: tuple = ()) -> None:
+        self._faces = faces
+        self.enrolled_seen: list[tuple] = []
+
+    async def detect_and_match(self, bgr, enrolled):
+        self.enrolled_seen.append(tuple(sorted(enrolled.keys())))
+        return self._faces
+
+
+def _face(vec, bbox=(0.2, 0.1, 0.6, 0.7), det=0.9) -> DetectedFace:
+    return DetectedFace(bbox=bbox, det_confidence=det, embedding=_unit(vec),
+                        matched_actor_id=None, match_confidence=0.0)
+
+
+@pytest.mark.asyncio
+async def test_face_embed_ungated_and_resolves(tmp_path):
+    alice = _unit([0.5, 0.1, 0.2, 0.3, 0.4])
+    rec = _StubFaceRecognizer(faces=(_face(alice),))
+    p = FacePipeline(rec)
+    assert isinstance(p, EmbeddingPipeline)
+
+    out = await p.embed(frame=_real_jpeg(3.0), detections=(_person("t1", 3.0),))
+    assert len(out) == 1
+    te = out[0]
+    assert te.modality == "face" and te.match_method == "face_arcface" and te.track_id == "t1"
+    assert rec.enrolled_seen == [()]  # embed never consults a corpus
+
+    store = DetectionStore(tmp_path / "det.db")
+    _persist(store, "e1", "door", out)
+    matches = resolve_event(store, "e1", EnrolledCorpus(templates={"face": {"alice": alice}}))
+    assert len(matches) == 1
+    assert matches[0].actor_id == "alice" and matches[0].match_method == "face_arcface"
+
+
+@pytest.mark.asyncio
+async def test_face_embed_keeps_largest_face_in_head_region():
+    big, small = _unit([1.0, 0.0, 0.0]), _unit([0.0, 1.0, 0.0])
+    rec = _StubFaceRecognizer(faces=(
+        _face(small, bbox=(0.0, 0.0, 0.2, 0.2)),   # tiny background head
+        _face(big, bbox=(0.1, 0.1, 0.9, 0.9)),     # foreground person
+    ))
+    out = await FacePipeline(rec).embed(frame=_real_jpeg(1.0), detections=(_person("t1"),))
+    assert len(out) == 1
+    np.testing.assert_allclose(np.asarray(out[0].embedding, dtype=np.float32), big, rtol=1e-6)
+
+
+@pytest.mark.asyncio
+async def test_face_embed_no_face_detected_yields_nothing():
+    # face simply absent (turned away / top-down) → no face row; body still embeds elsewhere.
+    out = await FacePipeline(_StubFaceRecognizer(faces=())).embed(
+        frame=_real_jpeg(1.0), detections=(_person("t1"),)
+    )
+    assert out == ()
+
+
+@pytest.mark.asyncio
+async def test_collect_embeddings_routes_body_and_face(tmp_path):
+    body = BodyIdPipeline(_StubBodyIdRecognizer(
+        bodies=(DetectedBody(track_id="t1", embedding=_unit([1.0, 0.0]),
+                             matched_actor_id=None, match_confidence=0.0),)))
+    face = FacePipeline(_StubFaceRecognizer(faces=(_face([0.0, 1.0, 0.0]),)))
+    out = await collect_embeddings(
+        [body, face], frame=_real_jpeg(1.0), detections=(_person("t1"),))
+    assert {te.modality for te in out} == {"body", "face"}  # one person → two modalities
 
 
 # ─── gait: temporal (sequence) embed ────────────────────────────────

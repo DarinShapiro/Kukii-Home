@@ -26,7 +26,7 @@ from kukiihome_preprocessor.pipelines.face import (
 )
 
 if TYPE_CHECKING:
-    from kukiihome_shared.preprocessor import ActorMatch, DetectionTag
+    from kukiihome_shared.preprocessor import ActorMatch, DetectionTag, TrackEmbedding
 
     from kukiihome_preprocessor.pipelines.face import FaceRecognizer
     from kukiihome_preprocessor.pipelines.identity.router import EnrolledCorpus
@@ -115,6 +115,59 @@ class FacePipeline:
             match = detected_face_to_actor_match(best, frame_ts=frame.ts, track_id=d.track_id)
             if match is not None:
                 out.append(match)
+        return tuple(out)
+
+    async def embed(
+        self,
+        *,
+        frame: BufferedFrame,
+        detections: tuple[DetectionTag, ...],
+    ) -> tuple[TrackEmbedding, ...]:
+        """Always-embed: one face :class:`TrackEmbedding` per tracked person
+        whose face the detector finds, with no corpus and no matching.
+
+        Same per-frame pattern as :meth:`BodyIdPipeline.embed`, but face is the
+        most durable + discriminative signal (and the strongest argument for
+        always-embedding it): a person seen face-on today is recognizable
+        across days, outfits, and lighting. Detection is scoped to the head
+        region (as in :meth:`run`), and the face inherits the person's
+        ``track_id`` directly. When >1 face lands in the region (a background
+        head peeking into the box) we keep the **largest** — the foreground
+        person whose box this is. No face found / unusable embedding → nothing
+        for that track this frame (face is simply absent, body still embeds)."""
+        from kukiihome_shared.preprocessor import TrackEmbedding
+
+        bgr = jpeg_to_bgr(frame.jpeg_bytes)
+        if bgr is None:
+            return ()
+        h, w = bgr.shape[:2]
+        out: list[TrackEmbedding] = []
+        for d in detections:
+            if d.kind != "person" or d.track_id is None:
+                continue
+            head = _head_region(bgr, d.bbox, w, h)
+            if head is None:
+                continue
+            faces = [
+                f
+                for f in await self._recognizer.detect_and_match(head, {})
+                if f.embedding is not None and f.embedding.any()
+            ]
+            if not faces:
+                continue
+            best = max(
+                faces,
+                key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]),
+            )
+            out.append(
+                TrackEmbedding(
+                    modality=self.modality,
+                    match_method=self.name,
+                    track_id=d.track_id,
+                    frame_ts=frame.ts,
+                    embedding=tuple(best.embedding.astype(float).tolist()),
+                )
+            )
         return tuple(out)
 
 
