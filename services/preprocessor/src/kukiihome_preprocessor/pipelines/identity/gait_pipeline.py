@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from kukiihome_preprocessor.pipelines.gait import detected_gait_to_actor_match
 
 if TYPE_CHECKING:
-    from kukiihome_shared.preprocessor import ActorMatch, DetectionTag
+    from kukiihome_shared.preprocessor import ActorMatch, DetectionTag, TrackEmbedding
 
     from kukiihome_preprocessor.pipelines.gait import GaitRecognizer
     from kukiihome_preprocessor.pipelines.identity.router import (
@@ -91,4 +91,44 @@ class GaitPipeline:
             match = detected_gait_to_actor_match(gait)
             if match is not None:
                 out.append(match)
+        return tuple(out)
+
+    async def embed_sequence(
+        self,
+        *,
+        tracks: dict[str, TrackSequence],
+    ) -> tuple[TrackEmbedding, ...]:
+        """Always-embed (temporal): one :class:`TrackEmbedding` per track that
+        clears the min-frames gate, with no corpus and no matching.
+
+        The temporal analogue of :meth:`BodyIdPipeline.embed` — reuses the
+        recognizer's embed path with an empty corpus (it embeds every
+        sufficiently-long track regardless, only the match step consults the
+        corpus), so a persisted gait descriptor is byte-identical to what
+        :meth:`run_sequence` would compute. Short tracks (< ``min_frames``
+        silhouettes) yield nothing, which is the cost gate that makes gait
+        affordable. Zero vectors are dropped defensively.
+
+        Designed to be driven by a *deferred Stage-2 worker* — only for tracks
+        the cheaper per-frame modalities (face/body) couldn't capture cleanly —
+        so gait's segmentation cost is paid proportional to need, off the
+        alert's critical path. See the gait-processing model in the identity-UI
+        design spec.
+        """
+        from kukiihome_shared.preprocessor import TrackEmbedding
+
+        gaits = await self._recognizer.identify_tracks(tracks, {})
+        out: list[TrackEmbedding] = []
+        for gait in gaits:
+            if not gait.embedding.any():
+                continue
+            out.append(
+                TrackEmbedding(
+                    modality=self.modality,
+                    match_method=self.name,
+                    track_id=gait.track_id,
+                    frame_ts=gait.frame_ts,
+                    embedding=tuple(gait.embedding.astype(float).tolist()),
+                )
+            )
         return tuple(out)

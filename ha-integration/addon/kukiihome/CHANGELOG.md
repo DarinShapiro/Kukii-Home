@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.0 — 2026-06-03
+
+**New: Identity Review — name the people & pets your cameras see.**
+
+A new **🔎 Review identities** page in the add-on Web UI (top of the status
+page, and the Kukii-Home sidebar panel). The recognition preprocessor now
+remembers every person and pet it sees — even before you've named anyone — so
+Review lets you:
+
+- See the un-named people/pets the cameras captured, each with a crop.
+- **Label** one ("this is Alice", "this is Rex"). It's enrolled on the spot and
+  every past *and* future sighting is matched automatically — no re-processing
+  of old footage.
+- Fix mistakes: **✗ not them** clears a wrong match (it returns to the queue to
+  re-label), and **Merge** combines two labels that are actually the same
+  person/pet.
+
+Newly-labelled people/pets are also folded into live recognition immediately,
+so the next alert can name them.
+
+**Requires the recognition preprocessor.** Set **preprocessor_url** in the
+add-on options to your inference box, and point it at a detection database
+(`KUKIIHOME_PREPROCESSOR_DETECTION_DB_PATH`). Without a preprocessor configured,
+the Review page shows a short setup notice and the rest of the add-on is
+unchanged.
+
+Under the hood: always-embed identity pipelines (body / pet / gait), a
+persist-then-resolve loop, and a new `/identity` API the Review page reads.
+
 ## 0.4.0 — 2026-05-31
 
 **Rebrand: SentiHome → Kukii-Home.**

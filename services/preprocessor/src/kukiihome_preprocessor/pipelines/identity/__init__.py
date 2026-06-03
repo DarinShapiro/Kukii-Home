@@ -18,21 +18,35 @@ from kukiihome_preprocessor.pipelines.identity.ccreid_pipeline import CCReIDPipe
 from kukiihome_preprocessor.pipelines.identity.face_pipeline import FacePipeline
 from kukiihome_preprocessor.pipelines.identity.gait_pipeline import GaitPipeline
 from kukiihome_preprocessor.pipelines.identity.pet_pipeline import PetPipeline
+from kukiihome_preprocessor.pipelines.identity.resolve import (
+    DEFAULT_RESOLVE_THRESHOLDS,
+    resolve_event,
+)
 from kukiihome_preprocessor.pipelines.identity.router import (
+    EmbeddingPipeline,
     EnrolledCorpus,
     IdentityPipeline,
     IdentityRouter,
+    TemporalEmbeddingPipeline,
     TemporalIdentityPipeline,
+    collect_embeddings,
+    collect_track_embeddings,
 )
 
 __all__ = [
+    "DEFAULT_RESOLVE_THRESHOLDS",
     "BodyIdPipeline",
     "CCReIDPipeline",
+    "EmbeddingPipeline",
     "EnrolledCorpus",
     "FacePipeline",
     "GaitPipeline",
     "IdentityPipeline",
     "IdentityRouter",
     "PetPipeline",
+    "TemporalEmbeddingPipeline",
     "TemporalIdentityPipeline",
+    "collect_embeddings",
+    "collect_track_embeddings",
+    "resolve_event",
 ]

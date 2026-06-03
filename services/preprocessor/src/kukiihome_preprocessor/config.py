@@ -183,6 +183,11 @@ class PreprocessorConfig:
     Closes the gap where the ephemeral rolling buffer dropped un-pulled
     events. Off by default so synthetic/CI runs don't write to disk."""
     event_store_dir: str = "events"
+    detection_db_path: str = ""
+    """Path to the queryable detection/embedding/identity SQLite store (the
+    one the enrich worker writes). When set, the service exposes the
+    ``/identity/*`` Review-UI surface (track queue, label, resolve) backed by
+    this DB + the frames under ``event_store_dir``. Empty = identity API off."""
     event_pre_roll_s: float = 10.0
     event_post_roll_s: float = 10.0
     """Held open after motion stops, to keep analyzing a subject who goes
@@ -375,6 +380,7 @@ def load_from_env() -> PreprocessorConfig:
         events_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_EVENTS", "false").lower()
         in ("1", "true", "yes", "on"),
         event_store_dir=os.environ.get("KUKIIHOME_PREPROCESSOR_EVENT_STORE_DIR", "events"),
+        detection_db_path=os.environ.get("KUKIIHOME_PREPROCESSOR_DETECTION_DB_PATH", ""),
         event_pre_roll_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_PRE_ROLL_S", 10.0),
         event_post_roll_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_POST_ROLL_S", 30.0),
         event_max_duration_s=_env_float("KUKIIHOME_PREPROCESSOR_EVENT_MAX_DURATION_S", 180.0),
