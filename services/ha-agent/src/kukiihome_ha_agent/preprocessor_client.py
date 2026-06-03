@@ -90,6 +90,80 @@ class PreprocessorClient:
             )
             return None
 
+    # ─── Identity Review UI (Epic 10 / Build #292) ──────────────────
+    #
+    # Back the ha-agent's ingress "Review" page. The preprocessor owns the
+    # detections.db + frames + recognizer, so these proxy its /identity/*
+    # surface. Same fail-soft posture: a sleeping inference box yields an
+    # empty list / None, and the page renders an "offline" state instead of
+    # erroring.
+
+    async def list_identity_tracks(
+        self, *, status: str | None = None, kind: str | None = None, limit: int = 200
+    ) -> list[dict]:
+        params: dict[str, object] = {"limit": limit}
+        if status:
+            params["status"] = status
+        if kind:
+            params["kind"] = kind
+        body = await self._get_json("/identity/tracks", params=params)
+        return body.get("tracks", []) if body else []
+
+    async def list_identity_subjects(self) -> list[dict]:
+        body = await self._get_json("/identity/subjects")
+        return body.get("subjects", []) if body else []
+
+    async def label_track(self, payload: dict) -> dict | None:
+        """POST /identity/label — label a track → enroll + retroactive resolve.
+        Returns the response dict, or None on failure."""
+        return await self._post_json("/identity/label", payload)
+
+    async def resolve_identity(self, *, event_id: str | None = None) -> dict | None:
+        return await self._post_json("/identity/resolve", {"event_id": event_id})
+
+    async def fetch_track_thumb(self, event_id: str, track_id: str) -> bytes | None:
+        """GET the cropped track thumbnail bytes for the Review page to re-serve."""
+        try:
+            resp = await self._http.get(
+                f"{self._base}/identity/tracks/{event_id}/{track_id}/thumb.jpg"
+            )
+        except httpx.HTTPError as e:
+            logger.info("preprocessor_client.thumb_failed", track_id=track_id, error=str(e))
+            return None
+        if resp.status_code >= 400 or not resp.content:
+            return None
+        return resp.content
+
+    async def _get_json(self, path: str, *, params: dict | None = None) -> dict | None:
+        try:
+            resp = await self._http.get(f"{self._base}{path}", params=params)
+        except httpx.HTTPError as e:
+            logger.info("preprocessor_client.unreachable", path=path, error=str(e))
+            return None
+        if resp.status_code >= 400:
+            return None
+        try:
+            return resp.json()
+        except Exception:
+            return None
+
+    async def _post_json(self, path: str, payload: dict) -> dict | None:
+        try:
+            resp = await self._http.post(f"{self._base}{path}", json=payload)
+        except httpx.HTTPError as e:
+            logger.info("preprocessor_client.post_failed", path=path, error=str(e))
+            return None
+        if resp.status_code >= 400:
+            logger.warning(
+                "preprocessor_client.post_http_error",
+                path=path, status=resp.status_code, body=resp.text[:200],
+            )
+            return None
+        try:
+            return resp.json()
+        except Exception:
+            return None
+
     async def fetch_frame_image(self, uri: str) -> bytes | None:
         """Fetch annotated/raw frame bytes for a FrameRef URI.
 

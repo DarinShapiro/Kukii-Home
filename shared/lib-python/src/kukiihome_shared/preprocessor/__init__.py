@@ -31,6 +31,7 @@ from kukiihome_shared.preprocessor.contracts import (
     IdentifiedEntity,
     KnobAdjustment,
     PreprocessorStatus,
+    TrackEmbedding,
 )
 from kukiihome_shared.preprocessor.nats_subjects import (
     ALL_ACTOR_SUBJECTS,
@@ -59,4 +60,5 @@ __all__ = [
     "IdentifiedEntity",
     "KnobAdjustment",
     "PreprocessorStatus",
+    "TrackEmbedding",
 ]

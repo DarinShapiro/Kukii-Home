@@ -16,15 +16,23 @@ import structlog
 if TYPE_CHECKING:
     from kukiihome_preprocessor.config import PreprocessorConfig
     from kukiihome_preprocessor.pipelines.detection import YOLODetector
-    from kukiihome_preprocessor.pipelines.identity import IdentityRouter
+    from kukiihome_preprocessor.pipelines.identity import IdentityPipeline, IdentityRouter
 
 logger = structlog.get_logger(__name__)
 
 
-def build_identity_router(config: PreprocessorConfig) -> IdentityRouter | None:
-    """Build the IdentityRouter from the enabled identity pipelines
-    (face / body-ID / CC-ReID / pet / gait → fusion). None if none enabled."""
-    identity_pipelines = []
+def build_identity_pipelines(config: PreprocessorConfig) -> list[IdentityPipeline]:
+    """Construct the enabled identity pipelines (face / body-ID / CC-ReID /
+    pet / gait) as a flat list, in registration order.
+
+    The single construction point for the identity DAG's nodes. Both
+    :func:`build_identity_router` (live per-frame match dispatch) and the
+    offline enrichment worker's always-embed pass (which calls
+    :func:`~kukiihome_preprocessor.pipelines.identity.collect_embeddings` over
+    these directly) build from this, so the set of models — and their config
+    — never drifts between matching and embedding.
+    """
+    identity_pipelines: list[IdentityPipeline] = []
 
     if config.face_recognition_enabled:
         from kukiihome_preprocessor.pipelines.face import FaceConfig, FaceRecognizer
@@ -83,6 +91,13 @@ def build_identity_router(config: PreprocessorConfig) -> IdentityRouter | None:
             providers=tuple(config.gait_providers),
         ))))
 
+    return identity_pipelines
+
+
+def build_identity_router(config: PreprocessorConfig) -> IdentityRouter | None:
+    """Build the IdentityRouter from the enabled identity pipelines
+    (face / body-ID / CC-ReID / pet / gait → fusion). None if none enabled."""
+    identity_pipelines = build_identity_pipelines(config)
     if not identity_pipelines:
         return None
     from kukiihome_preprocessor.pipelines.identity import IdentityRouter

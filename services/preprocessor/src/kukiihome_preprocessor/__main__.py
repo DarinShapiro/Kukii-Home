@@ -193,12 +193,26 @@ async def _run(config: PreprocessorConfig) -> None:
         )
         event_recorder_task = asyncio.create_task(recorder.run(stop=event_recorder_stop))
 
+    # Identity Review-UI stores — opened on the same detections.db the enrich
+    # worker writes. Empty path → identity API stays off (e.g. synthetic CI).
+    detection_store = identity_store = None
+    if config.detection_db_path:
+        from kukiihome_preprocessor.detection_store import DetectionStore
+        from kukiihome_preprocessor.identity_store import IdentityStore
+
+        detection_store = DetectionStore(config.detection_db_path)
+        identity_store = IdentityStore(config.detection_db_path)
+        logger.info("preprocessor.identity_store.opened", db=config.detection_db_path)
+
     state = AppState(
         config=config,
         cache=cache,
         frame_buffer=frame_buffer,
         started_ts=time.time(),
         capture_supervisor=capture_supervisor,
+        detection_store=detection_store,
+        identity_store=identity_store,
+        event_store_dir=config.event_store_dir,
     )
 
     app = create_app(state)

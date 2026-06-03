@@ -63,6 +63,7 @@ from kukiihome_ha_agent.overrides import (
 )
 from kukiihome_ha_agent.preprocessor_client import PreprocessorClient
 from kukiihome_ha_agent.reconciler import Reconciler
+from kukiihome_ha_agent.review_page import parse_label_form, render_review_html
 from kukiihome_ha_agent.supervisor import (
     get_ingress_url_prefix,
     get_panel_url_base,
@@ -296,6 +297,9 @@ _STATUS_PAGE = """<!doctype html>
 <a href="." style="font-size:0.6em;font-weight:normal;margin-left:1rem;
   background:#f6f8fa;padding:0.25rem 0.6rem;border-radius:6px;
   border:1px solid #d1d5da;text-decoration:none">↻ Refresh</a>
+<a href="review" style="font-size:0.6em;font-weight:normal;margin-left:0.5rem;
+  background:#eef4ff;padding:0.25rem 0.6rem;border-radius:6px;
+  border:1px solid #c7dbff;text-decoration:none">🔎 Review identities</a>
 </h1>
 <p class="muted">v__VERSION__ &middot; stage: <code>__STAGE__</code></p>
 
@@ -1932,8 +1936,66 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         status, payload = await api.dispatch(method="POST", path=request.path, body=body)
         return web.json_response(payload, status=status)
 
+    # ── Identity Review UI (Build #292) ──────────────────────────────
+    # Server-rendered Inbox over the preprocessor's /identity surface. All
+    # data lives on the inference box; these handlers proxy it so the page
+    # works under HA Ingress auth. Fail-soft: no preprocessor → setup notice.
+
+    async def review_page(request: web.Request) -> web.Response:
+        from kukiihome_ha_agent import __version__
+
+        client = boot.preprocessor_client
+        configured = client is not None
+        tracks: list = []
+        subjects: list = []
+        if client is not None:
+            tracks = await client.list_identity_tracks(limit=200)
+            subjects = await client.list_identity_subjects()
+        q = request.rel_url.query
+        flash = None
+        if "labeled" in q:
+            flash = f"Labelled “{q.get('labeled')}” — resolved {q.get('n', '0')} appearance(s)."
+        elif "err" in q:
+            flash = "Could not label that track (preprocessor unreachable or rejected it)."
+        return web.Response(
+            text=render_review_html(
+                tracks, subjects, configured=configured, flash=flash, version=__version__
+            ),
+            content_type="text/html",
+        )
+
+    async def review_thumb(request: web.Request) -> web.Response:
+        client = boot.preprocessor_client
+        if client is None:
+            return web.Response(status=404, text="no preprocessor configured")
+        data = await client.fetch_track_thumb(
+            request.match_info["event_id"], request.match_info["track_id"]
+        )
+        if not data:
+            return web.Response(status=404, text="no thumbnail")
+        return web.Response(body=data, content_type="image/jpeg")
+
+    async def review_label(request: web.Request) -> web.Response:
+        from urllib.parse import quote
+
+        client = boot.preprocessor_client
+        form = await request.post()
+        payload = parse_label_form({k: str(v) for k, v in form.items()})
+        # PRG: redirect to /review so the rendered page's relative thumb URLs
+        # resolve from /review, not /review/label.
+        if client is None or payload is None:
+            raise web.HTTPSeeOther(location="../review?err=1")
+        result = await client.label_track(payload)
+        if not result:
+            raise web.HTTPSeeOther(location="../review?err=1")
+        loc = f"../review?labeled={quote(payload['name'])}&n={result.get('matched', 0)}"
+        raise web.HTTPSeeOther(location=loc)
+
     app = web.Application()
     app.router.add_get("/", status_page)
+    app.router.add_get("/review", review_page)
+    app.router.add_get("/review/thumb/{event_id}/{track_id}.jpg", review_thumb)
+    app.router.add_post("/review/label", review_label)
     app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
     app.router.add_get("/alerts/{alert_id}/snapshot", snapshot_for_alert)
     app.router.add_get("/alerts/{alert_id}", debug_alert)

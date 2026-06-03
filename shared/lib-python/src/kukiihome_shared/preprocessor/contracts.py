@@ -96,6 +96,52 @@ class ActorMatch(_Strict):
     corresponding DetectionTag."""
 
 
+class TrackEmbedding(_Strict):
+    """One identity embedding captured for a tracked detection —
+    persisted *whether or not* it matched a KnownActor.
+
+    The "always-embed" primitive. An identity pipeline emits one of
+    these for every track it can embed (person → body / body_shape /
+    gait, pet → pet, …), independent of the enrolled corpus. The
+    worker persists them; a later enrollment then resolves who the
+    track was via :func:`resolve_event` — retroactively, with no
+    re-inference over the original frames.
+
+    Mirrors :class:`DetectionTag`: the pipeline-side output, carrying
+    no ``event_id`` (the durable sink stamps that at persist time, the
+    same way ``DetectionTag`` → store ``DetectionRow`` does).
+    """
+
+    modality: str
+    """Enrollment-template key this embedding matches against — the
+    :class:`EnrolledCorpus` slice ``resolve_event`` resolves it in
+    (``body`` / ``body_shape`` / ``gait`` / ``face`` / ``pet``). The
+    durability/threshold of a match is a property of the modality, not
+    the producing model."""
+
+    match_method: str
+    """The pipeline that produced it (``body_id_osnet`` / ``ccreid_cal``
+    / ``gait_opengait`` / ``face_arcface`` / ``pet_dinov2``). Stamped
+    onto the resolved :class:`ActorMatch` so the fusion layer can weight
+    each signal distinctly — preserved through persist→resolve so a
+    resolution is indistinguishable from a live match."""
+
+    track_id: str
+    """Tracking handle from the source detection — the join key a
+    resolved match inherits. Always set; untracked detections can't be
+    correlated downstream so the pipeline never embeds them."""
+
+    frame_ts: float
+    """Frame the embedding was taken from. A track yields one
+    TrackEmbedding per frame it was embedded on."""
+
+    embedding: tuple[float, ...]
+    """L2-normalized feature vector. Length is the model's output dim
+    (512 for OSNet body-ID; 4096 for CC-ReID / gait; 512 for ArcFace).
+    Stored verbatim; cosine similarity against the corpus is what
+    ``resolve_event`` computes."""
+
+
 class FrameRef(_Strict):
     """A handle to one buffered frame.
 

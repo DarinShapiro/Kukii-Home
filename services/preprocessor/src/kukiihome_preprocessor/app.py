@@ -71,6 +71,14 @@ class AppState:
     # workers capture path.
     capture_supervisor: object | None = None
 
+    # Identity-resolution stores (None when no detections.db is configured —
+    # e.g. the synthetic CI backend). When BOTH are set, create_app registers
+    # the /identity/* Review-UI surface. `event_store_dir` locates the frames
+    # the thumbnail endpoint crops.
+    detection_store: object | None = None
+    identity_store: object | None = None
+    event_store_dir: str | None = None
+
     def __post_init__(self) -> None:
         if self.applied_knobs is None:
             self.applied_knobs = {}
@@ -246,5 +254,12 @@ def create_app(state: AppState) -> FastAPI:
             )
         await state.cache.upsert(event)
         return {"status": "cached", "actor_id": event.actor_id}
+
+    # Identity Review-UI surface — only when a detections.db is wired in.
+    if state.identity_store is not None and state.detection_store is not None:
+        from kukiihome_preprocessor.identity_api import register_identity_routes
+
+        register_identity_routes(app, state)
+        logger.info("preprocessor.identity_api.registered")
 
     return app

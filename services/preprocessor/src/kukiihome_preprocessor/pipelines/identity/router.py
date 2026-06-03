@@ -37,7 +37,7 @@ import asyncio
 import time
 from collections import defaultdict
 from collections.abc import Awaitable, Sequence
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import numpy as np
 import structlog
@@ -45,7 +45,7 @@ import structlog
 from kukiihome_preprocessor.pipelines.identity.scheduling import ResourcePool
 
 if TYPE_CHECKING:
-    from kukiihome_shared.preprocessor import ActorMatch, DetectionTag
+    from kukiihome_shared.preprocessor import ActorMatch, DetectionTag, TrackEmbedding
     from kukiihome_shared.timing import StepTimings
 
     from kukiihome_preprocessor.pipelines.rolling_buffer import BufferedFrame
@@ -260,6 +260,103 @@ class IdentityPipeline(Protocol):
         implement ``run`` as a no-op returning ``()``.
         """
         ...
+
+
+@runtime_checkable
+class EmbeddingPipeline(Protocol):
+    """Capability add-on: an :class:`IdentityPipeline` that can *embed*
+    a track independently of matching it.
+
+    Separate from the core Protocol so a pipeline gains always-embed by
+    implementing one method — and so modalities not yet migrated (and
+    inherently match-only ones like plate OCR) keep conforming to
+    :class:`IdentityPipeline` unchanged. Detected structurally via
+    ``isinstance(pipeline, EmbeddingPipeline)`` — see
+    :func:`collect_embeddings`.
+
+    The contract that makes "always-embed → persist → resolve" work: the
+    embedding ``embed`` returns must be byte-identical to the one the same
+    pipeline's :meth:`~IdentityPipeline.run` would compute, so a later
+    :func:`resolve_event` resolution is indistinguishable from a live match.
+    """
+
+    name: str
+    modality: str
+    triggers_on: frozenset[str]
+
+    async def embed(
+        self,
+        *,
+        frame: BufferedFrame,
+        detections: tuple[DetectionTag, ...],
+    ) -> tuple[TrackEmbedding, ...]:
+        """Embed every track this pipeline triggers on, with no corpus and
+        no matching. ``detections`` is the frame's full detection set; the
+        pipeline filters to its own ``triggers_on`` kinds + tracked dets."""
+        ...
+
+
+async def collect_embeddings(
+    pipelines: Sequence[IdentityPipeline],
+    *,
+    frame: BufferedFrame,
+    detections: tuple[DetectionTag, ...],
+) -> tuple[TrackEmbedding, ...]:
+    """Run every per-frame embed-capable pipeline over one frame and merge the
+    embeddings. Pipelines that can't embed per-frame (no
+    :class:`EmbeddingPipeline` surface — plate OCR, or temporal gait) are
+    skipped — so a mixed registry (body-ID + pet embed, gait doesn't here)
+    yields the per-frame embeddable subset. The worker calls this per frame.
+    Temporal pipelines embed via :func:`collect_track_embeddings` instead."""
+    out: list[TrackEmbedding] = []
+    for p in pipelines:
+        if not isinstance(p, EmbeddingPipeline):
+            continue
+        out.extend(await p.embed(frame=frame, detections=detections))
+    return tuple(out)
+
+
+@runtime_checkable
+class TemporalEmbeddingPipeline(Protocol):
+    """Capability add-on for a *temporal* pipeline (gait) that embeds a track
+    from its frame *sequence*, not a single frame.
+
+    The temporal twin of :class:`EmbeddingPipeline`: separate so a per-frame
+    embedder (body/pet) and a sequence embedder (gait) are each detected by the
+    right collector. Returns **one** :class:`TrackEmbedding` per qualifying
+    track (gait is one descriptor per clip), stamped with a representative
+    ``frame_ts``. Tracks below the model's min-frames gate yield nothing —
+    that gate is exactly what keeps gait's cost proportional to need."""
+
+    name: str
+    modality: str
+    triggers_on: frozenset[str]
+
+    async def embed_sequence(
+        self,
+        *,
+        tracks: dict[str, TrackSequence],
+    ) -> tuple[TrackEmbedding, ...]:
+        """Embed each track from its ``track_id -> ((frame, bbox), ...)``
+        sequence, with no corpus and no matching."""
+        ...
+
+
+async def collect_track_embeddings(
+    pipelines: Sequence[IdentityPipeline],
+    *,
+    tracks: dict[str, TrackSequence],
+) -> tuple[TrackEmbedding, ...]:
+    """Run every temporal embed-capable pipeline over a per-track sequence
+    index and merge the embeddings. The sequence-shaped counterpart of
+    :func:`collect_embeddings`; the (future) gait Stage-2 worker calls this
+    once per event after building the track→sequence map."""
+    out: list[TrackEmbedding] = []
+    for p in pipelines:
+        if not isinstance(p, TemporalEmbeddingPipeline):
+            continue
+        out.extend(await p.embed_sequence(tracks=tracks))
+    return tuple(out)
 
 
 # A per-track frame sequence: ``(BufferedFrame, normalized_bbox)`` pairs

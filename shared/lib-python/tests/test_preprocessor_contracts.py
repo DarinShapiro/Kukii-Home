@@ -28,8 +28,37 @@ from kukiihome_shared.preprocessor import (
     FrameWindow,
     KnobAdjustment,
     PreprocessorStatus,
+    TrackEmbedding,
 )
 from pydantic import ValidationError
+
+# ─── TrackEmbedding (always-embed output) ───────────────────────────
+
+
+def test_track_embedding_roundtrips_through_json():
+    original = TrackEmbedding(
+        modality="body",
+        match_method="body_id_osnet",
+        track_id="t7",
+        frame_ts=1_700_000_000.0,
+        embedding=(0.1, -0.2, 0.3, 0.4),
+    )
+    restored = TrackEmbedding.model_validate_json(original.model_dump_json())
+    assert restored == original
+    assert restored.embedding == (0.1, -0.2, 0.3, 0.4)
+
+
+def test_track_embedding_forbids_unknown_fields():
+    with pytest.raises(ValidationError):
+        TrackEmbedding(
+            modality="body",
+            match_method="body_id_osnet",
+            track_id="t1",
+            frame_ts=1.0,
+            embedding=(0.0, 1.0),
+            event_id="e1",  # not on the pipeline-side contract — store stamps it
+        )
+
 
 # ─── FrameWindow ─────────────────────────────────────────────────────
 

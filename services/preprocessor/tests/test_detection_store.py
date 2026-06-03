@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from kukiihome_preprocessor.detection_store import DetectionRow, DetectionStore
+import numpy as np
+from kukiihome_preprocessor.detection_store import (
+    DetectionRow,
+    DetectionStore,
+    EmbeddingRow,
+)
 
 
 def _store(tmp_path):
@@ -79,3 +84,62 @@ def test_query_roundtrips_bbox_and_track(tmp_path):
     row = s.query(camera_id="pool")[0]
     assert row.bbox == (0.1, 0.1, 0.2, 0.2)
     assert row.track_id == "7"
+
+
+# ─── track_embeddings table (always-embed sink) ─────────────────────
+
+
+def _emb(event_id, cam, track, ts, vec, modality="body", method="body_id_osnet"):
+    return EmbeddingRow(
+        event_id=event_id, camera_id=cam, track_id=track, frame_ts=ts,
+        modality=modality, match_method=method,
+        embedding=np.asarray(vec, dtype=np.float32),
+    )
+
+
+def test_embeddings_roundtrip_vector_and_fields(tmp_path):
+    s = _store(tmp_path)
+    s.register_event(event_id="e1", camera_id="pool", captured_ts=10.0)
+    vec = [0.1, 0.2, 0.3, 0.4]
+    s.add_embeddings([_emb("e1", "pool", "t1", 5.0, vec)])
+    (row,) = s.embeddings_for_event("e1")
+    assert row.event_id == "e1"
+    assert row.camera_id == "pool"
+    assert row.track_id == "t1"
+    assert row.frame_ts == 5.0
+    assert row.modality == "body"
+    assert row.match_method == "body_id_osnet"
+    np.testing.assert_allclose(row.embedding, np.array(vec, dtype=np.float32))
+    assert row.embedding.dtype == np.float32
+
+
+def test_embeddings_filtered_by_modality(tmp_path):
+    s = _store(tmp_path)
+    s.register_event(event_id="e1", camera_id="pool", captured_ts=10.0)
+    s.add_embeddings([
+        _emb("e1", "pool", "t1", 5.0, [1.0, 0.0], modality="body"),
+        _emb("e1", "pool", "t1", 5.0, [0.0, 1.0, 0.0], modality="gait",
+             method="gait_opengait"),
+    ])
+    assert {r.modality for r in s.embeddings_for_event("e1")} == {"body", "gait"}
+    body = s.embeddings_for_event("e1", modality="body")
+    assert len(body) == 1 and body[0].modality == "body"
+
+
+def test_embeddings_scoped_to_event_and_ordered_by_frame(tmp_path):
+    s = _store(tmp_path)
+    s.register_event(event_id="e1", camera_id="pool", captured_ts=10.0)
+    s.register_event(event_id="e2", camera_id="pool", captured_ts=20.0)
+    s.add_embeddings([
+        _emb("e1", "pool", "t1", 9.0, [0.0, 1.0]),
+        _emb("e1", "pool", "t1", 5.0, [1.0, 0.0]),
+        _emb("e2", "pool", "t2", 7.0, [0.5, 0.5]),
+    ])
+    e1 = s.embeddings_for_event("e1")
+    assert [r.frame_ts for r in e1] == [5.0, 9.0]  # oldest frame first
+    assert {r.event_id for r in e1} == {"e1"}  # e2 not leaked
+
+
+def test_embeddings_for_missing_event_is_empty(tmp_path):
+    s = _store(tmp_path)
+    assert s.embeddings_for_event("nope") == []

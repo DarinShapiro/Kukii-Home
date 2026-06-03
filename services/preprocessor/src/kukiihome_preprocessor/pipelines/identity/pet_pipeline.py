@@ -13,7 +13,7 @@ from kukiihome_preprocessor.pipelines.face import jpeg_to_bgr
 from kukiihome_preprocessor.pipelines.pet import detected_pet_to_actor_match
 
 if TYPE_CHECKING:
-    from kukiihome_shared.preprocessor import ActorMatch, DetectionTag
+    from kukiihome_shared.preprocessor import ActorMatch, DetectionTag, TrackEmbedding
 
     from kukiihome_preprocessor.pipelines.identity.router import EnrolledCorpus
     from kukiihome_preprocessor.pipelines.pet import PetRecognizer
@@ -54,6 +54,25 @@ class PetPipeline:
     def has_enrollments(self, corpus: EnrolledCorpus) -> bool:
         return bool(corpus.slice(self.modality))
 
+    def _decode_pets(
+        self, frame: BufferedFrame, detections: tuple[DetectionTag, ...]
+    ) -> tuple[object, list[tuple[str, str, tuple[float, float, float, float]]]] | None:
+        """Decode the JPEG + pull the tracked dog/cat crops both :meth:`run`
+        and :meth:`embed` work on. ``None`` when there's nothing to do (corrupt
+        frame or no tracked animal dets — untracked can't be correlated
+        downstream into an IdentifiedEntity, nor resolved back to a track)."""
+        bgr = jpeg_to_bgr(frame.jpeg_bytes)
+        if bgr is None:
+            return None
+        pets = [
+            (d.track_id, d.kind, d.bbox)
+            for d in detections
+            if d.kind in _PET_KINDS and d.track_id is not None
+        ]
+        if not pets:
+            return None
+        return bgr, pets
+
     async def run(
         self,
         *,
@@ -61,19 +80,10 @@ class PetPipeline:
         detections: tuple[DetectionTag, ...],
         corpus: EnrolledCorpus,
     ) -> tuple[ActorMatch, ...]:
-        bgr = jpeg_to_bgr(frame.jpeg_bytes)
-        if bgr is None:
+        decoded = self._decode_pets(frame, detections)
+        if decoded is None:
             return ()
-
-        # Tracked dog/cat detections only — untracked can't be
-        # correlated downstream into an IdentifiedEntity.
-        pets = [
-            (d.track_id, d.kind, d.bbox)
-            for d in detections
-            if d.kind in _PET_KINDS and d.track_id is not None
-        ]
-        if not pets:
-            return ()
+        bgr, pets = decoded
 
         detected = await self._recognizer.identify_pets(bgr, pets, corpus.slice(self.modality))
 
@@ -82,4 +92,40 @@ class PetPipeline:
             match = detected_pet_to_actor_match(pet, frame_ts=frame.ts)
             if match is not None:
                 out.append(match)
+        return tuple(out)
+
+    async def embed(
+        self,
+        *,
+        frame: BufferedFrame,
+        detections: tuple[DetectionTag, ...],
+    ) -> tuple[TrackEmbedding, ...]:
+        """Always-embed: one :class:`TrackEmbedding` per tracked animal, with
+        no corpus and no matching — the per-frame DINOv2 analogue of
+        :meth:`BodyIdPipeline.embed`. A dog/cat caught with no `KnownPet`
+        enrolled becomes resolvable the moment one is (`resolve_event`), no
+        re-inference. Zero vectors (degenerate crops) are dropped — they can't
+        clear any cosine threshold."""
+        from kukiihome_shared.preprocessor import TrackEmbedding
+
+        decoded = self._decode_pets(frame, detections)
+        if decoded is None:
+            return ()
+        bgr, pets = decoded
+
+        detected = await self._recognizer.identify_pets(bgr, pets, {})
+
+        out: list[TrackEmbedding] = []
+        for pet in detected:
+            if not pet.embedding.any():
+                continue
+            out.append(
+                TrackEmbedding(
+                    modality=self.modality,
+                    match_method=self.name,
+                    track_id=pet.track_id,
+                    frame_ts=frame.ts,
+                    embedding=tuple(pet.embedding.astype(float).tolist()),
+                )
+            )
         return tuple(out)
