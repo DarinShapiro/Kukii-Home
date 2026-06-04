@@ -437,6 +437,54 @@ curate, merge/split, investigate.**
 
 ---
 
+## 7.5 Recognition decision model — small known gallery (design direction)
+
+Captured 2026-06-03. The household changes the recognition math: the **known
+set is tiny** (≈5–10 residents + a few regulars), even though the set of people
+who *could* appear is open. Most recognition tuning targets open-world galleries
+(is this one of millions); ours should exploit the closed-ish gallery.
+
+**Principle: propose against the small known set *aggressively*, commit
+*conservatively*.**
+
+- **Rank + margin, not an absolute threshold.** Against 5 candidates the useful
+  question isn't "is cosine ≥ 0.5" but "is the top candidate clearly ahead of
+  the second?" A soft, distant face scoring 0.45→Alice / 0.18→everyone-else is a
+  confident Alice by *margin*, though a fixed threshold would reject it. Resolve
+  should emit the **top-K of the known set with similarities + the margin**, and
+  decide on (floor × margin), with a *lower* floor than a big-gallery system
+  could use.
+- **Compounds with fusion + context priors.** Three individually-weak signals
+  (body/face/gait) agreeing on the *same* one of five is strong — coincidental
+  agreement on the wrong person out of five is unlikely. Time-of-day, camera,
+  access profiles, and co-occurrence shrink the *effective* gallery further:
+  P(identity | embedding, time, camera, recent), not P(identity | embedding).
+- **Open-set guardrail (the safety boundary).** The gallery is small but not
+  closed — couriers, strangers, an actual intruder. "Nearest of five" would
+  force a stranger into "Alice," and since this recognizer can **short-circuit
+  the VLM** for known-person-at-known-time, that means *auto-dismissing an
+  intruder as a resident* — the dangerous FP. So a lone weak embedding may
+  *propose* "tentatively Alice" (→ review band, VLM/human stays in the loop) but
+  must **never silently promote an unknown to a confident known**. Low floor to
+  propose; margin + corroboration (fusion / context / human) to commit.
+
+**What it changes when built:**
+- `resolve` returns **ranked candidates + margin**, not a single thresholded
+  match; verdict = f(floor, margin, fusion).
+- The **Review UI** shows ranked candidates even when auto-resolve abstains —
+  "most likely Alice (0.45), then Bob (0.18) — confirm?" → one-tap labeling
+  against a short list instead of typing. Pairs naturally with the track-detail
+  view (§5.2): *here's the track animated, and here's who we think it is.*
+- **Per-gallery calibration:** tighten the margin when two enrolled subjects
+  look alike (measure inter-subject similarity at enroll); loosen it for a
+  visually distinct household.
+
+**Status:** design direction, not built. Targets a later version (0.6.x),
+bundled with the track-detail view — together they make "abstain" rare and
+labeling a one-tap confirm.
+
+---
+
 ## 8. Build state & sequencing (for when we leave design)
 
 **Built (Build #292):** `track_embeddings` + `EmbeddingRow`, `TrackEmbedding`
