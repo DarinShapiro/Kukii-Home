@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from kukiihome_ha_agent.web_ui.home import render_home_page
-from kukiihome_ha_agent.web_ui.mocks import (
-    render_diagnostics_page,
-    render_policies_page,
-)
+from kukiihome_ha_agent.web_ui.mocks import render_diagnostics_page
 from kukiihome_ha_agent.web_ui.shell import (
     NAV_ITEMS,
     camera_display_name,
@@ -270,7 +267,6 @@ def test_each_mock_renders_explainer():
     # served by their own renderers. The remaining mocks are still credible
     # "Coming soon" skeletons.
     pages = {
-        "Policies": render_policies_page(),
         "Diagnostics": render_diagnostics_page(),
     }
     for title, html in pages.items():

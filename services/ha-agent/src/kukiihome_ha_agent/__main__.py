@@ -211,6 +211,9 @@ class BootState:
     preferences_store: Any | None = None
     """Iter 2.A: household-wide reasoner guidance — vigilance baseline,
     'what I care about' free text, quiet hours, per-actor relationships."""
+    policy_store: Any | None = None
+    """Iter 2.D: dismissal policies + transient intents + policy_hits audit
+    log. Read by /policies, reverse-linked from passive activity rows."""
     health_service: Any | None = None
     """Epic 15: resilience watchdog + health registry for this add-on
     process. Drives the F4 (HA down) probe and backs the /health +
@@ -2463,8 +2466,28 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
 
     async def v2_policies(_request: web.Request) -> web.Response:
-        from kukiihome_ha_agent.web_ui.mocks import render_policies_page
-        return _v2_mock_response(active="policies", body_html=render_policies_page())
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.policies import render_policies_page
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        if getattr(boot, "policy_store", None) is None:
+            body = "<h1>Policies</h1><div class='empty'>Policy store unavailable.</div>"
+        else:
+            dismissals = boot.policy_store.all_policies(kind="dismissal")
+            transients = boot.policy_store.all_policies(kind="transient_intent")
+            body = render_policies_page(
+                dismissals=dismissals, transient_intents=transients,
+            )
+        return web.Response(
+            text=render_shell("policies", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_policy_revoke(request: web.Request) -> web.Response:
+        if getattr(boot, "policy_store", None) is None:
+            return web.HTTPServiceUnavailable(text="policy store unavailable")
+        boot.policy_store.revoke(request.match_info["policy_id"])
+        raise web.HTTPSeeOther(location="policies")
 
     async def v2_cameras(_request: web.Request) -> web.Response:
         # Iter 2.B: live list page reading the registry + alert log.
@@ -2646,6 +2669,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     app.router.add_post("/intent/rules/{rule_id}/delete", v2_intent_rule_delete)
     app.router.add_get("/intent/rules/{rule_id}/matches", v2_intent_rule_matches)
     app.router.add_get("/policies", v2_policies)
+    # Iter 2.D: revoke endpoint.
+    app.router.add_post("/policies/{policy_id}/revoke", v2_policy_revoke)
     app.router.add_get("/cameras", v2_cameras)
     # Iter 2.B: per-camera detail + whitelist editor (Task 10 UI surface).
     # Specific subpaths registered BEFORE the generic /cameras/{id} so
@@ -3035,6 +3060,9 @@ async def _run() -> None:
     # Iter 2.A: preferences store (singleton row + per-actor relationships).
     from kukiihome_ha_agent.preferences_store import PreferencesStore
     boot.preferences_store = PreferencesStore(path="/data/kukiihome/preferences.db")
+    # Iter 2.D: policies store (dismissals + transient intents + hits).
+    from kukiihome_ha_agent.policy_store import PolicyStore
+    boot.policy_store = PolicyStore(path="/data/kukiihome/policies.db")
 
     # Epic 10.8.1: per-event persistent store. Lives next to
     # alerts.json in the Supervisor's /data volume. Subscribed to

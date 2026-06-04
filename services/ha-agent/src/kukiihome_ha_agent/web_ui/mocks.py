@@ -41,22 +41,9 @@ def _coming_soon(
 # real rules from RulesStore). See planning/web-ui-iteration-1.md Task 9.
 
 
-def render_policies_page() -> str:
-    return (
-        "<h1>Policies</h1>"
-        "<div class='sub'>The throttles and overrides the agent has built up "
-        "over time. Dismissal policies suppress patterns the system has "
-        "learned to ignore; transient intents are temporary watches. Every "
-        "policy is viewable, revocable, and shows the incidents it has acted "
-        "on.</div>"
-        + _coming_soon(
-            "Coming soon",
-            "List of active dismissals + transient intents; per-policy "
-            "rationale + sanity-check countdown; revoke / narrow-scope; "
-            "reverse-link from passive activity rows.",
-            ref="planning/web-ui-design.md — Part VII (Policies).",
-        )
-    )
+# NOTE: render_policies_page() removed in Iter 2.D — /policies is now a live
+# page from kukiihome_ha_agent.web_ui.policies. See planning/web-ui-design.md
+# Part VII + PolicyStore in policy_store.py.
 
 
 # NOTE: render_cameras_page() removed in Iter 2.B — /cameras is now a live
