@@ -314,6 +314,11 @@ section.drift-banner{background:#1f1d14;border:1px solid #4a3a18;
   border-radius:8px;padding:12px 14px;margin:14px 0}
 section.drift-banner h3{margin:0 0 6px;color:#d5b793;font-size:13px}
 .drift-row{margin-top:8px;font-size:13px;color:#cfd6df}
+section.llm-down-banner{background:#231518;border:1px solid #5a2a32;
+  border-radius:8px;padding:12px 14px;margin:14px 0}
+section.llm-down-banner h3{margin:0 0 6px;color:#e08a8a;font-size:13px}
+section.llm-down-banner code{background:#1a2230;padding:1px 5px;
+  border-radius:3px;font-size:12px}
 """
 
 

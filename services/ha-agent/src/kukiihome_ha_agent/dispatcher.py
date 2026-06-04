@@ -464,21 +464,31 @@ class CompositeDispatcherProvider:
     def __init__(
         self, *, llm: LLMDispatcherProvider | None,
         heuristic: HeuristicDispatcherProvider | None = None,
+        health: Any | None = None,
     ) -> None:
         self.llm = llm
         self.heuristic = heuristic or HeuristicDispatcherProvider()
+        # Optional LLMHealthTracker the /memory page reads to render
+        # the degraded-mode banner. None-safe: when not provided, the
+        # composite still falls back silently as before.
+        self.health = health
 
     async def propose_async(
         self, utterance: str, *, ctx: DispatcherContext,
     ) -> PlacementProposal:
         if self.llm is not None:
             try:
-                return await self.llm.propose_async(utterance, ctx=ctx)
+                proposal = await self.llm.propose_async(utterance, ctx=ctx)
+                if self.health is not None:
+                    self.health.record_success()
+                return proposal
             except Exception as e:
                 logger.warning(
                     "dispatcher.composite.fallback_to_heuristic",
                     error=str(e),
                 )
+                if self.health is not None:
+                    self.health.record_failure(str(e))
         proposal = self.heuristic.propose(utterance, ctx=ctx)
         # Tag the fallback in reasoning so the audit row makes it visible.
         if self.llm is not None:

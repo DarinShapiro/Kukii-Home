@@ -239,6 +239,7 @@ def render_memory_page(
     cut: str = "by_context",
     known_actor_names: set[str] | None = None,
     drift_suggestions: list[Any] | None = None,
+    llm_health: Any | None = None,
     now_ts: float | None = None,
 ) -> str:
     """Render the unified `/memory` page.
@@ -247,6 +248,9 @@ def render_memory_page(
     page renders the same entries — different grouping.
     ``drift_suggestions`` (Part X §39 backstop #3) renders as a banner
     above the entries when non-empty.
+    ``llm_health`` is an LLMHealth snapshot (or None); when its ``ok``
+    field is False, renders the degraded-mode banner so the user
+    knows the dispatcher is on heuristic fallback.
     """
     now_ts = now_ts if now_ts is not None else time.time()
 
@@ -296,6 +300,7 @@ def render_memory_page(
         )
 
     drift_html = _render_drift_banner(drift_suggestions or [])
+    llm_banner = _render_llm_health_banner(llm_health)
 
     return (
         "<h1>Memory</h1>"
@@ -303,10 +308,36 @@ def render_memory_page(
         "and situational context the agent reads when reasoning. One list, "
         "two cuts — by what you're talking <i>about</i>, or by storage "
         "<i>type</i>.</div>"
+        + llm_banner
         + drift_html
         + drawer_trigger
         + toggle
         + sections
+    )
+
+
+def _render_llm_health_banner(health: Any | None) -> str:
+    """Surface LLM-down state so the user knows the dispatcher is on
+    heuristic fallback. Empty string when health is None (LLM not
+    configured) or ok (working as expected)."""
+    if health is None:
+        return ""
+    if getattr(health, "ok", True):
+        return ""
+    reason = getattr(health, "last_failure_reason", "")
+    return (
+        "<section class='card llm-down-banner'>"
+        "<h3>LLM unavailable — using fallback placement</h3>"
+        "<div class='sub'>The dispatcher couldn't reach the configured "
+        "LLM; new utterances are being placed by the heuristic provider. "
+        "Placements still work — they're just less nuanced. Check "
+        "<code>KUKIIHOME_LLM_URL</code> / <code>KUKIIHOME_LLM_API_KEY</code> "
+        "or the network path to the endpoint.</div>"
+        + (
+            f"<div class='hint'>Last failure: {_e(reason)}</div>"
+            if reason else ""
+        )
+        + "</section>"
     )
 
 

@@ -217,6 +217,15 @@ class BootState:
     retention_store: Any | None = None
     """Iter 3 (Part IX §30): per-class retention policy + admin audit log.
     Read by /system + the (future) nightly pruner."""
+    dispatcher: Any | None = None
+    """Iter 3 (Part X §35): the active DispatcherProvider — either
+    CompositeDispatcherProvider (when LLM is configured) or
+    HeuristicDispatcherProvider directly. Drawer's POST /api/drawer/turn
+    handler calls .propose_async on this."""
+    llm_health: Any | None = None
+    """Iter 3 (Part X §35): LLMHealthTracker the composite reports
+    success/failure to. /memory reads .status to decide whether to
+    render the degraded-mode banner."""
     provenance_store: Any | None = None
     """Iter 3 (Part X §36): sessions + transcripts + guidance_provenance.
     Single source of truth for *how* each guidance entry came to exist —
@@ -2436,9 +2445,15 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         drift = detect_all_drift(
             rules=rules, policies=pols, now_ts=_time.time(),
         )
+        # Iter 3 (Part X §35): degraded-mode banner when LLM is down.
+        llm_health = (
+            boot.llm_health.status
+            if getattr(boot, "llm_health", None) else None
+        )
         body = render_memory_page(
             entries, cut=cut, now_ts=_time.time(),
             drift_suggestions=drift,
+            llm_health=llm_health,
         )
 
         drawer_html = ""
@@ -2525,12 +2540,18 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             sess.id, role="user", utterance=utterance, now_ts=_time.time(),
         )
 
-        # Heuristic dispatcher for now; LLM provider lands in Task 46.
-        provider = HeuristicDispatcherProvider()
+        # Iter 3 (Part X §35): use boot.dispatcher — Composite (LLM →
+        # heuristic fallback) when LLM is configured, raw Heuristic when
+        # not. Composite reports health via boot.llm_health for the
+        # /memory degraded-mode banner.
+        dispatcher = getattr(boot, "dispatcher", None) or HeuristicDispatcherProvider()
         ctx = context_from_boot(boot)
         ctx.page_context = "memory"
         ctx.alert_context = alert_context
-        proposal = provider.propose(utterance, ctx=ctx)
+        if hasattr(dispatcher, "propose_async"):
+            proposal = await dispatcher.propose_async(utterance, ctx=ctx)
+        else:
+            proposal = dispatcher.propose(utterance, ctx=ctx)
         prov.append_turn(
             sess.id, role="system",
             utterance=proposal.reasoning,
@@ -3678,6 +3699,40 @@ async def _run() -> None:
     # Iter 3 (Part IX §30): retention policy + admin audit log.
     from kukiihome_ha_agent.retention_store import RetentionStore
     boot.retention_store = RetentionStore(path="/data/kukiihome/retention.db")
+    # Iter 3 (Part X §35): LLM-backed conversational dispatcher. Reads
+    # endpoint config from env (KUKIIHOME_LLM_URL / _API_KEY / _MODEL).
+    # When unconfigured, dispatcher = HeuristicDispatcherProvider directly
+    # so the drawer always has a placement path. When configured, wraps
+    # the LLM provider in a Composite that falls back to heuristic + tracks
+    # health so /memory can surface the degraded-mode banner.
+    import os as _os
+
+    from kukiihome_ha_agent.dispatcher import (
+        CompositeDispatcherProvider,
+        HeuristicDispatcherProvider,
+        LLMDispatcherProvider,
+    )
+    from kukiihome_ha_agent.llm_client import LLMHealthTracker, OpenAIChatClient
+    boot.llm_health = LLMHealthTracker()
+    llm_url = (_os.environ.get("KUKIIHOME_LLM_URL") or "").strip()
+    llm_key = (_os.environ.get("KUKIIHOME_LLM_API_KEY") or "").strip()
+    llm_model = (_os.environ.get("KUKIIHOME_LLM_MODEL") or "llama-3.3-70b").strip()
+    if llm_url and llm_key:
+        client = OpenAIChatClient(
+            base_url=llm_url, api_key=llm_key, model=llm_model,
+        )
+        boot.dispatcher = CompositeDispatcherProvider(
+            llm=LLMDispatcherProvider(client),
+            heuristic=HeuristicDispatcherProvider(),
+            health=boot.llm_health,
+        )
+        logger.info(
+            "dispatcher.llm.configured",
+            base_url=llm_url, model=llm_model,
+        )
+    else:
+        boot.dispatcher = HeuristicDispatcherProvider()
+        logger.info("dispatcher.heuristic.fallback_only")
 
     # Epic 10.8.1: per-event persistent store. Lives next to
     # alerts.json in the Supervisor's /data volume. Subscribed to
@@ -3769,8 +3824,37 @@ async def _run() -> None:
             await boot.preprocessor_client.close()
 
 
+def _load_dotenv_if_present() -> None:
+    """Best-effort .env loader for local development. In the HA add-on
+    image, env vars come from the Supervisor; this is just so the same
+    code path works when running directly from the repo. Walks up from
+    cwd to find a .env file; existing env vars take precedence (caller's
+    explicit setting wins over the file)."""
+    import os as _os
+    from pathlib import Path
+
+    cur = Path.cwd().resolve()
+    for d in [cur, *cur.parents]:
+        env_path = d / ".env"
+        if env_path.is_file():
+            try:
+                for raw in env_path.read_text(encoding="utf-8").splitlines():
+                    line = raw.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    # Caller env wins — don't overwrite an already-set var.
+                    _os.environ.setdefault(key, value)
+            except OSError as e:
+                logger.warning("dotenv.read_failed", path=str(env_path), error=str(e))
+            return
+
+
 def main() -> None:
     """Service entry point."""
+    _load_dotenv_if_present()
     asyncio.run(_run())
 
 
