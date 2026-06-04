@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0 — 2026-06-03
+
+**New: open a track to see it move — and one-tap confirm who it is.**
+
+Click any thumbnail in Identity Review to open the track:
+
+- **Animated playback** of the whole track — padded crops that follow the
+  person across every frame — the context a single still can't give when it's a
+  top-down head or there's no clear face.
+- **"We think this is…"** — the people and pets you've already enrolled, ranked
+  by similarity with a confidence margin, each a one-tap **Confirm**. Because
+  your known set is small, even a soft match usually points clearly at the right
+  person — so labeling becomes a tap instead of typing. (Or label someone new,
+  right there.)
+- Confirming now **strengthens** that person's template (averaged across every
+  track you confirm) instead of replacing it.
+
+Also preprocessor-side (no add-on change needed): **gait** now flows end-to-end
+from the enrichment worker — one descriptor per walking track — joining body,
+pet, and face as an always-embed identity signal.
+
 ## 0.5.1 — 2026-06-03
 
 **Fix: Identity Review actions no longer show a false "action failed."**
