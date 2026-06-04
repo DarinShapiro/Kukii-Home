@@ -306,6 +306,9 @@ _STATUS_PAGE = """<!doctype html>
 <a href="review" style="font-size:0.6em;font-weight:normal;margin-left:0.5rem;
   background:#eef4ff;padding:0.25rem 0.6rem;border-radius:6px;
   border:1px solid #c7dbff;text-decoration:none">🔎 Review identities</a>
+<a href="home" style="font-size:0.6em;font-weight:normal;margin-left:0.5rem;
+  background:#fff5e6;padding:0.25rem 0.6rem;border-radius:6px;
+  border:1px solid #ffd9a8;text-decoration:none">✨ Try the new UI</a>
 </h1>
 <p class="muted">v__VERSION__ &middot; stage: <code>__STAGE__</code></p>
 
@@ -2048,12 +2051,108 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             return web.Response(status=404, text="no clip")
         return web.Response(body=data, content_type="image/gif")
 
+    # ── v2 product UI (Web UI skeleton) ──────────────────────────────
+    # Lives at top-level paths (/home, /activity, /areas, /intent, /policies,
+    # /cameras, /diagnostics). Home page is fleshed out using real alert_log
+    # + identity-tracks data; the rest are credible 'Coming soon' skeletons
+    # tied to ratified sections of planning/web-ui-design.md. The legacy /
+    # status page stays untouched during the transition — see /diagnostics
+    # for the link back.
+
+    async def v2_home(_request: web.Request) -> web.Response:
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.home import render_home_page
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        # Pull real data — degrade gracefully on any failure.
+        recent = alert_log.recent(50)
+        unresolved = 0
+        prep_ok: bool | None = None
+        if boot.preprocessor_client is not None:
+            try:
+                tracks = await boot.preprocessor_client.list_identity_tracks(
+                    status="unresolved", limit=200,
+                )
+                unresolved = len(tracks)
+            except Exception as e:
+                logger.info("v2.home.unresolved_failed", error=str(e))
+            try:
+                prep_ok = await boot.preprocessor_client.healthz()
+            except Exception as e:
+                logger.info("v2.home.healthz_failed", error=str(e))
+                prep_ok = False
+        cameras = list(boot.cameras) if getattr(boot, "cameras", None) else []
+        ha_connected = bool(getattr(boot, "ha_client", None))
+        ha_entities = 0
+        try:
+            snap = await boot.tools.get_snapshot() if getattr(boot, "tools", None) else []
+            ha_entities = len(list(snap))
+        except Exception as e:
+            logger.info("v2.home.snapshot_failed", error=str(e))
+        import time as _time
+        content = render_home_page(
+            alerts_recent=recent,
+            unresolved_tracks=unresolved,
+            cameras_total=len(cameras),
+            cameras_active=len(cameras),  # no per-cam health yet; same count
+            preprocessor_ok=prep_ok,
+            ha_connected=ha_connected,
+            ha_entities=ha_entities,
+            now_ts=_time.time(),
+        )
+        return web.Response(
+            text=render_shell("home", content, version=__version__),
+            content_type="text/html",
+        )
+
+    def _v2_mock_response(*, active: str, body_html: str) -> web.Response:
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        return web.Response(
+            text=render_shell(active, body_html, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_activity(_request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.web_ui.mocks import render_activity_page
+        return _v2_mock_response(active="activity", body_html=render_activity_page())
+
+    async def v2_areas(_request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.web_ui.mocks import render_areas_page
+        return _v2_mock_response(active="areas", body_html=render_areas_page())
+
+    async def v2_intent(_request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.web_ui.mocks import render_intent_page
+        return _v2_mock_response(active="intent", body_html=render_intent_page())
+
+    async def v2_policies(_request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.web_ui.mocks import render_policies_page
+        return _v2_mock_response(active="policies", body_html=render_policies_page())
+
+    async def v2_cameras(_request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.web_ui.mocks import render_cameras_page
+        return _v2_mock_response(active="cameras", body_html=render_cameras_page())
+
+    async def v2_diagnostics(_request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.web_ui.mocks import render_diagnostics_page
+        return _v2_mock_response(active="diagnostics", body_html=render_diagnostics_page())
+
     app = web.Application()
     app.router.add_get("/", status_page)
     app.router.add_get("/review", review_page)
     app.router.add_get("/review/thumb/{event_id}/{track_id}.jpg", review_thumb)
     app.router.add_get("/review-track", review_track)
     app.router.add_get("/review-track-clip", review_track_clip)
+    # v2 product UI — see comments above. Reach via [Home] nav, link from
+    # the legacy / status page TBD.
+    app.router.add_get("/home", v2_home)
+    app.router.add_get("/activity", v2_activity)
+    app.router.add_get("/areas", v2_areas)
+    app.router.add_get("/intent", v2_intent)
+    app.router.add_get("/policies", v2_policies)
+    app.router.add_get("/cameras", v2_cameras)
+    app.router.add_get("/diagnostics", v2_diagnostics)
     app.router.add_post("/review/label", review_label)
     app.router.add_post("/review/reject", review_reject)
     app.router.add_post("/review/merge", review_merge)
