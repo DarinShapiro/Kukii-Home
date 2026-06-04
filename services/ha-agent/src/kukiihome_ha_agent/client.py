@@ -291,6 +291,31 @@ class HAClient:
         except json.JSONDecodeError:
             return {"_raw": resp.text}
 
+    async def fire_event(self, event_type: str, data: dict[str, Any]) -> None:
+        """Fire an HA event so downstream automations can trigger on it.
+
+        Task 9: every rule match emits ``kukiihome_alert`` with reasoned
+        severity; HA automations subscribe to that one event type and
+        branch on ``data.severity``. Cheaper than per-rule entity churn.
+
+        Errors are non-fatal at the caller level — a failed POST logs +
+        re-raises so the dispatcher can record `alert_emitted=False` on
+        the audit row but doesn't take down the rest of triage.
+        """
+        t0 = time.perf_counter()
+        resp = await self._http.post(f"/api/events/{event_type}", json=data)
+        action_ms = round((time.perf_counter() - t0) * 1000.0, 1)
+        logger.info(
+            "ha.fire_event",
+            event_type=event_type,
+            status=resp.status_code,
+            action_ms=action_ms,
+        )
+        if resp.status_code >= 400:
+            raise HAClientError(
+                f"fire_event {event_type} failed: HTTP {resp.status_code} {resp.text}"
+            )
+
     async def list_services(self) -> list[dict[str, Any]]:
         """Fetch HA's full service registry via ``GET /api/services``.
 

@@ -151,6 +151,52 @@ form.filters a.clear:hover{color:#cfd6df;text-decoration:underline}
 .coming-soon .sketch{margin:16px 0 0;color:#7e8a9a;font-size:13px;
   font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre;
   text-align:left;display:inline-block}
+
+/* ─── Intent / Rules (Task 9) ────────────────────────────────────── */
+.card{background:#141a22;border:1px solid #1f2632;border-radius:10px;
+  padding:16px 18px;margin:18px 0}
+.card h2{margin:0 0 8px;font-size:16px;color:#e5edf7}
+.card h3{margin:8px 0;font-size:14px;color:#cfd6df}
+.card-head{display:flex;align-items:center;justify-content:space-between}
+.btn{display:inline-block;background:#1d2733;border:1px solid #2a3548;
+  color:#cfd6df;border-radius:6px;padding:5px 10px;font-size:12px;
+  text-decoration:none;cursor:pointer}
+.btn:hover{background:#26344a}
+.btn.primary{background:#2e6ad1;border-color:#2e6ad1;color:#fff}
+.btn.danger{color:#e08a8a;border-color:#3b2530}
+.btn.danger:hover{background:#3b2530;color:#fff}
+.rule-row{padding:12px 0;border-bottom:1px solid #1f2632}
+.rule-row:last-child{border-bottom:0}
+.rule-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rule-head b{color:#e5edf7;font-size:14px}
+.rule-head .severity{color:#9aa7b8;font-size:12px}
+.chip{font-size:11px;padding:2px 8px;border-radius:10px;
+  background:#1d2733;color:#9aa7b8}
+.chip.enabled{background:#1f3320;color:#9dd5a3}
+.chip.disabled{background:#2f2225;color:#e08a8a}
+.rule-scope,.rule-intent{font-size:13px;color:#cfd6df;margin-top:4px}
+.rule-intent .intent-text{color:#e5edf7}
+.rule-row .muted{color:#7e8a9a;font-size:12px;margin-top:4px}
+.rule-actions{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.empty{padding:24px;text-align:center;color:#7e8a9a;font-style:italic}
+.rule-form input[type=text],.rule-form textarea,.rule-form select{
+  width:100%;max-width:560px;background:#0c0f14;border:1px solid #2a3140;
+  color:#cfd6df;border-radius:6px;padding:8px 10px;font:inherit;
+  box-sizing:border-box}
+.rule-form textarea{min-height:80px;font-family:inherit;resize:vertical}
+.rule-form .mode-radios,.rule-form .severity-radios{
+  display:flex;gap:18px;flex-wrap:wrap}
+.rule-form label.radio,.rule-form label.check{display:flex;align-items:center;
+  gap:6px;color:#cfd6df;font-size:13px}
+.rule-form .check-list{display:flex;flex-direction:column;gap:6px;
+  margin-top:6px;max-height:200px;overflow:auto;padding:6px 0}
+.rule-form details summary{cursor:pointer;color:#9aa7b8;font-size:13px;
+  padding:4px 0}
+.rule-form .hint{color:#7e8a9a;font-size:12px;margin-top:6px}
+.rule-form .subject-row{display:flex;align-items:center;gap:8px;
+  flex-wrap:wrap;color:#cfd6df;font-size:13px}
+.rule-form .form-actions{display:flex;justify-content:flex-end;
+  gap:10px;margin-top:20px}
 """
 
 

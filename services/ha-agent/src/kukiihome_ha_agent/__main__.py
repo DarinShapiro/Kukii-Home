@@ -197,6 +197,10 @@ class BootState:
     """Epic 10.6: reasoning gate subscribed to AlertLog in place of the
     notifier — reasons about each event and notifies only when warranted.
     None when KUKIIHOME_TRIAGE_REASONING=off (legacy direct-notify)."""
+    rules_store: Any | None = None
+    """Task 9: SQLite-backed rules + rule_matches persistence. Created on
+    boot and shared between the /intent web pages, the /api/intent/rules
+    HTTP routes, and the triage gate's per-event evaluation."""
     health_service: Any | None = None
     """Epic 15: resilience watchdog + health registry for this add-on
     process. Drives the F4 (HA down) probe and backs the /health +
@@ -1348,7 +1352,10 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
 
 
 def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore) -> web.Application:
-    api = HAAgentAPI(tools=None, alert_log=alert_log)  # tools rebound below
+    api = HAAgentAPI(
+        tools=None, alert_log=alert_log,
+        rules_store=boot.rules_store,  # may be None pre-Task9 boot paths
+    )  # tools rebound below
 
     async def status_page(_request: web.Request) -> web.Response:
         body = await _render_status(boot, alert_log)
@@ -2111,6 +2118,40 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             content_type="text/html",
         )
 
+    def _intent_known_subjects(_boot: BootState) -> list[tuple[str, str]]:
+        """Subject dropdown source for shortcut rules. Pulls enrolled actors
+        from the preprocessor's identity store when reachable; falls back to
+        a small set of kind-keyed shortcuts so the form is useful even when
+        the identity store is empty (greenfield install). Each tuple is
+        ``(id_for_form, display_label)``."""
+        defaults = [
+            ("person", "Any person (kind)"),
+            ("dog", "Any dog (kind)"),
+            ("cat", "Any cat (kind)"),
+            ("vehicle", "Any vehicle (kind)"),
+        ]
+        # Enrolled actors from the preprocessor identity store would slot
+        # in here once we add a sync read on the BootState; for now the
+        # kind-keyed shortcuts cover the MVP path (Task 9 §Done when).
+        return defaults
+
+    def _intent_known_cameras(boot: BootState) -> list[tuple[str, str]]:
+        """Camera dropdown source for rule scopes. Uses the camera registry's
+        live entries, falling back to ``camera_id`` when there's no friendly
+        name to display."""
+        from kukiihome_ha_agent.web_ui.shell import camera_display_name
+        out: list[tuple[str, str]] = []
+        try:
+            for loop in (boot.ha_camera_loops or []):
+                cid = getattr(loop, "camera_id", None) or getattr(loop, "id", "")
+                friendly = getattr(loop, "friendly_name", "") or cid
+                if cid:
+                    out.append((str(cid), camera_display_name(str(friendly)) or str(cid)))
+        except Exception as e:
+            # registry shape evolves; this read is best-effort
+            logger.debug("intent.known_cameras_failed", error=str(e))
+        return out
+
     def _v2_mock_response(*, active: str, body_html: str) -> web.Response:
         from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.shell import render_shell
@@ -2148,8 +2189,145 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         return _v2_mock_response(active="areas", body_html=render_areas_page())
 
     async def v2_intent(_request: web.Request) -> web.Response:
-        from kukiihome_ha_agent.web_ui.mocks import render_intent_page
-        return _v2_mock_response(active="intent", body_html=render_intent_page())
+        # Task 9: real page from RulesStore. Falls back to a brief "rules
+        # storage unavailable" notice when the store isn't wired (older
+        # boot path / tests).
+        import time as _time
+
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.intent import render_intent_page
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        if boot.rules_store is None:
+            body = (
+                "<h1>Intent</h1>"
+                "<div class='empty'>Rules storage isn't wired in this build.</div>"
+            )
+        else:
+            rules = boot.rules_store.all_rules()
+            body = render_intent_page(rules, now_ts=_time.time())
+        return web.Response(
+            text=render_shell("intent", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_intent_rule_new(_request: web.Request) -> web.Response:
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.intent import render_rule_form
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        body = render_rule_form(
+            None,
+            available_subjects=_intent_known_subjects(boot),
+            available_cameras=_intent_known_cameras(boot),
+            available_areas=[],
+        )
+        return web.Response(
+            text=render_shell("intent", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_intent_rule_edit(request: web.Request) -> web.Response:
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.intent import render_rule_form
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        rule_id = request.match_info["rule_id"]
+        if boot.rules_store is None:
+            return web.HTTPNotFound(text="rules store unavailable")
+        rule = boot.rules_store.get(rule_id)
+        if rule is None:
+            return web.HTTPNotFound(text="rule not found")
+        body = render_rule_form(
+            rule,
+            available_subjects=_intent_known_subjects(boot),
+            available_cameras=_intent_known_cameras(boot),
+            available_areas=[],
+        )
+        return web.Response(
+            text=render_shell("intent", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_intent_rule_save(request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.rules_store import Rule, RuleScope
+        from kukiihome_ha_agent.web_ui.intent import parse_rule_form
+
+        if boot.rules_store is None:
+            return web.HTTPServiceUnavailable(text="rules store unavailable")
+
+        form = await request.post()
+        try:
+            patch = parse_rule_form(dict(form))
+        except ValueError as e:
+            return web.HTTPBadRequest(text=str(e))
+
+        rule_id = request.match_info.get("rule_id") or ""
+        if rule_id:
+            boot.rules_store.update(rule_id, **patch)
+        else:
+            boot.rules_store.create(Rule(
+                id="", name=patch["name"], mode=patch["mode"],
+                intent_text=patch.get("intent_text", ""),
+                scope=patch.get("scope") or RuleScope(),
+                shortcut_subject=patch.get("shortcut_subject"),
+                severity_static=patch.get("severity_static"),
+            ))
+        raise web.HTTPSeeOther(location="intent")
+
+    async def v2_intent_rule_enable(request: web.Request) -> web.Response:
+        if boot.rules_store is None:
+            return web.HTTPServiceUnavailable(text="rules store unavailable")
+        rule_id = request.match_info["rule_id"]
+        form = await request.post()
+        enabled = (form.get("enabled") or "1") == "1"
+        boot.rules_store.set_enabled(rule_id, enabled)
+        raise web.HTTPSeeOther(location="intent")
+
+    async def v2_intent_rule_delete(request: web.Request) -> web.Response:
+        if boot.rules_store is None:
+            return web.HTTPServiceUnavailable(text="rules store unavailable")
+        rule_id = request.match_info["rule_id"]
+        boot.rules_store.soft_delete(rule_id)
+        raise web.HTTPSeeOther(location="intent")
+
+    async def v2_intent_rule_matches(request: web.Request) -> web.Response:
+        # Lightweight matches list — table of recent evaluations. Full Part
+        # VI matches UI lands when the VLM-side recording loop does.
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.shell import _e, render_shell
+
+        if boot.rules_store is None:
+            return web.HTTPServiceUnavailable(text="rules store unavailable")
+        rule_id = request.match_info["rule_id"]
+        rule = boot.rules_store.get(rule_id)
+        if rule is None:
+            return web.HTTPNotFound(text="rule not found")
+        matches = boot.rules_store.matches_for_rule(rule_id, limit=50)
+        rows_html = "".join(
+            "<tr>"
+            f"<td>{_e(m.matched_at)}</td>"
+            f"<td>{_e(m.severity or '—')}</td>"
+            f"<td>{_e(round(m.confidence or 0.0, 2))}</td>"
+            f"<td>{_e(m.reasoning or '')}</td>"
+            f"<td>{'matched' if m.matched else 'non-match'}</td>"
+            "</tr>"
+            for m in matches
+        ) or "<tr><td colspan='5' class='empty'>No matches yet.</td></tr>"
+        body = (
+            f"<h1>Matches · {_e(rule.name)}</h1>"
+            "<div class='sub'>Most recent rule evaluations — match and "
+            "non-match, newest first.</div>"
+            "<table class='matches-table'>"
+            "<thead><tr><th>When</th><th>Severity</th><th>Conf</th>"
+            "<th>Reasoning</th><th>Status</th></tr></thead>"
+            f"<tbody>{rows_html}</tbody></table>"
+            "<a class='btn' href='../../../intent'>← Back to rules</a>"
+        )
+        return web.Response(
+            text=render_shell("intent", body, version=__version__),
+            content_type="text/html",
+        )
 
     async def v2_policies(_request: web.Request) -> web.Response:
         from kukiihome_ha_agent.web_ui.mocks import render_policies_page
@@ -2175,6 +2353,16 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     app.router.add_get("/activity", v2_activity)
     app.router.add_get("/areas", v2_areas)
     app.router.add_get("/intent", v2_intent)
+    # Task 9: rules CRUD via the /intent page. The matches subpath is
+    # registered before the generic edit route so the URL parser doesn't
+    # treat "matches" as a rule_id.
+    app.router.add_get("/intent/rules/new", v2_intent_rule_new)
+    app.router.add_post("/intent/rules", v2_intent_rule_save)
+    app.router.add_get("/intent/rules/{rule_id}/edit", v2_intent_rule_edit)
+    app.router.add_post("/intent/rules/{rule_id}", v2_intent_rule_save)
+    app.router.add_post("/intent/rules/{rule_id}/enable", v2_intent_rule_enable)
+    app.router.add_post("/intent/rules/{rule_id}/delete", v2_intent_rule_delete)
+    app.router.add_get("/intent/rules/{rule_id}/matches", v2_intent_rule_matches)
     app.router.add_get("/policies", v2_policies)
     app.router.add_get("/cameras", v2_cameras)
     app.router.add_get("/diagnostics", v2_diagnostics)
@@ -2198,6 +2386,20 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         app.router.add_get(path, api_get)
     for path in ("/service", "/acknowledge_alert"):
         app.router.add_post(path, api_post)
+    # Task 9: /api/intent/rules CRUD goes through the same dispatcher so
+    # external HTTP clients (HA integration, scripts, future native app)
+    # see the same view of rules the web UI does.
+    async def api_delete(request: web.Request) -> web.Response:
+        api._tools = boot.tools
+        status, payload = await api.dispatch(
+            method="DELETE", path=request.path, body={}
+        )
+        return web.json_response(payload, status=status)
+    app.router.add_get("/api/intent/rules", api_get)
+    app.router.add_get("/api/intent/rules/{rest:.*}", api_get)
+    app.router.add_post("/api/intent/rules", api_post)
+    app.router.add_post("/api/intent/rules/{rest:.*}", api_post)
+    app.router.add_delete("/api/intent/rules/{rest:.*}", api_delete)
     # v0.3.11 zero-config discovery overrides.
     app.router.add_post("/discovery/enable", discovery_enable)
     app.router.add_post("/discovery/override", discovery_override)
@@ -2501,6 +2703,12 @@ async def _run() -> None:
     # v0.3.12: persistent alerts. /data is the Supervisor persistent
     # volume, so alerts survive add-on restarts + updates.
     alert_log = AlertLog(persist_path="/data/kukiihome/alerts.json")
+
+    # Task 9: rules store. Co-located under /data/kukiihome/ so it survives
+    # add-on upgrades. The store is plumbed through BootState so route
+    # handlers can reach it without rewiring the api object.
+    from kukiihome_ha_agent.rules_store import RulesStore
+    boot.rules_store = RulesStore(path="/data/kukiihome/rules.db")
 
     # Epic 10.8.1: per-event persistent store. Lives next to
     # alerts.json in the Supervisor's /data volume. Subscribed to

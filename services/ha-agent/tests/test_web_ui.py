@@ -7,7 +7,6 @@ from kukiihome_ha_agent.web_ui.mocks import (
     render_areas_page,
     render_cameras_page,
     render_diagnostics_page,
-    render_intent_page,
     render_policies_page,
 )
 from kukiihome_ha_agent.web_ui.shell import (
@@ -269,11 +268,11 @@ def test_home_unresolved_tracks_disappears_when_zero():
 
 
 def test_each_mock_renders_explainer():
-    # Activity is no longer a mock (Task 7); the remaining mocks are still
-    # credible "Coming soon" skeletons.
+    # Activity (Task 7) and Intent (Task 9) are no longer mocks — they're
+    # served by their own renderers. The remaining mocks are still credible
+    # "Coming soon" skeletons.
     pages = {
         "Areas": render_areas_page(),
-        "Intent": render_intent_page(),
         "Policies": render_policies_page(),
         "Cameras": render_cameras_page(),
         "Diagnostics": render_diagnostics_page(),
@@ -283,13 +282,6 @@ def test_each_mock_renders_explainer():
         assert "Coming soon" in html or "coming-soon" in html
         # each mock anchors to the design doc so future me knows where to look
         assert "web-ui-design.md" in html
-
-
-def test_intent_mock_calls_out_both_preferences_and_rules():
-    html = render_intent_page()
-    assert "Preferences" in html
-    assert "Rules" in html
-    assert "VLM" in html       # mentions the reasoner
 
 
 def test_diagnostics_mock_links_back_to_legacy_status():

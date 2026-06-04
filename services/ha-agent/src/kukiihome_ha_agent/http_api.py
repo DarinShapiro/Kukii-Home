@@ -48,9 +48,12 @@ class HAAgentAPI:
     socket.
     """
 
-    def __init__(self, *, tools, alert_log) -> None:
+    def __init__(self, *, tools, alert_log, rules_store=None) -> None:
         self._tools = tools
         self._alert_log = alert_log
+        # Optional — None when rules feature is not wired (older tests, the
+        # diagnostics-only mode). Routes 404 cleanly when absent.
+        self._rules_store = rules_store
 
     async def dispatch(
         self, *, method: str, path: str, body: dict[str, Any] | None = None
@@ -120,10 +123,149 @@ class HAAgentAPI:
                 limit = int(body.get("limit", 20))
                 return 200, {"alerts": self._alert_log.recent(limit)}
 
+            # ─── Intent · Rules CRUD (Task 9) ────────────────────────
+            # Mounted under /api/intent/rules. The web UI uses these for
+            # form submission too (HTML POST → 303 redirect in the route
+            # handler); the HA integration / external clients call them
+            # as JSON.
+            if path == "/api/intent/rules" or path.startswith("/api/intent/rules/"):
+                if self._rules_store is None:
+                    return 503, {"error": "rules store not wired in this build"}
+                return self._dispatch_rules(method=method, path=path, body=body)
+
             return 404, {"error": f"no route for {method} {path}"}
         except Exception as e:
             logger.exception("ha_agent.api_dispatch_failed", path=path)
             return 500, {"error": str(e)}
+
+    def _dispatch_rules(
+        self, *, method: str, path: str, body: dict[str, Any]
+    ) -> tuple[int, dict[str, Any]]:
+        """Sub-router for /api/intent/rules*. Split out so the parent dispatch
+        stays readable; everything in here assumes ``self._rules_store`` is
+        non-None (the caller gates on it)."""
+        from .rules_store import Rule, RuleScope
+
+        store = self._rules_store
+        base = "/api/intent/rules"
+
+        # GET /api/intent/rules → list
+        if method == "GET" and path == base:
+            include_retired = str(body.get("retired") or "").lower() == "true"
+            rules = store.all_rules(include_retired=include_retired)
+            return 200, {"rules": [self._rule_to_dict(r) for r in rules]}
+
+        # POST /api/intent/rules → create
+        if method == "POST" and path == base:
+            rule = Rule(
+                id="", name=str(body.get("name") or "").strip(),
+                mode=str(body.get("mode") or "nl"),
+                intent_text=str(body.get("intent_text") or ""),
+                scope=RuleScope(
+                    cameras=list(body.get("cameras", [])),
+                    areas=list(body.get("areas", [])),
+                    time_windows=list(body.get("time_windows", [])),
+                ),
+                shortcut_subject=body.get("shortcut_subject"),
+                severity_static=body.get("severity_static"),
+            )
+            if not rule.name:
+                return 400, {"error": "name required"}
+            created = store.create(rule)
+            return 200, {"rule": self._rule_to_dict(created)}
+
+        # Sub-paths: /api/intent/rules/{id}[/<action>]
+        if path.startswith(f"{base}/"):
+            tail = path[len(base) + 1:]
+            parts = tail.split("/", 1)
+            rule_id = parts[0]
+            action = parts[1] if len(parts) > 1 else ""
+            if not rule_id:
+                return 400, {"error": "rule_id required"}
+
+            if method == "GET" and not action:
+                rule = store.get(rule_id)
+                return (
+                    (200, {"rule": self._rule_to_dict(rule)})
+                    if rule else (404, {"error": "rule not found"})
+                )
+
+            if method in ("PUT", "POST") and not action:
+                patch = {
+                    k: body[k] for k in (
+                        "name", "mode", "intent_text",
+                        "shortcut_subject", "severity_static",
+                    ) if k in body
+                }
+                if "enabled" in body:
+                    patch["enabled"] = bool(body["enabled"])
+                if "cameras" in body or "areas" in body or "time_windows" in body:
+                    patch["scope"] = RuleScope(
+                        cameras=list(body.get("cameras", [])),
+                        areas=list(body.get("areas", [])),
+                        time_windows=list(body.get("time_windows", [])),
+                    )
+                updated = store.update(rule_id, **patch)
+                return (
+                    (200, {"rule": self._rule_to_dict(updated)})
+                    if updated else (404, {"error": "rule not found"})
+                )
+
+            if method == "POST" and action == "enable":
+                enabled = bool(body.get("enabled", True))
+                out = store.set_enabled(rule_id, enabled)
+                return (
+                    (200, {"rule": self._rule_to_dict(out)})
+                    if out else (404, {"error": "rule not found"})
+                )
+
+            if method == "DELETE" and not action:
+                out = store.soft_delete(rule_id)
+                return (
+                    (200, {"rule": self._rule_to_dict(out)})
+                    if out else (404, {"error": "rule not found"})
+                )
+
+            if method == "GET" and action == "matches":
+                limit = int(body.get("limit", 50))
+                matches = store.matches_for_rule(rule_id, limit=limit)
+                return 200, {
+                    "matches": [
+                        {
+                            "rule_id": m.rule_id, "incident_id": m.incident_id,
+                            "matched_at": m.matched_at, "severity": m.severity,
+                            "confidence": m.confidence, "reasoning": m.reasoning,
+                            "matched": m.matched,
+                            "alert_emitted": m.alert_emitted,
+                            "protective_actions_taken": m.protective_actions_taken,
+                        }
+                        for m in matches
+                    ]
+                }
+
+        return 404, {"error": f"no rules route for {method} {path}"}
+
+    @staticmethod
+    def _rule_to_dict(rule) -> dict[str, Any]:
+        """Wire-format mapping for Rule → JSON. Kept on the API side so the
+        dataclass itself stays import-free of presentation concerns."""
+        return {
+            "id": rule.id, "name": rule.name, "mode": rule.mode,
+            "intent_text": rule.intent_text,
+            "scope": {
+                "cameras": rule.scope.cameras,
+                "areas": rule.scope.areas,
+                "time_windows": rule.scope.time_windows,
+            },
+            "enabled": rule.enabled,
+            "shortcut_subject": rule.shortcut_subject,
+            "severity_static": rule.severity_static,
+            "created_at": rule.created_at,
+            "updated_at": rule.updated_at,
+            "matched_count": rule.matched_count,
+            "last_matched_at": rule.last_matched_at,
+            "retired_at": rule.retired_at,
+        }
 
 
 @dataclass

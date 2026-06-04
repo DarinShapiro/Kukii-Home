@@ -40,6 +40,9 @@ from .notifier import AlertNotifier
 from .preprocessor_client import PreprocessorClient
 from .reasoning import Reasoner, should_notify
 
+# rules_store imported lazily inside _maybe_evaluate_rules so the gate
+# stays importable in environments without the rules backend.
+
 logger = structlog.get_logger(__name__)
 
 
@@ -52,6 +55,12 @@ class TriageGate:
     event_store: EventStore
     alert_log: AlertLog
     preprocessor: PreprocessorClient | None = None
+    # Task 9: rules pipeline. Both are optional so tests / older boot paths
+    # work unchanged — when either is None, the gate skips rule evaluation
+    # and the system behaves exactly as before.
+    rules_runtime: object | None = None  # RulesRuntime — avoid hard import cycle
+    rules_store: object | None = None    # RulesStore — for audit-row writes
+    ha_event_fire: object | None = None  # callable(event_type, data) -> awaitable
 
     window_before_s: float = 4.0
     window_after_s: float = 2.0
@@ -124,6 +133,96 @@ class TriageGate:
                 criticality=decision.criticality.value,
                 explanation=decision.explanation,
             )
+
+        # Task 9: rule evaluation. Runs AFTER the reasoner so we have the
+        # full evidence + identified actors in the alert. Shortcut rules
+        # are evaluated deterministically here; NL rules will be folded
+        # into the VLM prompt when the real reasoner lands (see
+        # rules_runtime.build_nl_prompt_section).
+        await self._maybe_evaluate_rules(alert, event_id=event_id, decision=decision)
+
+    async def _maybe_evaluate_rules(
+        self, alert: dict, *, event_id: str, decision
+    ) -> None:
+        """Fire kukiihome_alert per matched shortcut rule. No-op when the
+        rules pipeline isn't wired (older boot path / tests)."""
+        if self.rules_runtime is None or self.ha_event_fire is None:
+            return
+        try:
+            camera_id = alert.get("camera_id")
+            area_id = alert.get("area_id")
+            ts = float(alert.get("trigger_ts") or 0.0) or None
+            outcomes = self.rules_runtime.shortcuts_for(
+                alert=alert, camera_id=camera_id, area_id=area_id, ts=ts,
+            )
+        except Exception as e:
+            logger.warning("triage.rules_eval_failed", error=str(e))
+            return
+
+        for outcome in outcomes:
+            payload = self._build_alert_event_payload(
+                alert, outcome=outcome, decision=decision, event_id=event_id,
+            )
+            alert_emitted = True
+            try:
+                await self.ha_event_fire("kukiihome_alert", payload)
+                logger.info(
+                    "triage.kukiihome_alert_fired",
+                    rule_id=outcome.rule.id,
+                    severity=outcome.severity,
+                    event_id=event_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "triage.kukiihome_alert_failed",
+                    rule_id=outcome.rule.id, error=str(e),
+                )
+                alert_emitted = False
+            # Record the match for the per-rule audit page, whether or not
+            # the HA event POST succeeded.
+            if self.rules_store is not None:
+                try:
+                    import time as _time
+
+                    from .rules_store import RuleMatch
+                    self.rules_store.record_match(RuleMatch(
+                        rule_id=outcome.rule.id, incident_id=event_id,
+                        matched_at=_time.time(), severity=outcome.severity,
+                        confidence=None,
+                        reasoning="shortcut identity match",
+                        matched=True, alert_emitted=alert_emitted,
+                    ))
+                except Exception as e:
+                    logger.warning("triage.match_record_failed", error=str(e))
+
+    @staticmethod
+    def _build_alert_event_payload(
+        alert: dict, *, outcome, decision, event_id: str
+    ) -> dict:
+        """Build the kukiihome_alert event body per Task 9 §HA event payload.
+
+        Kept conservative: include the fields HA automations will branch on
+        (rule_id, rule_name, severity, scene_description, camera_*, ts) plus
+        the alert_id for de-dupe. The richer fields (clip_url, actions_taken)
+        land when their producers do."""
+        rule = outcome.rule
+        return {
+            "alert_id": f"alert_{event_id}_{rule.id}",
+            "incident_id": event_id,
+            "rule_id": rule.id,
+            "rule_name": rule.name,
+            "ts": float(alert.get("trigger_ts") or 0.0),
+            "severity": outcome.severity,
+            "confidence": getattr(decision, "confidence", None),
+            "scene_description": getattr(decision, "explanation", "") or "",
+            "reasoning": "shortcut identity match",
+            "camera_id": alert.get("camera_id"),
+            "camera_name": alert.get("camera_friendly_name")
+                           or alert.get("camera_name"),
+            "area_id": alert.get("area_id"),
+            "kind": alert.get("sensor_classification") or alert.get("kind"),
+            "actors": [outcome.matched_subject_id] if outcome.matched_subject_id else [],
+        }
 
     async def _gather_evidence(self, alert: dict):
         """Pull the preprocessor frame window for this event, or None.

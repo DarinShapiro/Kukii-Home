@@ -47,34 +47,9 @@ def render_areas_page() -> str:
     )
 
 
-def render_intent_page() -> str:
-    return (
-        "<h1>Intent</h1>"
-        "<div class='sub'>How you've told the system what you care about. "
-        "Preferences shape the reasoner's baseline; Rules attach named, "
-        "scoped intents with explicit actions on top. Both are user-written "
-        "guidance the VLM reads.</div>"
-        + _coming_soon(
-            "Preferences",
-            "Vigilance dial; 'what I care about' free-text; per-actor "
-            "relationship; per-area posture; quiet hours.",
-            ref="planning/web-ui-design.md — Part VI (Intent · Preferences).",
-        )
-        + _coming_soon(
-            "Rules",
-            "Named scoped intents in natural language that the VLM evaluates "
-            "against the situation; structured shortcut for trivial identity "
-            "matches; fires HA events for downstream automations.",
-            sketch=(
-                "WHEN  Front Yard\n"
-                "ALERT IF\n"
-                "  Winston seems to have gotten outside\n"
-                "  without someone watching him.\n"
-                "THEN  alert + fire kukiihome.winston_unsupervised"
-            ),
-            ref="planning/web-ui-design.md — Part VI (Intent · Rules).",
-        )
-    )
+# NOTE: render_intent_page() removed in Task 9 — /intent is now a live page
+# served from kukiihome_ha_agent.web_ui.intent.render_intent_page (with
+# real rules from RulesStore). See planning/web-ui-iteration-1.md Task 9.
 
 
 def render_policies_page() -> str:
