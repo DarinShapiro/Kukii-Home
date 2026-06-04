@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.22.0...v0.23.0) (2026-06-04)
+
+
+### Features
+
+* **memory:** push-reply fragment-load — drawer opens contextualized on /alert/{id}[#drawer](https://github.com/DarinShapiro/Kukii-Home/issues/drawer) (Part X §40) ([4d6bf80](https://github.com/DarinShapiro/Kukii-Home/commit/4d6bf8067dbbde6aab8b367d2d9f2ef2189a2e7d))
+
 ## [0.22.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.21.0...v0.22.0) (2026-06-04)
 
 
