@@ -2428,7 +2428,18 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             rules=rules, preferences=prefs, policies=pols, areas=areas,
             provenance_store=getattr(boot, "provenance_store", None),
         )
-        body = render_memory_page(entries, cut=cut, now_ts=_time.time())
+
+        # Iter 3 / Part X §39: drift detection — surface guidance entries
+        # that haven't earned their placement. Cheap inline call; a
+        # nightly background sweep lands as a follow-up if the cost grows.
+        from kukiihome_ha_agent.drift_detector import detect_all_drift
+        drift = detect_all_drift(
+            rules=rules, policies=pols, now_ts=_time.time(),
+        )
+        body = render_memory_page(
+            entries, cut=cut, now_ts=_time.time(),
+            drift_suggestions=drift,
+        )
 
         drawer_html = ""
         if is_drawer_requested(dict(request.rel_url.query)):

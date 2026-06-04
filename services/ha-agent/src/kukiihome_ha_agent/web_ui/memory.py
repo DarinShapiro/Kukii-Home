@@ -238,12 +238,15 @@ def render_memory_page(
     entries: list[GuidanceEntry], *,
     cut: str = "by_context",
     known_actor_names: set[str] | None = None,
+    drift_suggestions: list[Any] | None = None,
     now_ts: float | None = None,
 ) -> str:
     """Render the unified `/memory` page.
 
     ``cut`` is one of ``'by_context'`` (default) or ``'by_type'``. The
     page renders the same entries — different grouping.
+    ``drift_suggestions`` (Part X §39 backstop #3) renders as a banner
+    above the entries when non-empty.
     """
     now_ts = now_ts if now_ts is not None else time.time()
 
@@ -292,13 +295,42 @@ def render_memory_page(
             _group_section(k, groups[k], now_ts=now_ts) for k in ordered_keys
         )
 
+    drift_html = _render_drift_banner(drift_suggestions or [])
+
     return (
         "<h1>Memory</h1>"
         "<div class='sub'>Every rule, preference, policy, transient intent, "
         "and situational context the agent reads when reasoning. One list, "
         "two cuts — by what you're talking <i>about</i>, or by storage "
         "<i>type</i>.</div>"
+        + drift_html
         + drawer_trigger
         + toggle
         + sections
+    )
+
+
+def _render_drift_banner(suggestions: list[Any]) -> str:
+    """Drift suggestions banner (Part X §39 backstop #3). Empty string
+    when nothing's drifting."""
+    if not suggestions:
+        return ""
+    bullets = "".join(
+        "<div class='drift-row'>"
+        f"<b>{_e(s.name)}</b> "
+        f"<span class='chip cap-src muted'>{_e(s.kind)}</span>"
+        f"<div class='muted'>{_e(s.summary)}</div>"
+        "</div>"
+        for s in suggestions
+    )
+    return (
+        "<section class='card drift-banner'>"
+        "<h3>Suggestions "
+        f"<span class='muted'>({len(suggestions)} item"
+        f"{'s' if len(suggestions) != 1 else ''})</span></h3>"
+        "<div class='sub'>The system noticed these entries aren't "
+        "earning their placement. Each suggestion is just a hint — "
+        "click an entry to confirm or dismiss.</div>"
+        f"{bullets}"
+        "</section>"
     )

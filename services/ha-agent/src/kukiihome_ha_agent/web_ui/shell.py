@@ -310,6 +310,10 @@ aside.drawer{position:fixed;top:54px;right:0;width:360px;height:calc(100vh - 54p
 .memory-cut a.active{color:#cfd6df;border-bottom-color:#5d8aa8}
 .origin-icon{font-size:11px;color:#7e8a9a;cursor:help;margin-left:6px}
 .rule-row .rule-meta{font-size:12px;margin-top:4px}
+section.drift-banner{background:#1f1d14;border:1px solid #4a3a18;
+  border-radius:8px;padding:12px 14px;margin:14px 0}
+section.drift-banner h3{margin:0 0 6px;color:#d5b793;font-size:13px}
+.drift-row{margin-top:8px;font-size:13px;color:#cfd6df}
 """
 
 
