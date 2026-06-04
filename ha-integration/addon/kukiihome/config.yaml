@@ -7,7 +7,10 @@ slug: kukiihome
 description: AI-powered home security and presence understanding
 url: https://github.com/DarinShapiro/Kukii-Home
 arch:
-  - amd64
+  # amd64 dropped 2026-06-04 — single known user runs HA Yellow (aarch64). To
+  # re-enable: add `- amd64` back here AND re-add the matrix entry in
+  # .github/workflows/addon-build.yml. The verify-published gate picks up
+  # the arch set dynamically from this list.
   - aarch64
 init: false
 # We rely on s6-overlay (provided by the base image) to supervise multiple
