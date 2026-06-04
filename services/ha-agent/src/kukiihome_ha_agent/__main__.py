@@ -2055,7 +2055,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             tracks, subjects, configured=configured, flash=flash,
         )
         return web.Response(
-            text=render_shell("review", body, version=__version__),
+            text=render_shell("identities", body, version=__version__),
             content_type="text/html",
         )
 
@@ -2121,7 +2121,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
 
         body = render_track_detail_html(detail)
         return web.Response(
-            text=render_shell("review", body, version=__version__),
+            text=render_shell("identities", body, version=__version__),
             content_type="text/html",
         )
 
@@ -2882,6 +2882,99 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
         raise web.HTTPSeeOther(location=f"cameras/{camera_id}")
 
+    async def v2_identities(_request: web.Request) -> web.Response:
+        """Iter 3 / Part IX §29: Enrolled identities list. Reads
+        /identity/subjects from the preprocessor and renders the tile
+        grid. Falls back to an empty list if the preprocessor is down."""
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.identities import (
+            build_identity_subjects,
+            render_identities_list,
+        )
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        subjects = []
+        unresolved_count = 0
+        if boot.preprocessor_client is not None:
+            try:
+                payload = await boot.preprocessor_client.list_identity_subjects()
+                subjects = build_identity_subjects(payload)
+            except Exception as e:
+                logger.warning("v2.identities.subjects_fetch_failed", error=str(e))
+            try:
+                tracks = await boot.preprocessor_client.list_identity_tracks(
+                    only_unresolved=True,
+                )
+                unresolved_count = len(tracks or [])
+            except Exception as e:
+                logger.debug("v2.identities.tracks_fetch_failed", error=str(e))
+        body = render_identities_list(
+            subjects, unresolved_count=unresolved_count, tab="enrolled",
+        )
+        return web.Response(
+            text=render_shell("identities", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_identity_detail(request: web.Request) -> web.Response:
+        """Iter 3 / Part IX §29: per-identity detail page. Pulls the
+        subject record + matching guidance entries from /memory."""
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.identities import (
+            IdentityDetailViewModel,
+            build_identity_subjects,
+            filter_guidance_for_subject,
+            render_identity_detail,
+        )
+        from kukiihome_ha_agent.web_ui.memory_data import (
+            build_guidance_entries,
+        )
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        subject_id = request.match_info["subject_id"]
+        subject = None
+        if boot.preprocessor_client is not None:
+            try:
+                payload = await boot.preprocessor_client.list_identity_subjects()
+                subs = build_identity_subjects(payload)
+                subject = next(
+                    (s for s in subs if s.subject_id == subject_id), None,
+                )
+            except Exception as e:
+                logger.warning("v2.identity_detail.fetch_failed", error=str(e))
+        if subject is None:
+            return web.HTTPNotFound(text=f"subject {subject_id!r} not found")
+
+        # Linked guidance — pull all entries + filter by subject
+        rules = (
+            boot.rules_store.all_rules()
+            if getattr(boot, "rules_store", None) else []
+        )
+        prefs = (
+            boot.preferences_store.get()
+            if getattr(boot, "preferences_store", None) else None
+        )
+        pols: list = []
+        if getattr(boot, "policy_store", None):
+            pols.extend(boot.policy_store.all_policies(kind="dismissal"))
+            pols.extend(boot.policy_store.all_policies(kind="transient_intent"))
+        areas = (
+            boot.area_store.all_areas()
+            if getattr(boot, "area_store", None) else []
+        )
+        entries = build_guidance_entries(
+            rules=rules, preferences=prefs, policies=pols, areas=areas,
+            provenance_store=getattr(boot, "provenance_store", None),
+        )
+        linked = filter_guidance_for_subject(entries, subject=subject)
+
+        vm = IdentityDetailViewModel(subject=subject, linked_guidance=linked)
+        body = render_identity_detail(vm)
+        return web.Response(
+            text=render_shell("identities", body, version=__version__),
+            content_type="text/html",
+        )
+
     async def v2_diagnostics(_request: web.Request) -> web.Response:
         import os
         import time as _time
@@ -3011,6 +3104,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
     app.router.add_get("/cameras/{camera_id}", v2_camera_detail)
     app.router.add_get("/diagnostics", v2_diagnostics)
+    # Iter 3 / Part IX §29: /identities Enrolled list + per-subject detail.
+    app.router.add_get("/identities", v2_identities)
+    app.router.add_get("/identities/{subject_id}", v2_identity_detail)
     app.router.add_post("/review/label", review_label)
     app.router.add_post("/review/reject", review_reject)
     app.router.add_post("/review/merge", review_merge)

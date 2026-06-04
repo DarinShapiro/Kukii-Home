@@ -26,7 +26,9 @@ NAV_ITEMS: list[tuple[str, str]] = [
     # bookmarks + HA Lovelace card links.
     ("memory",      "Memory"),
     ("areas",       "Areas"),
-    ("review",      "Identities"),
+    # Iter 3 / Part IX §29: /identities is now the unified Review+Enrolled
+    # surface; the existing /review URL is preserved as a tab within it.
+    ("identities",  "Identities"),
     ("cameras",     "Cameras"),
     ("diagnostics", "Diagnostics"),
 ]
