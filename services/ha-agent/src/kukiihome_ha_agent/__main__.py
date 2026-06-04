@@ -2330,10 +2330,14 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     async def v2_memory(request: web.Request) -> web.Response:
         """Iter 3 / Part IX §28: unified guidance browse. Aggregates rules
         + preferences + policies + area postures, classifies each entry
-        to one or more contexts, renders grouped."""
+        to one or more contexts, renders grouped. Optionally embeds the
+        conversational drawer when ?drawer=1 is present."""
         import time as _time
 
         from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.drawer import (
+            is_drawer_requested,
+        )
         from kukiihome_ha_agent.web_ui.memory import render_memory_page
         from kukiihome_ha_agent.web_ui.memory_data import (
             build_guidance_entries,
@@ -2367,10 +2371,171 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             provenance_store=getattr(boot, "provenance_store", None),
         )
         body = render_memory_page(entries, cut=cut, now_ts=_time.time())
+
+        drawer_html = ""
+        if is_drawer_requested(dict(request.rel_url.query)):
+            drawer_html = _build_drawer_html(
+                request, alert_context=request.rel_url.query.get("alert", ""),
+                page_context="memory",
+            )
+
         return web.Response(
-            text=render_shell("memory", body, version=__version__),
+            text=render_shell(
+                "memory", body, version=__version__, drawer_html=drawer_html,
+            ),
             content_type="text/html",
         )
+
+    # ── Drawer helpers (Iter 3 / Part X §34) ──────────────────────
+
+    def _user_id_for(request: web.Request) -> str:
+        """Pull the HA user id from ingress headers; fall back to a
+        constant per-instance id when running outside ingress (tests,
+        direct port-8765 access)."""
+        return (
+            request.headers.get("X-Remote-User-Id")
+            or request.headers.get("X-Hass-User-Id")
+            or "default"
+        )
+
+    def _build_drawer_html(
+        request: web.Request, *,
+        alert_context: str = "", page_context: str = "",
+    ) -> str:
+        """Compose the drawer aside for a route handler. Re-attaches the
+        active session (opening a fresh one if idle) and renders the
+        full transcript. Returns "" if the provenance store is not
+        wired (the shell will then render without the drawer slot)."""
+        import time as _time
+
+        from kukiihome_ha_agent.web_ui.drawer import render_drawer
+
+        prov = getattr(boot, "provenance_store", None)
+        if prov is None:
+            return ""
+        sess = prov.get_or_open_session(
+            _user_id_for(request),
+            page_context=page_context,
+            alert_context=alert_context,
+            now_ts=_time.time(),
+        )
+        turns = prov.turns_for_session(sess.id)
+        return render_drawer(
+            session=sess, turns=turns,
+            alert_context=alert_context, now_ts=_time.time(),
+        )
+
+    async def api_drawer_turn(request: web.Request) -> web.Response:
+        """POST /api/drawer/turn — user-submitted utterance. Appends the
+        user's turn, calls the dispatcher, appends the system's proposal
+        turn, then redirects back to /memory?drawer=1."""
+        import time as _time
+
+        from kukiihome_ha_agent.dispatcher import (
+            HeuristicDispatcherProvider,
+            context_from_boot,
+        )
+
+        prov = getattr(boot, "provenance_store", None)
+        if prov is None:
+            return web.HTTPServiceUnavailable(text="provenance store unavailable")
+
+        form = await request.post()
+        utterance = (form.get("utterance") or "").strip()
+        alert_context = (form.get("alert_context") or "").strip()
+        if not utterance:
+            raise web.HTTPSeeOther(location="memory?drawer=1")
+
+        sess = prov.get_or_open_session(
+            _user_id_for(request),
+            page_context="memory",
+            alert_context=alert_context,
+            now_ts=_time.time(),
+        )
+        prov.append_turn(
+            sess.id, role="user", utterance=utterance, now_ts=_time.time(),
+        )
+
+        # Heuristic dispatcher for now; LLM provider lands in Task 46.
+        provider = HeuristicDispatcherProvider()
+        ctx = context_from_boot(boot)
+        ctx.page_context = "memory"
+        ctx.alert_context = alert_context
+        proposal = provider.propose(utterance, ctx=ctx)
+        prov.append_turn(
+            sess.id, role="system",
+            utterance=proposal.reasoning,
+            proposal_json=proposal.to_json(),
+            now_ts=_time.time(),
+        )
+        raise web.HTTPSeeOther(location="memory?drawer=1")
+
+    async def api_drawer_confirm(request: web.Request) -> web.Response:
+        """POST /api/drawer/confirm — user confirmed a proposal. Routes
+        the placement through commit_guidance and marks the proposal turn
+        with the new guidance entry id."""
+        import time as _time
+
+        from kukiihome_ha_agent.commit_guidance import (
+            GuidanceStores,
+            commit_guidance,
+        )
+        from kukiihome_ha_agent.provenance_store import PlacementProposal
+
+        prov = getattr(boot, "provenance_store", None)
+        if prov is None:
+            return web.HTTPServiceUnavailable(text="provenance store unavailable")
+
+        form = await request.post()
+        turn_id = (form.get("turn_id") or "").strip()
+        session_id = (form.get("session_id") or "").strip()
+        if not turn_id or not session_id:
+            return web.HTTPBadRequest(text="turn_id + session_id required")
+
+        proposal_turn = prov.get_turn(turn_id)
+        if proposal_turn is None or not proposal_turn.proposal_json:
+            return web.HTTPNotFound(text="proposal turn not found")
+        try:
+            proposal = PlacementProposal.from_json(proposal_turn.proposal_json)
+        except Exception as e:
+            return web.HTTPBadRequest(text=f"malformed proposal: {e}")
+
+        # Find the user turn that generated this proposal (most recent
+        # user turn before the proposal turn in the same session).
+        all_turns = prov.turns_for_session(session_id)
+        prior_user_utterance = ""
+        for t in all_turns:
+            if t.turn_index >= proposal_turn.turn_index:
+                break
+            if t.role == "user":
+                prior_user_utterance = t.utterance
+
+        stores = GuidanceStores(
+            rules=getattr(boot, "rules_store", None),
+            preferences=getattr(boot, "preferences_store", None),
+            policies=getattr(boot, "policy_store", None),
+            actions=getattr(boot, "action_store", None),
+            areas=getattr(boot, "area_store", None),
+            provenance=prov,
+        )
+        try:
+            gid = commit_guidance(
+                proposal, stores=stores, origin="conversation",
+                transcript_id=turn_id,
+                user_utterance=prior_user_utterance,
+                now_ts=_time.time(),
+            )
+        except Exception as e:
+            return web.HTTPBadRequest(text=f"commit failed: {e}")
+
+        # Append a committed-marker turn so the drawer thread shows the result.
+        prov.append_turn(
+            session_id, role="system",
+            utterance=f"committed as {gid}",
+            committed_to=gid,
+            now_ts=_time.time(),
+        )
+        raise web.HTTPSeeOther(location="memory?drawer=1")
 
     async def v2_intent_redirect(request: web.Request) -> web.Response:
         """301 redirect from old /intent → /memory?cut=by_type. The Iter 2
@@ -2790,6 +2955,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     # policy CRUD subpaths stay live — they're the per-type detail forms
     # /memory rows link to.
     app.router.add_get("/memory", v2_memory)
+    # Iter 3 / Part X §34: conversational drawer endpoints.
+    app.router.add_post("/api/drawer/turn", api_drawer_turn)
+    app.router.add_post("/api/drawer/confirm", api_drawer_confirm)
     # NOTE: keeping the legacy /intent listing handler reachable via
     # v2_intent for now (it's referenced by other tests / tools). The
     # public list redirect lives at the top-level route.

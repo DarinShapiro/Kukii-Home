@@ -260,6 +260,39 @@ a.camera-tile:hover{border-color:#3a4a64}
   text-decoration:none;margin-bottom:10px}
 .back-link:hover{color:#cfd6df;text-decoration:underline}
 
+/* ─── Conversational drawer (Iter 3 / Part X §34) ───────────── */
+main.with-drawer{padding-right:380px}
+aside.drawer{position:fixed;top:54px;right:0;width:360px;height:calc(100vh - 54px);
+  background:#0f141b;border-left:1px solid #1f2632;overflow-y:auto;
+  padding:14px 16px 80px;z-index:50}
+.drawer-head{display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:8px}
+.drawer-head h3{margin:0;font-size:14px;color:#e5edf7;font-weight:600}
+.drawer-close{color:#9aa7b8;text-decoration:none;font-size:12px}
+.drawer-close:hover{color:#cfd6df}
+.drawer-context{background:#1a2230;border-radius:6px;padding:8px 10px;
+  font-size:12px;color:#cfd6df;margin-bottom:10px}
+.drawer-empty{color:#9aa7b8;font-size:13px;padding:14px 0;line-height:1.5}
+.drawer-thread{display:flex;flex-direction:column;gap:10px;
+  margin:8px 0 14px}
+.drawer-turn{font-size:13px}
+.drawer-turn .turn-meta{font-size:11px;color:#7e8a9a;margin-bottom:2px}
+.drawer-turn.user .turn-body{background:#1a2230;color:#cfd6df;
+  padding:8px 10px;border-radius:6px}
+.drawer-turn.system .turn-body{color:#cfd6df}
+.drawer-card{background:#141a22;border:1px solid #1f2632;border-radius:8px;
+  padding:10px 12px;color:#cfd6df;font-size:13px}
+.drawer-card.committed{background:#1f2a20;border-color:#345a35}
+.drawer-card .drawer-meta{font-size:11px;margin:6px 0}
+.drawer-card .drawer-reasoning{margin-top:8px;color:#9aa7b8;font-size:12px;
+  font-style:italic}
+.drawer-card .drawer-actions{margin-top:10px;display:flex;gap:6px}
+.clarify-q{margin-top:6px;color:#d5b793;font-size:12px}
+.drawer-composer{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.drawer-composer textarea{background:#141a22;border:1px solid #1f2632;
+  color:#cfd6df;border-radius:6px;padding:8px 10px;font-size:13px;
+  font-family:inherit;resize:vertical}
+
 /* ─── /memory unified browse (Iter 3 / Part IX §28) ──────────── */
 .memory-drawer-trigger{margin:18px 0 12px}
 .memory-drawer-trigger .btn{font-size:14px;padding:10px 16px}
@@ -345,16 +378,22 @@ def camera_display_name(raw_name: str | None) -> str:
 
 
 def render_shell(active: str, content_html: str, *, version: str = "",
-                 flash: str | None = None) -> str:
+                 flash: str | None = None, drawer_html: str = "") -> str:
     """Wrap ``content_html`` in the shared shell. ``active`` is the path of
     the current page (one of :data:`NAV_ITEMS` paths) so its nav link is
     highlighted. ``flash`` is an optional one-line notice rendered above the
-    content (success / error messages from a POST-redirect)."""
+    content (success / error messages from a POST-redirect).
+
+    ``drawer_html`` is the optional conversational drawer (Part X §34) —
+    when non-empty, it renders as a fixed right-side panel and the main
+    content shifts to make room. Pass empty string to render without
+    the drawer."""
     nav = "".join(
         f"<a class='{'active' if path == active else ''}' href='{path}'>{_e(label)}</a>"
         for path, label in NAV_ITEMS
     )
     flash_html = f"<div class='flash'>{_e(flash)}</div>" if flash else ""
+    main_class = "with-drawer" if drawer_html else ""
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -367,7 +406,8 @@ def render_shell(active: str, content_html: str, *, version: str = "",
         f"<nav>{nav}</nav>"
         f"<span class='version'>{_e(version)}</span>"
         "</header>"
-        f"<main>{flash_html}{content_html}</main>"
+        f"<main class='{main_class}'>{flash_html}{content_html}</main>"
+        f"{drawer_html}"
         "</body></html>"
     )
 
