@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.7.0...v0.8.0) (2026-06-04)
+
+
+### Features
+
+* **web-ui:** build real /activity page (Part IV depth + filters) ([55cd77f](https://github.com/DarinShapiro/Kukii-Home/commit/55cd77f197725dffc714698b325bcc0e43f50a6c))
+
+
+### Bug Fixes
+
+* **web-ui:** friendly_time graduates with clock-time + tooltip ([016014b](https://github.com/DarinShapiro/Kukii-Home/commit/016014b04fc7c7579b41da52f4d04514a585cbfa))
+* **web-ui:** readable activity headlines, strip stream-quality suffixes ([198026a](https://github.com/DarinShapiro/Kukii-Home/commit/198026a08ba7c876183caa626ff3d11d5667d0e4))
+* **web-ui:** standardize thumbnail aspect-ratio containers + §17 corollary ([93a4b98](https://github.com/DarinShapiro/Kukii-Home/commit/93a4b98f208a49c0c113595ea2d9dd475ed1af73))
+
 ## 0.7.0 — 2026-06-04
 
 **Preview: a new product Web UI you can try alongside the existing one.**
