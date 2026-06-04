@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.17.0...v0.18.0) (2026-06-04)
+
+
+### Features
+
+* **memory:** ProvenanceStore + commit_guidance dispatcher (Parts IX/X foundation) ([ff8564b](https://github.com/DarinShapiro/Kukii-Home/commit/ff8564b12d2bc90c970929adbd3471214245a03a)), closes [#2](https://github.com/DarinShapiro/Kukii-Home/issues/2)
+
 ## [0.17.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.16.0...v0.17.0) (2026-06-04)
 
 
