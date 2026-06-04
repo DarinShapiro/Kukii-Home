@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.15.0...v0.16.0) (2026-06-04)
+
+
+### Features
+
+* **diagnostics:** live Part VIII page — system + stores + reasoner roll-up ([17a9a83](https://github.com/DarinShapiro/Kukii-Home/commit/17a9a83001f9c6e3b30a75a1b5656ab2264136d3))
+
 ## [0.15.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.14.0...v0.15.0) (2026-06-04)
 
 
