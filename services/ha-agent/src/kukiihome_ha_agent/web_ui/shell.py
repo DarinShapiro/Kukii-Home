@@ -30,6 +30,9 @@ NAV_ITEMS: list[tuple[str, str]] = [
     # surface; the existing /review URL is preserved as a tab within it.
     ("identities",  "Identities"),
     ("cameras",     "Cameras"),
+    # Iter 3 / Part IX §30: storage + privacy. Diagnostics stays separate;
+    # this surface is "what's it holding + privacy ops".
+    ("system",      "System"),
     ("diagnostics", "Diagnostics"),
 ]
 

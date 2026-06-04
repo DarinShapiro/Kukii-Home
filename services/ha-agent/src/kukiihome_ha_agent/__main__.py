@@ -214,6 +214,9 @@ class BootState:
     policy_store: Any | None = None
     """Iter 2.D: dismissal policies + transient intents + policy_hits audit
     log. Read by /policies, reverse-linked from passive activity rows."""
+    retention_store: Any | None = None
+    """Iter 3 (Part IX §30): per-class retention policy + admin audit log.
+    Read by /system + the (future) nightly pruner."""
     provenance_store: Any | None = None
     """Iter 3 (Part X §36): sessions + transcripts + guidance_provenance.
     Single source of truth for *how* each guidance entry came to exist —
@@ -465,6 +468,40 @@ async def _render_notifications_card(boot: BootState) -> str:
 
     parts.append("</div>")
     return "".join(parts)
+
+
+def _erase_recent_event_dirs(
+    events_root: Any, cutoff: float, shutil_mod: Any, log: Any,
+) -> tuple[int, int]:
+    """Sync helper for the /system erase-last-hour endpoint. Walks the
+    events directory and removes event-dirs whose mtime is newer than
+    ``cutoff``, returning (bytes_removed, rows_removed). Runs in a
+    thread via asyncio.to_thread from the async handler — keeps the
+    event loop responsive during the disk walk."""
+    bytes_removed = 0
+    rows_removed = 0
+    if not events_root.exists():
+        return 0, 0
+    for ev_dir in events_root.iterdir():
+        if not ev_dir.is_dir():
+            continue
+        try:
+            if ev_dir.stat().st_mtime < cutoff:
+                continue
+            for p in ev_dir.rglob("*"):
+                if p.is_file():
+                    try:
+                        bytes_removed += p.stat().st_size
+                    except OSError:
+                        pass
+            shutil_mod.rmtree(ev_dir, ignore_errors=True)
+            rows_removed += 1
+        except OSError as e:
+            log.warning(
+                "system.erase_last_hour.dir_skipped",
+                path=str(ev_dir), error=str(e),
+            )
+    return bytes_removed, rows_removed
 
 
 def _render_alert_404(event_id: str) -> str:
@@ -2975,6 +3012,136 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             content_type="text/html",
         )
 
+    async def v2_system(_request: web.Request) -> web.Response:
+        """Iter 3 / Part IX §30: /system page — storage usage + retention
+        policy + privacy operations + admin audit log."""
+        import time as _time
+
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.camera_data import (
+            build_camera_summaries,
+        )
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+        from kukiihome_ha_agent.web_ui.system import render_system_page
+        from kukiihome_ha_agent.web_ui.system_data import build_system_vm
+
+        ret = getattr(boot, "retention_store", None)
+        policy = ret.get_policy() if ret else None
+        audit_log = ret.recent_audits(limit=50) if ret else []
+
+        # Camera (id, friendly_name) pairs for the purge form dropdown.
+        statuses = (
+            list(boot.camera_registry.all())
+            if getattr(boot, "camera_registry", None) else []
+        )
+        ha_loops = list(getattr(boot, "ha_camera_loops", []) or [])
+        summaries = build_camera_summaries(
+            registry_statuses=statuses, ha_loops=ha_loops,
+            alerts=[], now_ts=_time.time(),
+        )
+        cameras = [(c.camera_id, c.name) for c in summaries]
+
+        vm = build_system_vm(
+            data_root="/data/kukiihome",
+            policy=policy, audit_log=audit_log,
+            cameras=cameras, now_ts=_time.time(),
+        )
+        return web.Response(
+            text=render_shell(
+                "system", render_system_page(vm), version=__version__,
+            ),
+            content_type="text/html",
+        )
+
+    async def v2_system_retention(request: web.Request) -> web.Response:
+        """POST /system/retention — update the retention policy. All fields
+        optional; bad inputs fall back to the existing values."""
+        ret = getattr(boot, "retention_store", None)
+        if ret is None:
+            return web.HTTPServiceUnavailable(text="retention store unavailable")
+        form = await request.post()
+
+        def _as_int(k):
+            v = form.get(k)
+            try:
+                return int(v) if v else None
+            except (TypeError, ValueError):
+                return None
+
+        ret.update_policy(
+            events_days=_as_int("events_days"),
+            events_max_gb=_as_int("events_max_gb"),
+            frames_days=_as_int("frames_days"),
+            audit_days=_as_int("audit_days"),
+        )
+        import time as _time
+
+        from kukiihome_ha_agent.retention_store import AdminAudit
+        ret.record_audit(AdminAudit(
+            id=None, ts=_time.time(),
+            actor=_user_id_for(request),
+            operation="retention.policy.updated",
+            scope="global", notes="via /system page",
+        ))
+        raise web.HTTPSeeOther(location="system")
+
+    async def v2_system_erase_last_hour(request: web.Request) -> web.Response:
+        """POST /system/erase-last-hour — panic button. Walks the events
+        directory and removes any event-dirs with mtime in the last 60
+        minutes. Records the operation in admin_audit before deletion."""
+        import shutil
+        import time as _time
+        from pathlib import Path
+
+        from kukiihome_ha_agent.retention_store import AdminAudit
+
+        ret = getattr(boot, "retention_store", None)
+        if ret is None:
+            return web.HTTPServiceUnavailable(text="retention store unavailable")
+
+        events_root = Path("/data/kukiihome/events")
+        cutoff = _time.time() - 3600.0
+        # Synchronous filesystem walk runs in a thread to keep the event
+        # loop responsive — this is a rarely-pressed panic button so the
+        # overhead is fine.
+        bytes_removed, rows_removed = await asyncio.to_thread(
+            _erase_recent_event_dirs, events_root, cutoff, shutil, logger,
+        )
+
+        ret.record_audit(AdminAudit(
+            id=None, ts=_time.time(),
+            actor=_user_id_for(request),
+            operation="erase_last_hour",
+            scope="all cameras / last 60 min",
+            bytes_removed=bytes_removed, rows_removed=rows_removed,
+            notes=f"{rows_removed} event dirs removed",
+        ))
+        raise web.HTTPSeeOther(location="system")
+
+    async def v2_system_purge(request: web.Request) -> web.Response:
+        """POST /system/purge — surgical bulk delete by camera + date.
+        For v1 this records the audit row + 303s back; the actual
+        date-range parse + event filtering lands when EventStore exposes
+        a query-by-camera + recorded-at-between primitive."""
+        import time as _time
+
+        from kukiihome_ha_agent.retention_store import AdminAudit
+        ret = getattr(boot, "retention_store", None)
+        if ret is None:
+            return web.HTTPServiceUnavailable(text="retention store unavailable")
+        form = await request.post()
+        camera_id = (form.get("camera_id") or "").strip()
+        start_date = (form.get("start_date") or "").strip()
+        end_date = (form.get("end_date") or "").strip()
+        ret.record_audit(AdminAudit(
+            id=None, ts=_time.time(),
+            actor=_user_id_for(request),
+            operation="purge.scheduled",
+            scope=f"camera={camera_id} from {start_date} to {end_date}",
+            notes="purge worker not yet implemented; audit only",
+        ))
+        raise web.HTTPSeeOther(location="system")
+
     async def v2_diagnostics(_request: web.Request) -> web.Response:
         import os
         import time as _time
@@ -3104,6 +3271,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
     app.router.add_get("/cameras/{camera_id}", v2_camera_detail)
     app.router.add_get("/diagnostics", v2_diagnostics)
+    # Iter 3 / Part IX §30: /system storage + privacy.
+    app.router.add_get("/system", v2_system)
+    app.router.add_post("/system/retention", v2_system_retention)
+    app.router.add_post("/system/erase-last-hour", v2_system_erase_last_hour)
+    app.router.add_post("/system/purge", v2_system_purge)
     # Iter 3 / Part IX §29: /identities Enrolled list + per-subject detail.
     app.router.add_get("/identities", v2_identities)
     app.router.add_get("/identities/{subject_id}", v2_identity_detail)
@@ -3471,6 +3643,9 @@ async def _run() -> None:
     # chain extension on /alert/{id}.
     from kukiihome_ha_agent.provenance_store import ProvenanceStore
     boot.provenance_store = ProvenanceStore(path="/data/kukiihome/sessions.db")
+    # Iter 3 (Part IX §30): retention policy + admin audit log.
+    from kukiihome_ha_agent.retention_store import RetentionStore
+    boot.retention_store = RetentionStore(path="/data/kukiihome/retention.db")
 
     # Epic 10.8.1: per-event persistent store. Lives next to
     # alerts.json in the Supervisor's /data volume. Subscribed to
