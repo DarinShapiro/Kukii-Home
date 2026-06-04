@@ -576,43 +576,21 @@ Shares row schema with Home (same `_render_activity_row()`), adds:
 
 ## Task 8 — Next-step planning after this round
 
-After the seven tasks above land, the natural next surface to design + build
-is **Part VI — Intent (Preferences + Rules)**. Reasoning:
+**Updated 2026-06-04**: Rules has been pulled into Iteration 1 (Task 9
+below). Preferences + Policies remain for Iteration 2.
 
-- The remaining unbuilt user-facing pieces are Areas (V), Intent (VI), and
-  Policies (VII). Home + Activity (Part III + Part IV done in this round)
-  already point at Intent and Policies; Areas can live as a placeholder a
-  bit longer because it's a metadata page.
-- Intent is the **most novel** screen in the whole product — natural-
-  language alert authoring + Preferences shaping the VLM — and the design
-  is already ratified (rules with text intent + scope + action; persona-
-  shaping preferences with dials + free-text). Building it has high payoff
-  in user feel.
-- Intent is the page that *makes the agent feel like an agent* rather than
-  a security alarm with a fancy UI. That's the right tone-setter to land
-  before any further visual polish.
+After Tasks 1-7, 9 land, the natural next iteration is the rest of Part VI
+plus Part VII:
 
-Items to scope before Part VI build (these become Iteration 2's planning
-doc, mirroring this one):
-
-- The rule editor's condition-builder primitives (subject / area /
-  co-occurrence / temporal / VLM-state-tags — list confirmed in §VI of
-  web-ui-design.md).
-- Rule storage location (preprocessor SQLite vs ha-agent vs HA itself).
-  Likely ha-agent — it owns the dispatcher; rules become triggers for HA
-  automations downstream.
-- Rule lifecycle: enable / disable, edit, delete, the "matched N times"
-  count, link out to the matching incidents in Activity.
-- Preferences UI shape: dials + free-text + per-actor relationship +
-  per-area posture. Already sketched in web-ui-design.md §VI.
-
-A reasonable sequencing for Iteration 2:
-
-- Iteration 2.A: Rules editor (the meaty piece) + rule storage + HA event
-  emission on match.
-- Iteration 2.B: Preferences (dials + free-text + per-actor metadata).
-- Iteration 2.C: Policies (Part VII — view + revoke + audit) since it
-  pairs naturally with Intent.
+- **Iteration 2.A — Preferences** (dials + free-text + per-actor
+  relationship + per-area posture; persona-shaping that complements the
+  named Rules from Task 9). Already sketched in web-ui-design.md §VI.
+- **Iteration 2.B — Policies (Part VII)**. The VLM-authored dismissal
+  policies + transient intents view + revoke + audit. Pairs naturally with
+  Rules — both surface as "active behaviour the agent has," with Rules
+  user-authored and Policies VLM-authored.
+- **Iteration 2.C — Areas (Part V)**. The metadata page; can stay as a
+  placeholder a bit longer because it doesn't carry user-driven action.
 
 This document (web-ui-iteration-1.md) is the spec for **Iteration 1**.
 Iteration 2 begins as `planning/web-ui-iteration-2.md` once Iteration 1's
@@ -620,21 +598,424 @@ tasks land.
 
 ---
 
+## Task 9 — Rules editor (Part VI: Intent · Rules)
+
+**Intent.** Build the Rules half of Part VI — *named, scoped,
+natural-language intents the VLM evaluates per-event with explicit
+actions.* The user writes prose ("Alert me if Winston seems to have gotten
+outside without someone watching him"); the system gates the evaluation by
+scope (camera / area / time); the VLM judges whether the situation
+matches; on match, the dispatcher fires the rule's action(s) (built-in
+alert + a structured HA event for downstream automations).
+
+This is the single most novel surface in the product — the place where the
+agent stops feeling like a security alarm and starts feeling like an
+*agent you can talk to.* It's also the page that turns the "no manual
+alert rules" architectural commitment from §1.5 of web-ui-design.md into a
+concrete user experience.
+
+### Architectural model (recap from web-ui-design.md §VI)
+
+A **rule** has three parts:
+
+| Layer | Form | Deterministic? |
+|---|---|---|
+| **Scope** | camera / area / time-window picker | Yes — gates *when* the VLM evaluates this rule |
+| **Intent** | free-text user prose | No — the VLM reads it as guidance, decides match per-incident |
+| **Action** | built-in alert + optional HA event fire | Yes — once matched, the dispatcher executes deterministically |
+
+Rules are evaluated as part of the existing VLM call on each incident.
+**No per-rule VLM calls** — the active rules in scope are folded into the
+single VLM prompt; the structured output adds a `matched_rules` field;
+the dispatcher reads that field and fires actions. One call, many rules.
+
+### Data model
+
+A new SQLite store in ha-agent (co-located with the existing alert log
+persistence under `/data/kukiihome/`). Two tables:
+
+```sql
+CREATE TABLE rules (
+  id              TEXT PRIMARY KEY,           -- slug derived from name
+  name            TEXT NOT NULL,              -- display name
+  enabled         INTEGER NOT NULL DEFAULT 1,
+  scope_json      TEXT NOT NULL,              -- {cameras:[], areas:[], time_windows:[]}
+  intent_text     TEXT NOT NULL,              -- the prose the VLM reads
+  severity        TEXT NOT NULL DEFAULT 'normal',  -- critical | normal | low
+  alert_enabled   INTEGER NOT NULL DEFAULT 1, -- built-in push?
+  ha_event_name   TEXT,                       -- e.g. 'kukiihome.winston_unsupervised'; NULL = no HA event
+  created_at      REAL NOT NULL,
+  updated_at      REAL NOT NULL,
+  matched_count   INTEGER NOT NULL DEFAULT 0, -- denormalized counter
+  last_matched_at REAL,
+  retired_at      REAL                        -- soft-delete; NULL while active
+);
+
+CREATE TABLE rule_matches (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  rule_id      TEXT NOT NULL,
+  incident_id  TEXT NOT NULL,                 -- joins to alert_log
+  matched_at   REAL NOT NULL,
+  confidence   REAL,                          -- VLM's reported match confidence
+  reasoning    TEXT,                          -- VLM's brief explanation
+  action_fired TEXT,                          -- 'alert', 'ha_event', 'alert+ha_event', or 'gated'
+  FOREIGN KEY (rule_id) REFERENCES rules(id)
+);
+CREATE INDEX idx_match_rule ON rule_matches(rule_id, matched_at DESC);
+CREATE INDEX idx_match_inc  ON rule_matches(incident_id);
+```
+
+**`scope_json` shape:**
+
+```json
+{
+  "cameras": ["front_south", "pool"],         // empty list = any camera
+  "areas":   ["front_yard"],                  // empty list = any area
+  "time_windows": [
+    {"days": ["mon","tue","wed","thu","fri"], "start": "09:00", "end": "17:00"},
+    {"days": ["sat","sun"], "start": "00:00", "end": "23:59"}
+  ]                                           // empty list = any time
+}
+```
+
+All three scope fields are **AND-combined**; within each field the values
+are **OR-combined**. *"Any time"* / *"any camera"* / *"any area"* are
+represented by an empty list. Time windows are in the user's local
+timezone (read from add-on options).
+
+### Triage / VLM prompt integration
+
+This is the load-bearing backend change. The triage layer
+(`services/ha-agent/.../triage.py`) is extended in three places:
+
+**1. Rule activation per event.** When an event arrives, before calling the
+VLM, triage:
+- Loads enabled, non-retired rules from the rules table (cached, refreshed
+  on rule create/update/delete via an in-memory copy + change pubsub).
+- Filters by scope: keeps rules whose camera/area/time-window matches the
+  event's `(camera_id, area_id, ts)`.
+- The resulting active rule set is passed into VLM prompt assembly.
+
+**2. Prompt assembly.** A new section in the VLM prompt — *Named user
+intents* — lists each active rule as:
+
+```
+[rule:R3] "Winston unsupervised in front"
+  Intent: Winston seems to have gotten outside in front without someone
+          watching him.
+```
+
+The prompt instructs the VLM to evaluate each named intent against the
+situation and emit a `matched_rules` field in its structured output.
+
+**3. Structured output schema extension.** `VLMResponse` (per
+web-ui-design.md spec) gains:
+
+```json
+"matched_rules": [
+  {
+    "rule_id": "R3",
+    "matched": true,
+    "confidence": 0.87,
+    "reasoning": "no adult human visible in scene; pet appears to have exited unattended."
+  },
+  {
+    "rule_id": "R7",
+    "matched": false,
+    "confidence": 0.0,
+    "reasoning": null
+  }
+]
+```
+
+The dispatcher reads this, looks up each `matched: true` rule, and fires
+its action(s) (alert + HA event) if `confidence >= threshold` (default
+0.6, configurable per-rule later). Every evaluation — match or non-match —
+is recorded in `rule_matches` so the audit log shows the full picture.
+
+### Action authority — when rule and VLM both speak
+
+If a rule fires AND the VLM also emits standalone `recommendations` in the
+same call, **the rule's action takes priority** (deterministic, what the
+user asked for). The VLM's contemporaneous recommendation is recorded in
+the trace as *"VLM also suggested: …; rule action took priority"* but is
+not enacted. The trace shows both, the dispatcher acts on one.
+
+### HA event payload shape
+
+When a rule fires `ha_event_name`, the dispatcher emits an HA event with
+this payload (subscribable by HA automations):
+
+```json
+{
+  "rule_id": "winston_unsupervised",
+  "rule_name": "Winston unsupervised in front",
+  "incident_id": "inc_abc123",
+  "camera_id": "front_south",
+  "area_id": "front_yard",
+  "ts": 1717512637.4,
+  "kind": "person",          // or pet, vehicle, etc. — primary detection
+  "actors": ["winston"],     // resolved KnownActor/KnownPet ids
+  "severity": "critical",
+  "confidence": 0.87,
+  "trace_url": "/api/kukiihome/alert/inc_abc123"   // HA-Core proxy, signed
+}
+```
+
+HA automations key on `event_type: kukiihome_event` + the event-name
+discriminator (e.g. `data.rule_id == "winston_unsupervised"`).
+
+### REST API surface
+
+New endpoints on the existing ha-agent HTTP API:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/intent/rules` | List all rules (filter `?enabled=true/false&retired=true/false`) |
+| `POST` | `/api/intent/rules` | Create rule; body = full rule object minus id/timestamps; id derived from name |
+| `GET` | `/api/intent/rules/{id}` | Read rule (including recent matches summary) |
+| `PUT` | `/api/intent/rules/{id}` | Update rule (any field except id; updates `updated_at`) |
+| `DELETE` | `/api/intent/rules/{id}` | Soft-delete: sets `retired_at`; preserves audit history |
+| `POST` | `/api/intent/rules/{id}/enable` | Toggle `enabled` field |
+| `GET` | `/api/intent/rules/{id}/matches` | Paginated audit log of matches (newest first) |
+| `POST` | `/api/intent/rules/{id}/test` | Dry-run: replay the most recent eligible incident through the VLM with this rule's intent, return matched/confidence/reasoning *without* writing to the matches table or firing actions |
+
+The `test` endpoint is the "preview before save" UX — lets the user paste
+intent text, see how the VLM evaluates it against a real recent incident,
+iterate, then save when it reads right.
+
+### UI
+
+Lives at `/intent` (replaces the current mock). Two sections, top-to-bottom:
+
+**Top — Preferences** (placeholder section, becomes real in Iteration 2.A):
+
+```
+─── PREFERENCES ──────────────────────────────────────────────
+   (Coming in Iteration 2 — vigilance dial, "what I care about"
+   free text, per-actor relationships, per-area posture.)
+```
+
+This keeps the page from feeling lopsided while Preferences is being
+designed; the Rules section gets full attention now.
+
+**Bottom — Rules** (built in this task):
+
+```
+─── RULES ────────────────────────────────────────  [+ New rule]
+
+━━ Winston unsupervised in front ━━━━━━ critical · enabled ●
+   WHEN  Front Yard · any time
+   ALERT IF  "Winston seems to have gotten outside in front
+              without someone watching him."
+   → alert (built-in) + fires kukiihome.winston_unsupervised
+   ↳ matched 2 times this month · last match Tuesday at 6:21 PM
+   [Edit] [Disable] [View matches] [Delete]
+
+━━ Bob arrives ━━━━━━━━━━━━━━━━━━━━━━━ critical · enabled ●
+   WHEN  any camera · any time
+   ALERT IF (structured shortcut: Bob seen)
+   → alert (built-in) + fires kukiihome.bob_arrives
+   ↳ matched 14 times this month · last match 23 minutes ago
+   [Edit] [Disable] [View matches] [Delete]
+
+━━ Delivery at front door ━━━━━━━━━━━ event-only · enabled ●
+   WHEN  front_south · any time
+   ALERT IF  "A delivery happened — a person dropped a package and
+              left within a few seconds."
+   → fires kukiihome.delivery_at_front_door (no built-in alert)
+     ↳ HA automation: Sonos chime + lights red 1h  [Open in HA]
+   ↳ matched 8 times this month
+   [Edit] [Disable] [View matches] [Delete]
+
+ⓘ Rules are fast-path intents the VLM evaluates per event. Anything
+  not matched by any rule is reasoned about by the VLM under your
+  general preferences (Iteration 2).
+```
+
+**The rule editor — new + edit form**:
+
+```
+┌ New rule ─────────────────────────────────────────────[ × ]┐
+│  Name        [Winston unsupervised in front           ]    │
+│              ↳ rule id: winston_unsupervised_in_front       │
+│                                                             │
+│  WHEN  (scope — when to evaluate this rule)                │
+│    Camera / Area  [Front Yard ▾]  (multi-select)            │
+│                   ☐ Apply to any camera                     │
+│    Time           ☑ Any time                                │
+│                   ↳ or pick windows…                        │
+│                                                             │
+│  ALERT IF                                                   │
+│   ┌──────────────────────────────────────────────────────┐ │
+│   │ Winston seems to have gotten outside in front        │ │
+│   │ without someone watching him.                        │ │
+│   └──────────────────────────────────────────────────────┘ │
+│   The VLM evaluates this intent against the situation.     │
+│   [Try against the most recent eligible incident ↓]        │
+│   (After click: shows VLM verdict + reasoning inline)      │
+│                                                             │
+│  THEN                                                       │
+│   ☑ Alert (built-in push notification)                     │
+│   ☑ Fire HA event: kukiihome.winston_unsupervised          │
+│      ↳ auto-suggested from name; editable                  │
+│   Severity:  ◯ Low  ◉ Normal  ◯ Critical                   │
+│                                                             │
+│                              [Cancel]  [Save & enable]      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+For the simple identity-match case (*"alert me when Bob arrives"*) the
+form offers a **structured shortcut**: pick *"Subject seen → alert"* from
+a dropdown at the top of the form, pick a subject, and the rest of the
+form auto-fills (intent_text becomes `Subject seen anywhere within scope`,
+which is a no-op the VLM matches trivially). The shortcut is a UX win for
+the trivial case; the full form is the main shape.
+
+**Per-rule matches page** (`/intent/rules/{id}/matches`):
+
+```
+┌ Matches · Winston unsupervised in front ─────[× Close] ┐
+│                                                          │
+│  Recent matches                                          │
+│                                                          │
+│  Tuesday at 6:21 PM  [thumb] Front Yard                  │
+│    confidence 0.87 · "no adult human visible in scene;   │
+│    pet appears to have exited unattended."               │
+│    → alert sent  ⓘ open trace                            │
+│                                                          │
+│  May 19 at 4:02 PM  [thumb] Front Yard                   │
+│    confidence 0.91 · …                                   │
+│    → alert sent  ⓘ open trace                            │
+│                                                          │
+│  Recent non-matches (sample)                             │
+│  Mon at 11:14 AM  conf 0.12  "Winston with Alice nearby" │
+└──────────────────────────────────────────────────────────┘
+```
+
+Both matches and a sample of non-matches surface — the non-matches are
+where the trust contract lives: *"the rule was evaluated, the VLM said
+no, here's why."*
+
+### Loop 1 feedback on rules
+
+A ✗ on a rule-matched alert *also* surfaces a *"this rule matched but you
+said no. Want to refine the intent?"* prompt with an inline editor showing
+the current intent text and a one-tap *Refine* that opens the rule's edit
+form pre-focused on the intent textarea. The rule literally **learns its
+own wording** through user corrections — exactly the Loop 1 closure that
+makes Preferences and Rules architecturally distinct from policies.
+
+### Touches
+
+| File | Change |
+|---|---|
+| `services/ha-agent/src/.../rules_store.py` | **NEW** — SQLite-backed rule + match storage; mirrors `alert_log` shape |
+| `services/ha-agent/src/.../rules_runtime.py` | **NEW** — in-memory rule cache, scope-filter helper, prompt-section builder |
+| `services/ha-agent/src/.../triage.py` | extend: filter rules by scope; pass active rules into VLM call; read `matched_rules` from response; record matches; fire actions |
+| `services/ha-agent/src/.../reasoning.py` (or the VLM prompt builder) | add the *Named user intents* section to the prompt; update output schema |
+| `services/ha-agent/src/.../http_api.py` | add the `/api/intent/rules/*` endpoints |
+| `services/ha-agent/src/.../notifier.py` | new "rule-matched alert" path (carries rule context into push body) |
+| `services/ha-agent/src/.../client.py` (HA client) | new `fire_event(name, data)` method calling HA's `/api/events/{name}` |
+| `services/ha-agent/src/.../web_ui/intent.py` | **NEW** — `/intent` page renderer (Rules section live, Preferences placeholder) |
+| `services/ha-agent/src/.../web_ui/intent_rule_form.py` | **NEW** — new + edit form rendering + parsing |
+| `services/ha-agent/src/.../web_ui/mocks.py` | remove the Intent mock |
+| `services/ha-agent/src/.../__main__.py` | wire routes for `/intent`, `/intent/rules/new`, `/intent/rules/{id}`, `/intent/rules/{id}/matches`, and the POST handlers |
+| `services/ha-agent/src/.../web_ui/shell.py` | add form CSS (textarea, multi-select chips, severity radio) |
+| `planning/web-ui-design.md` | ratify Part VI Rules section based on the design decisions in this task |
+| `tests/test_rules_store.py` | **NEW** — store CRUD + scope-filter + audit log |
+| `tests/test_rules_runtime.py` | **NEW** — prompt-section building, response parsing, action gating |
+| `tests/test_intent_page.py` | **NEW** — page renderers + form parsing |
+| `tests/test_triage_rules.py` | **NEW** — integration test for triage → rules → dispatcher |
+
+### Open
+
+These are the design questions worth resolving with the user before
+implementation. Each has a recommended default in brackets; flagging so a
+fresh context knows what to ask.
+
+- **Storage location.** ha-agent local SQLite vs HA-Core (as automations).
+  [Recommend ha-agent SQLite — co-locates with dispatcher, doesn't pollute
+  HA's automation list, survives HA restart, queryable from the trace UI.
+  HA still consumes the *output* via fired events.]
+- **Prompt cost.** With N rules, prompt grows. At ~50 tokens per rule, 20
+  rules = ~1k extra prompt tokens per VLM call. [Recommend: no per-rule
+  budget for v1; surface as a knob if it becomes painful. The cheap
+  per-call tier_0 evaluation is exactly what makes natural-language rules
+  economically viable.]
+- **VLM cost** of the `/test` (dry-run) endpoint. Each test call is one
+  full VLM round-trip. [Recommend: rate-limit to N tests per minute per
+  user; cache the most-recent-incident pull for 60 s so iterating on a
+  rule's intent text doesn't refire context assembly.]
+- **Match confidence threshold.** Global 0.6 default; per-rule override.
+  [Recommend: global default in config; per-rule override only when a
+  rule consistently misfires — pair with Loop 1 feedback.]
+- **Structured shortcut for identity rules.** Stay within the same form
+  (radio at top: *"natural-language intent"* vs *"subject seen → alert"*)
+  or a separate "Quick add" flow. [Recommend: same form with a top-of-
+  form mode selector — fewer routes, less code, the simple case stays
+  one-click.]
+- **HA automation discovery.** Should the rule list show which HA
+  automations subscribe to its fired event? [Recommend: nice-to-have, not
+  required for v1. The "Open in HA" link is enough.]
+- **Rule retirement / soft-delete.** Deleted rules go to `retired_at` but
+  stay queryable for audit. UI shows them on a *Retired* tab. [Recommend:
+  yes — audit-friendly, undoable.]
+- **Suggested rules from observed patterns.** "We notice you keep
+  dismissing delivery events — want a rule for that?" [Defer to a later
+  iteration; depends on dismissal-policy + feedback loop infra. Out of
+  scope for Task 9.]
+- **Multiple rules matching one incident.** All fire (multiple alerts +
+  multiple HA events). [Recommend: yes — explicit user concerns are
+  additive. The trace shows all matched rules for transparency.]
+
+### Done when
+
+- User can create, edit, enable/disable, delete a rule via the `/intent`
+  page using the form sketched above.
+- The `Try against the most recent eligible incident` dry-run works and
+  returns a real VLM verdict + reasoning inline.
+- Triage assembles the active-rules section into the VLM prompt; the VLM
+  returns `matched_rules`; the dispatcher fires the rule's actions on
+  matches above threshold.
+- A rule-matched alert lands on HA Companion *and* fires the configured
+  HA event with the documented payload shape.
+- Every rule evaluation (match or non-match) is recorded in `rule_matches`
+  and shown on the per-rule matches page.
+- The activity trace page renders *"matched rule X"* lines in the audit
+  chain alongside the VLM call, with each matched rule's name + confidence
+  + reasoning, exactly as scoped in web-ui-design.md §22.
+- Loop 1: a ✗ on a rule-matched alert surfaces the *"refine intent"* prompt
+  and lets the user edit the rule's text inline.
+- `planning/web-ui-design.md` §VI Rules section is updated to reflect any
+  design choices made during implementation that differ from the current
+  spec (especially the action-priority rule and the matched_rules schema).
+
+---
+
 ## Implementation order recommendation
 
 If a fresh context picks this up, I'd build in this order — lighter and
-non-architectural first, biggest at the end:
+non-architectural first, two big arcs (Task 1, Task 9) at the end:
 
 1. **Task 2** (timestamp formatting) — pure helper change, low risk, immediately visible.
 2. **Task 3** (headline cleanup) — pure rendering change, low risk, immediately visible.
 3. **Task 4 + 6** (sticky nav + Identities under shell) — one refactor, two wins.
 4. **Task 7** (build real /activity) — formal Part IV, builds on row schema from Home.
 5. **Task 5** (pool cam diagnosis + aspect-ratio principles) — diagnostic + small CSS, may surface follow-ups.
-6. **Task 1** (event clips, architectural) — biggest, scope-out per the Design A/B/stop-gap framing above.
+6. **Task 9** (Rules editor) — large multi-session arc; should resolve its
+   open questions (storage location, prompt cost, dry-run rate-limit) with
+   the user before code lands. Mostly self-contained — touches triage but
+   not the existing UI structure.
+7. **Task 1** (event clips, architectural) — biggest, scope-out per the
+   Design A/B/stop-gap framing. Order may flip with Task 9 depending on
+   which the user wants to feel sooner.
 
-Tasks 2–4, 6–7 land cleanly in a single session; Task 1 is its own multi-
-session arc and should be planned separately once its design questions are
-resolved (codec, retention, AD integration depth).
+Tasks 2–4, 6–7 land cleanly in a single session each. Tasks 1 and 9 are
+their own multi-session arcs and should be planned + scoped before code
+starts. Task 9 has more open product-design questions to resolve with the
+user; Task 1 has more open systems-engineering questions to resolve
+internally (codec, retention, AD integration depth).
 
 ---
 
@@ -642,19 +1023,32 @@ resolved (codec, retention, AD integration depth).
 
 | File | Tasks touching it |
 |---|---|
-| `services/ha-agent/src/.../web_ui/shell.py` | 2 (friendly_time), 3 (camera_display_name), 4 (sticky CSS), 7 (filter chip CSS) |
+| `services/ha-agent/src/.../web_ui/shell.py` | 2 (friendly_time), 3 (camera_display_name), 4 (sticky CSS), 7 (filter chip CSS), 9 (form CSS) |
 | `services/ha-agent/src/.../web_ui/home.py` | 2 (use friendly_time), 3 (headline + where line) |
 | `services/ha-agent/src/.../web_ui/activity.py` | 7 (new file) |
-| `services/ha-agent/src/.../web_ui/mocks.py` | 7 (remove activity mock) |
+| `services/ha-agent/src/.../web_ui/intent.py` | 9 (new file — Rules section + Preferences placeholder) |
+| `services/ha-agent/src/.../web_ui/intent_rule_form.py` | 9 (new file — new + edit form render + parse) |
+| `services/ha-agent/src/.../web_ui/mocks.py` | 7 (remove activity mock), 9 (remove intent mock) |
 | `services/ha-agent/src/.../review_page.py` | 4, 6 (body-only renderers) |
-| `services/ha-agent/src/.../__main__.py` | 4, 6 (wrap legacy routes in shell), 7 (real activity handler) |
+| `services/ha-agent/src/.../__main__.py` | 4, 6, 7, 9 (wrap legacy routes; real activity + intent handlers + rule POSTs) |
+| `services/ha-agent/src/.../rules_store.py` | 9 (new file — SQLite-backed rules + matches) |
+| `services/ha-agent/src/.../rules_runtime.py` | 9 (new file — in-memory cache, scope filter, prompt builder) |
+| `services/ha-agent/src/.../triage.py` | 9 (rule filter + prompt extension + match recording + dispatcher hook) |
+| `services/ha-agent/src/.../reasoning.py` | 9 (VLM prompt + output schema for matched_rules) |
+| `services/ha-agent/src/.../http_api.py` | 9 (/api/intent/rules/* CRUD + test + matches) |
+| `services/ha-agent/src/.../notifier.py` | 9 (rule-matched alert path) |
+| `services/ha-agent/src/.../client.py` | 9 (HA fire_event method) |
 | `services/preprocessor/src/.../event_recorder.py` | 1 (clip writer integration) |
 | `services/preprocessor/src/.../clip_writer.py` | 1 (new file) |
 | `services/preprocessor/src/.../app.py` | 1 (clip serve endpoint) |
 | `services/ha-agent/.../preprocessor_client.py` | 1 (clip fetch method) |
-| `planning/web-ui-design.md` | 5 (new §17 principle), 7 (Part IV ratification) |
+| `planning/web-ui-design.md` | 5 (new §17 principle), 7 (Part IV ratification), 9 (Part VI Rules ratification) |
 | `tests/test_web_ui.py` | 2, 3, 4, 7 |
 | `tests/test_review_page.py` | 4, 6 |
+| `tests/test_rules_store.py` | 9 (new file) |
+| `tests/test_rules_runtime.py` | 9 (new file) |
+| `tests/test_intent_page.py` | 9 (new file) |
+| `tests/test_triage_rules.py` | 9 (new file — integration) |
 
 Conventional Commit prefixes (per the auto-release workflow):
 
