@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.18.0...v0.19.0) (2026-06-04)
+
+
+### Features
+
+* **memory:** drawer skeleton + heuristic dispatcher + wired POST endpoints (Part X §34-35) ([4ca9365](https://github.com/DarinShapiro/Kukii-Home/commit/4ca9365c6a82960a4760be7597cf4025df500e8a))
+* **memory:** unified /memory browse — collapse /intent + /policies (Part IX §28) ([445a317](https://github.com/DarinShapiro/Kukii-Home/commit/445a317a0199ae9d73e804a0274fa6c7e0803f00))
+
 ## [0.18.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.17.0...v0.18.0) (2026-06-04)
 
 
