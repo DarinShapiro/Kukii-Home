@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.11.0...v0.12.0) (2026-06-04)
+
+
+### Features
+
+* **cameras:** live Part II page — list + detail + Task 10 whitelist editor ([e31d5d4](https://github.com/DarinShapiro/Kukii-Home/commit/e31d5d4bf680454d38681500474222948932fce4))
+
 ## [0.11.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.10.0...v0.11.0) (2026-06-04)
 
 

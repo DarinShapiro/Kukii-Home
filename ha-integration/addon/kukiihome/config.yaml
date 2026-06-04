@@ -2,7 +2,7 @@
 # https://developers.home-assistant.io/docs/add-ons/configuration
 
 name: Kukii-Home
-version: '0.11.0'
+version: '0.12.0'
 slug: kukiihome
 description: AI-powered home security and presence understanding
 url: https://github.com/DarinShapiro/Kukii-Home
