@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.7.0 — 2026-06-04
+
+**Preview: a new product Web UI you can try alongside the existing one.**
+
+The Web UI is being rebuilt around what Kukii-Home actually is — a home AI
+agent, not a status dashboard. This release lands the skeleton of that new UI
+**non-disruptively**: the page you've always used (system status, cameras,
+notifications, logs) is exactly where it was. A small **✨ Try the new UI**
+chip on it opens the new home page.
+
+What's there to try:
+
+- **Home (fleshed)** — top-line state in plain English; a "Needs attention"
+  row for unnamed tracks waiting to be labeled; an activity stream of the
+  most-recent incidents (passive vs action lanes, friendly relative times,
+  no day boundaries); a small system stripe at the bottom.
+- **Activity, Areas, Intent, Policies, Cameras, Diagnostics** — credible
+  *Coming soon* skeletons so the navigation works end-to-end. Each tab
+  explains what'll go there. The Intent tab shows a sample of what
+  natural-language rules will look like.
+- **Identities** — the same Review page you've been using, now under the
+  new shell.
+
+The legacy UI is unchanged. When the new UI is ready to be the default, a
+later release will flip the switch.
+
 ## 0.6.0 — 2026-06-03
 
 **New: open a track to see it move — and one-tap confirm who it is.**
