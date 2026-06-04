@@ -1,15 +1,36 @@
-# Identity Resolution & Enrollment — UI Design Spec
+# Kukii-Home — Product Web UI Design Spec
 
-**Status:** Draft (design only; no implementation). Companion to Build #292
-(always-embed → persist → resolve). Maps the end-to-end information
-architecture for making the identity loop *usable*.
+**Status:** Living design document, grows by ratified section. Anchors the
+add-on's web UI (ingress panel) and the implicit coordination with the HA
+Companion / Lovelace mobile surfaces. Implementation tracking lives in epics
+and the commit history; this doc captures **principles + IA + screen shapes**
+so the UI converges instead of accreting.
 
-**Refs:** `planning/epics/10-identity-recognition.md` (the system design this
-serves), `services/preprocessor` (owns the store + frames + recognizer),
-`frontend/operator-dashboard` (React web UI, currently skeleton),
-`frontend/ha-cards` (in-HA surfaces).
+**Refs:** `planning/epics/10-identity-recognition.md` (the system the UI sits
+on top of), `services/preprocessor` (owns the store + frames + recognizer),
+`services/ha-agent` (owns the add-on Web UI + alert flow),
+`frontend/operator-dashboard` (greenfield React dashboard, not yet wired).
+
+**How to read this:** the doc is organized as **ratified parts**, each one a
+screen or subsystem we've designed end-to-end. Earlier parts ratified first;
+later parts hang off the same principles. The cross-cutting principles
+(§7, §7.5, §7.6) and shared vocabulary (capability matrix, external-dependency
+triple) apply across all parts unless a part says otherwise.
+
+| Part | Surface | Status |
+|---|---|---|
+| **I** | Identity & Review (Inbox, track detail, candidate confirm, merge/split) | Ratified + partially built (§1–9 below) |
+| **II** | Per-camera detail | Ratified, not built (§10) |
+| **III** | Home page (*Needs Attention*) | TBD — next |
+| **IV** | Activity stream | TBD |
+| **V** | Areas | TBD |
+| **VI** | Policies (VLM-authored, viewable + revocable) | TBD |
+| **VII** | Diagnostics + dev loop | TBD |
+| **VIII** | HA Companion / Lovelace surfaces | partial (§6 below, push only) |
 
 ---
+
+# PART I — Identity & Review
 
 ## 1. The reframe this design rests on
 
@@ -662,3 +683,187 @@ on the hot path."
 - **Threshold ownership:** per-camera bands via the existing `/tune` knob path,
   or a dedicated identity-settings screen?
 ```
+
+---
+
+# PART II — Per-camera detail
+
+Ratified 2026-06-04. The per-camera page is the dual of the activity stream:
+the activity stream answers *"what happened on this camera"* (chronological,
+filtered); per-camera detail answers ***"what is this camera, how does the
+system treat it, is it healthy."*** Two sides of the same coin — different
+shapes, different jobs, neither tries to be the other. The whole design rests
+on three principles that apply well beyond this page.
+
+## 10. Principles (load-bearing, apply broadly)
+
+These three are the design's spine — they also constrain the home page, the
+activity stream, and every later surface, so they're stated here once.
+
+**P1 · Permissive at the capability layer; selective at the content layer.**
+Don't pre-gate recognition by assumptions about what a camera *might* see.
+Every model the system has, we try on every camera; the pipelines self-gate by
+what they actually detect (face only embeds when SCRFD finds one). The UI
+**never** offers per-camera "enable face / body / gait" toggles — those would
+just be a way to silently refuse a face that did appear. Same shape as the
+small-gallery direction (§7.5): propose against what the data actually
+contains, commit conservatively based on confidence.
+
+**P2 · Meet the camera where it is; emit a normalized EvidencePacket regardless.**
+Cameras have wildly varying native AI. The system *discovers* what each offers,
+*normalizes* into a consistent downstream interface via a capability matrix,
+and *exposes the source-of-truth* per signal. Downstream consumers (rules,
+VLM, identity, dispatcher) see the same shape whether `person` came from the
+camera natively, from Agent DVR, or from our preprocessor.
+
+**P3 · The system is embedded in a network it doesn't own — be a good citizen.**
+We don't have full control authority over the devices it sits on top of. When
+we have an API, we use it; when we don't, we delegate gracefully to the user
+and treat external state as a *watched dependency*. Every external dependency
+carries the same triple — **link-out, re-scan, drift surfaces to "needs
+attention"** — and the same vocabulary, so users learn the pattern once.
+
+## 11. Page content
+
+It answers *"what is this camera, how does the system treat it, is it
+healthy."* It explicitly does **not** answer *"what happened on this camera"*
+(that's the activity stream, filtered by camera).
+
+| Section | R/W | Contents |
+|---|---|---|
+| **At a glance** | R | Refreshable still, connection state, 24h event count |
+| **Identity & role** | W | Friendly name, area, role, indoor/outdoor, public-facing flag |
+| **Detection capability matrix** | R + override | Per-signal source-of-truth + delegate affordances (§12) |
+| **Privacy posture** | W | Privacy zones, capture flags, retention overrides |
+| **Tuning** | W | Per-camera thresholds (existing `/tune` knobs); tracker config (ReID + capture-fps from §7.6) |
+| **Health** | R | Stream + decode/queue/drop metrics; FP rate trend (Loop 1); VLM-reported quality issues + tuner responses (Loop 2) |
+| **Active policies** | R + revoke | Dismissals + TransientIntents scoped to this camera, with rationale + revoke (links forward to Part VI) |
+| **Activity link out** | link | "N events today" → activity stream filtered to this camera |
+
+```
+┌ Pool cam ── [● connected · 12 events today] ──── [⋯] ┐
+│  [ current still + bbox of last detection ]            │
+│                                                        │
+│  Identity & role                                       │
+│    Area: Pool · Role: pool watch                       │
+│    Outdoor · faces public: no                          │
+│                                                        │
+│  Detection capabilities & sources                      │
+│    motion       NATIVE  (Dahua SMD)              ✓     │
+│    person       AUGMENTED  (Dahua trigger →      ✓     │
+│                  our YOLO classify)                    │
+│    vehicle      SUBSTITUTED  (our YOLO)          ✓     │
+│    dog/cat      SUBSTITUTED  (our YOLO)          ✓     │
+│    package      MISSING — no source              ⚠     │
+│      ↳ configured on the camera · [Open] [Re-scan]     │
+│                                                        │
+│  Privacy                                               │
+│    2 privacy zones (edit)                              │
+│                                                        │
+│  Tuning                                                │
+│    detection conf ≥ 0.45 · BoT-SORT @ 4fps · ReID off  │
+│                                                        │
+│  Health                                                │
+│    Stream 100% · 0 drops/24h                           │
+│    FP rate (7d): 2% ↓                                  │
+│    1 quality issue: low light @ 22:14 → CLAHE applied  │
+│                                                        │
+│  Active policies                                       │
+│    Dismiss {dog} on this cam · expires Wed 8pm [revoke]│
+│                                                        │
+│  Activity: 12 events today → see stream                │
+└────────────────────────────────────────────────────────┘
+```
+
+## 12. Detection capability matrix — vocabulary
+
+Five source-of-truth states per signal (motion, person, vehicle, pet, package,
+line-cross, tamper, …):
+
+- **NATIVE** — camera produces it, we pass it through
+- **AUGMENTED** — camera produces it as a *trigger*, our pipeline enriches
+- **SUBSTITUTED** — camera doesn't produce it, we run our own
+- **DELEGATED** — Agent DVR / NVR produces it for us
+- **MISSING** — nobody produces it; if "critical" → red on this page **and** on
+  the home page's *Needs Attention*
+
+Each row carries the **external-dependency triple** inline (P3):
+
+```
+person   AUGMENTED  (Dahua trigger → our YOLO)         ✓
+         ↳ configured on the camera · [Open] [Re-scan]
+```
+
+**Criticality is narrow.** Motion is the only **mandatory** signal — without
+a motion source, the camera has no event triggers and is invisible to the
+agent. Person/vehicle/pet are *graded* — missing them disables specific alert
+classes (rule scenarios that depend on `kind=person`, etc.), not the whole
+camera. Face / plate are recognition layers downstream of detection and never
+"critical" in this sense. Identity modalities (body / face / gait) are the
+preprocessor's, not the camera's — they don't appear in the matrix at all.
+
+## 13. Defaults & overrides
+
+- The system **auto-chooses** defaults from the discovered capability profile —
+  use NATIVE where the source is trusted, AUGMENT where native is a useful
+  trigger, SUBSTITUTE where native is missing or unreliable.
+- Per-signal **overrides** are available but rare — *"don't trust Reolink's
+  person on this cam," "force-substitute," "ignore native motion under
+  threshold X."* **Configure-by-exception, not configure-by-mapping.**
+- The vast majority of cameras: the user touches *nothing* in the matrix; it
+  surfaces what's discovered and what's chosen, and that's it.
+
+## 14. The external-dependency pattern — generalized from per-camera
+
+The same link-out / re-scan / drift triple applies to *every* dependency the
+system has on something it doesn't own. The per-camera page is just the most
+visible instance; future surfaces (HA integration, NVR config, network) reuse
+this UX verbatim.
+
+| Dependency | Link out to | Re-scan refreshes | Drift to surface |
+|---|---|---|---|
+| Camera firmware/config | camera web UI | capability matrix + stream | event-type toggles, sensitivity, credentials |
+| HA cameras + entities | HA Settings | discovered entities | a camera deleted/renamed in HA |
+| Agent DVR | AD admin | AD's detection profile | AD detection disabled on a cam |
+| Frigate (future) | Frigate UI | Frigate config | object filter changed |
+| Network / mDNS | (none, observable) | reachability + IP | camera IP changed via DHCP |
+
+**Re-scan is both manual *and* scheduled** (daily + on stream-reconnect).
+Detected drift becomes a row on the home page's *Needs Attention* lane — not
+buried in the per-camera page — so misconfiguration doesn't silently degrade
+for weeks before anyone notices.
+
+## 15. Explicit non-goals (the not-an-NVR line)
+
+Worth naming the boundary, because otherwise the page keeps growing:
+
+- No multi-camera grid view *(Agent DVR's job; we read from it).*
+- No scrubbing / clip export / arbitrary playback *(the NVR's job).*
+- No live RTSP in the browser — refreshable snapshot is enough for "is it
+  framed right." Live tile views break ingress + cost a lot.
+- No 24/7 motion search — "find every appearance" lives on the *person*
+  timeline (Part I), not on a camera-time axis.
+- No per-camera identity-signal toggles (P1).
+- No mounting / orientation as a config field (P1) — a roof-pointed camera
+  that happens to see a face *should* try to recognize it.
+
+## 16. Implications upstream (other parts must honor these)
+
+These ripple beyond per-camera; surfaces designed in later parts must accept
+them as constraints:
+
+- **Activity stream needs provenance per event** — `via Reolink` /
+  `via preprocessor` / `via AD` tags. Both for trust (native AI quality varies)
+  and for debugging *"why did this misfire — was it the native classifier or
+  ours?"*  (Part IV.)
+- **Home page needs a computational-dependency stripe** — distinguishes
+  *"cameras still functional if preprocessor goes down"* from *"cameras
+  dependent on preprocessor."* That's the *real* "is the system working"
+  question, more useful than a flat preprocessor up/down. (Part III.)
+- **A system-wide capability view may belong in Diagnostics** — *"across all
+  my cameras, what's the source-of-truth distribution"* — not on the home
+  page. (Part VII.)
+- **Drift detection writes to the home page's *Needs Attention* lane**, not
+  here. The per-camera page shows the *current* state; the home page shows
+  *what changed.* (Part III.)
+
