@@ -1018,6 +1018,30 @@ provenance per row (P2 — emit a normalized EvidencePacket regardless of
 source), and dependency drift surfaces here, not on the page where the
 dependency lives (P3 — be a good citizen, surface state changes centrally).
 
+### Corollary — every reasoned event surfaces (iteration 1 Task 5)
+
+> **Every event the system reasoned about — whether or not an alert was
+> sent — surfaces in the activity stream as at least a passive row. Silent
+> events are a bug.**
+
+This was implicit in the principle above but worth stating explicitly because
+it constrains the alert-feed scope: ha-agent's `alert_log` (or whatever feeds
+the home stream) must include events that triage processed and *chose not to
+escalate*, not just events that produced a push notification. Otherwise the
+"system is reasoning" trust line lies — a quiet day might mean *"nothing was
+reasoned about today"* rather than *"everything was reasoned about and
+nothing was actionable."*
+
+Concrete implication: when a per-camera motion event reaches triage and the
+VLM (or a dismissal policy, or the dispatcher) chooses to dismiss, a passive
+row still lands in the activity stream with the dismissal reason inline. This
+includes pool-cam-style cameras whose events might otherwise never produce a
+push notification on their own — they must still appear in the stream.
+
+This is the constraint that makes the home page legible to a watchful user:
+no camera is *invisible* to the activity surface, even if it never produces
+an alert. The feed scope is *reasoned events*, not *escalated alerts*.
+
 ## 18. Page shape
 
 Three zones, fixed order, top-to-bottom:

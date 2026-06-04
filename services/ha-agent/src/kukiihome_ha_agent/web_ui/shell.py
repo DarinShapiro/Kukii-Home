@@ -114,6 +114,22 @@ h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:#9aa7b8;
 .system-stripe .lines{margin-top:8px;padding-left:8px;border-left:2px solid #262c36}
 .system-stripe .lines div{padding:3px 0}
 
+/* ─── thumbnails — aspect-ratio handling (Task 5) ───────────────── */
+/* Standard activity-row thumbnail container: 16:9 wide-default with cover-
+ * crop. Pool-cam (top-down 4K) gets cropped heavily here — that's accepted
+ * for a thumbnail; the clip player below honors the source aspect. */
+.thumb{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;
+  background:#0a0c10;border-radius:6px}
+.thumb.portrait{aspect-ratio:3/4}  /* opt-in for top-down cams where the
+                                      subject lives in the vertical axis */
+
+/* Clip / event-detail video player: max-width constrained, native aspect
+ * preserved (no distortion). Used by the (future) per-event trace and
+ * the existing track-detail GIF — same container, different media. */
+.clip-player{display:block;width:100%;max-width:480px;height:auto;
+  margin:0 auto 14px;border-radius:10px;background:#0a0c10;
+  border:1px solid #262c36}
+
 /* ─── activity filter strip (Task 7 / Part IV) ──────────────────── */
 form.filters{display:flex;gap:14px;flex-wrap:wrap;align-items:center;
   padding:10px 12px;background:#13171e;border:1px solid #1c2129;
