@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.20.0...v0.21.0) (2026-06-04)
+
+
+### Features
+
+* **memory:** /identities expansion + per-identity detail (Part IX §29) ([6680bf9](https://github.com/DarinShapiro/Kukii-Home/commit/6680bf9b264f652b2dd4c95c3647a2ef4cd7980e)), closes [#292](https://github.com/DarinShapiro/Kukii-Home/issues/292)
+
 ## [0.20.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.19.0...v0.20.0) (2026-06-04)
 
 
