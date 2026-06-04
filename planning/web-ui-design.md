@@ -684,6 +684,118 @@ on the hot path."
   or a dedicated identity-settings screen?
 ```
 
+## 7.7 Action taxonomy — agent vs HA, four classes (design direction)
+
+Ratified 2026-06-04. The architectural principle behind every action surface
+in the product. Resolves the *"why does ha-agent emit events to HA but also
+call HA services directly?"* question in one frame.
+
+> **The agent perceives, reasons, and reports. HA acts on top of structured
+> outcome events. But the agent ALSO takes direct actions for its own
+> perception (transient adjustments to see better) and for protective
+> responses tightly coupled to the reasoning context (lock the door when it
+> reasons "intrusion") — both within a per-camera whitelist + policy.**
+
+There are **four** action classes, distinguished by *who decides*, *what
+mechanism executes*, and *what lifecycle*:
+
+| # | Class | Decided by | Executed via | Lifecycle |
+|---|---|---|---|---|
+| **1** | **Reasoning state** | The agent's own internal pipeline | ha-agent internal DB writes | Persistent, never leaves the agent |
+| **2** | **Perception actions** | The VLM, mid-reasoning, in its structured output (`perception_requests`) | Direct HA service call + camera API, executed by the dispatcher | **Temporary** — applied, perceived-with, **reverted** after assessment |
+| **3** | **Protective / responsive actions** | The VLM's `recommendations`, gated by dispatcher policy | Direct HA service call (or camera API), executed by the dispatcher | **Persistent** — does NOT auto-revert; the user owns the undo |
+| **4** | **Outcome notifications** | The reasoned alert itself | `kukiihome_alert` event + small status entities; HA automations branch on severity | Discrete event; HA owns delivery |
+
+Classes 2 and 3 both make direct HA service calls but differ on **lifecycle**
+(2 reverts, 3 persists), **purpose** (2 improves perception, 3 mitigates the
+assessed situation), **whitelist scope** (2 is narrow — camera-adjacent
+lights/PTZ; 3 is user-configured per-camera — locks, sirens, floods, …), and
+**policy gating** (2 has none; 3 has Epic 10's full policy — per-action-class
+confidence threshold, time-of-day rules, user-trust level, redundancy
+checks).
+
+### The intruder example, walked
+
+Backyard cam spots an unknown person climbing over the fence:
+
+1. **Class 1** — VLM call uses internal reasoning state: AttentionMode flag on
+   backyard, KnownActor list (no match for this person), prior policies, RAG
+   over past similar incidents.
+2. **Class 2** — VLM emits `perception_requests: [floods on red, re-look at
+   +2 s]`. Dispatcher executes via direct service call; reverts the flood
+   adjustment after the assessment finalizes.
+3. **Class 3** — VLM emits `recommendations: [lock back door, activate yard
+   siren 15 s, floods on red sustained]`. Dispatcher applies policy
+   (confidence ≥ 0.9 for lock, ≥ 0.85 for siren, etc.); executes the
+   whitelisted ones; *does not* revert.
+4. **Class 4** — Dispatcher emits a `kukiihome_alert` event with
+   `severity=critical`, `scene_description=…`, and crucially
+   `actions_taken: [lock.back_door, switch.yard_siren, light.backyard_floods]`
+   so HA automations can render *"the agent already locked the door + sounded
+   the siren"* in the notification body.
+
+The same incident exercises all four classes. Class 1 is invisible to HA;
+class 2 is transient and revert-tracked; class 3 is the agent acting on the
+world; class 4 is the agent reporting what happened (and what it already
+did). HA automations get the event and decide *delivery* (phone, Sonos,
+which channels) — they don't decide *whether to lock the door*; the agent
+did that.
+
+### Whitelist + policy
+
+Classes 2 and 3 are constrained by a per-camera whitelist + policy block
+configured in the per-camera page (Part II §11 *Tuning* section, extended):
+
+```
+Per-camera authorized actions (whitelist + policy):
+  Perception (class 2)
+    light.backyard_floods    [allow]  max-duration 60s
+    switch.backyard_ir_cut   [allow]
+    PTZ + zoom               [allow]  on this cam (capability)
+  Protective (class 3)
+    lock.back_door           [allow]  if severity≥critical AND confidence≥0.95
+                                       AND not (6am–10pm)
+    switch.yard_siren        [allow]  if severity=critical  max-duration 30s
+    light.backyard_floods    [allow]  if severity≥normal    max-duration 600s
+```
+
+The VLM can *recommend* whatever it wants; the dispatcher silently no-ops
+anything outside the whitelist (logged in the trace as *"recommendation X
+rejected: not in whitelist for this camera"*). Per-action-class policy is
+the deterministic gate on top of the VLM's probabilistic recommendation.
+
+### Composition with HA automations
+
+The user's HA automations *can* fire on `kukiihome_alert` and take their
+own actions on top of what the agent did. Two patterns are explicitly
+supported:
+
+- **"Always also":** *"on any critical alert, also start Frigate recording
+  for the camera in question."* The agent's locks + sirens already fired;
+  this is layered on top.
+- **"Only when the agent didn't":** automations can read
+  `actions_taken` and skip what's already done. Avoids double-firing
+  scenes like *"if the agent didn't already turn on yard lights, do so."*
+
+Most actions are **idempotent** (lock-already-locked is a no-op; light-on-
+already-on is a no-op), so double-action is usually harmless. The
+explicit awareness comes from `actions_taken` in the event payload.
+
+### Implications across the doc
+
+- **Part II § Tuning** picks up the per-camera whitelist + policy editor for
+  classes 2 and 3.
+- **Part III §22 trace page** renders both perception cycles (class 2) and
+  protective actions (class 3) inline in the audit chain, with revert
+  status for class 2 and a *"persisted — undo on the camera page"* tag
+  for class 3.
+- **Part VI Rules** (Iteration 1 Task 9) emits class-4 outcome events; rule
+  matching is the most common path to a class-3/class-4 firing but not the
+  only one (VLM emergent reasoning without a rule match can also produce
+  recommendations).
+- **Diagnostics (Part VIII)** carries the persistent action log: every class
+  3 action ever taken, who/why/when, with the trace deep-link.
+
 ---
 
 # PART II — Per-camera detail
