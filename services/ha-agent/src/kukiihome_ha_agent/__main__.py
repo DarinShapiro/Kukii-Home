@@ -214,6 +214,11 @@ class BootState:
     policy_store: Any | None = None
     """Iter 2.D: dismissal policies + transient intents + policy_hits audit
     log. Read by /policies, reverse-linked from passive activity rows."""
+    provenance_store: Any | None = None
+    """Iter 3 (Part X §36): sessions + transcripts + guidance_provenance.
+    Single source of truth for *how* each guidance entry came to exist —
+    conversation / form / system_proposed — and the audit thread it traces
+    back to. Read by /memory + the alert detail audit chain + the drawer."""
     health_service: Any | None = None
     """Epic 15: resilience watchdog + health registry for this add-on
     process. Drives the F4 (HA down) probe and backs the /health +
@@ -2322,6 +2327,67 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         boot.area_store.soft_delete(request.match_info["area_id"])
         raise web.HTTPSeeOther(location="areas")
 
+    async def v2_memory(request: web.Request) -> web.Response:
+        """Iter 3 / Part IX §28: unified guidance browse. Aggregates rules
+        + preferences + policies + area postures, classifies each entry
+        to one or more contexts, renders grouped."""
+        import time as _time
+
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.memory import render_memory_page
+        from kukiihome_ha_agent.web_ui.memory_data import (
+            build_guidance_entries,
+        )
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        cut = request.rel_url.query.get("cut") or "by_context"
+        if cut not in ("by_context", "by_type"):
+            cut = "by_context"
+
+        rules = (
+            boot.rules_store.all_rules()
+            if getattr(boot, "rules_store", None) else []
+        )
+        prefs = (
+            boot.preferences_store.get()
+            if getattr(boot, "preferences_store", None) else None
+        )
+        # Surface BOTH active dismissals AND TIs in /memory. Stale-revoked
+        # entries hide naturally because all_policies filters them by default.
+        pols: list = []
+        if getattr(boot, "policy_store", None):
+            pols.extend(boot.policy_store.all_policies(kind="dismissal"))
+            pols.extend(boot.policy_store.all_policies(kind="transient_intent"))
+        areas = (
+            boot.area_store.all_areas()
+            if getattr(boot, "area_store", None) else []
+        )
+        entries = build_guidance_entries(
+            rules=rules, preferences=prefs, policies=pols, areas=areas,
+            provenance_store=getattr(boot, "provenance_store", None),
+        )
+        body = render_memory_page(entries, cut=cut, now_ts=_time.time())
+        return web.Response(
+            text=render_shell("memory", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_intent_redirect(request: web.Request) -> web.Response:
+        """301 redirect from old /intent → /memory?cut=by_type. The Iter 2
+        /intent and /policies pages collapse into one under Part IX §28."""
+        qs = request.rel_url.query_string
+        target = "memory?cut=by_type"
+        if qs:
+            target = f"{target}&{qs}"
+        raise web.HTTPMovedPermanently(location=target)
+
+    async def v2_policies_redirect(request: web.Request) -> web.Response:
+        qs = request.rel_url.query_string
+        target = "memory?cut=by_type"
+        if qs:
+            target = f"{target}&{qs}"
+        raise web.HTTPMovedPermanently(location=target)
+
     async def v2_intent(_request: web.Request) -> web.Response:
         # Task 9: real page from RulesStore. Falls back to a brief "rules
         # storage unavailable" notice when the store isn't wired (older
@@ -2719,7 +2785,15 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     app.router.add_get("/areas/{area_id}/edit", v2_area_edit)
     app.router.add_post("/areas/{area_id}", v2_area_save)
     app.router.add_post("/areas/{area_id}/delete", v2_area_delete)
-    app.router.add_get("/intent", v2_intent)
+    # Iter 3 (Part IX §28): unified guidance browse. /intent and /policies
+    # GET requests 301-redirect here for backward-compat. Per-rule + per-
+    # policy CRUD subpaths stay live — they're the per-type detail forms
+    # /memory rows link to.
+    app.router.add_get("/memory", v2_memory)
+    # NOTE: keeping the legacy /intent listing handler reachable via
+    # v2_intent for now (it's referenced by other tests / tools). The
+    # public list redirect lives at the top-level route.
+    app.router.add_get("/intent", v2_intent_redirect)
     # Task 9: rules CRUD via the /intent page. The matches subpath is
     # registered before the generic edit route so the URL parser doesn't
     # treat "matches" as a rule_id.
@@ -2733,7 +2807,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     app.router.add_post("/intent/rules/{rule_id}/enable", v2_intent_rule_enable)
     app.router.add_post("/intent/rules/{rule_id}/delete", v2_intent_rule_delete)
     app.router.add_get("/intent/rules/{rule_id}/matches", v2_intent_rule_matches)
-    app.router.add_get("/policies", v2_policies)
+    app.router.add_get("/policies", v2_policies_redirect)
     # Iter 2.D: revoke endpoint.
     app.router.add_post("/policies/{policy_id}/revoke", v2_policy_revoke)
     app.router.add_get("/cameras", v2_cameras)
@@ -3128,6 +3202,11 @@ async def _run() -> None:
     # Iter 2.D: policies store (dismissals + transient intents + hits).
     from kukiihome_ha_agent.policy_store import PolicyStore
     boot.policy_store = PolicyStore(path="/data/kukiihome/policies.db")
+    # Iter 3 (Part X §36): provenance store — sessions + transcripts +
+    # per-guidance audit. Underlies /memory, the drawer, and the audit
+    # chain extension on /alert/{id}.
+    from kukiihome_ha_agent.provenance_store import ProvenanceStore
+    boot.provenance_store = ProvenanceStore(path="/data/kukiihome/sessions.db")
 
     # Epic 10.8.1: per-event persistent store. Lives next to
     # alerts.json in the Supervisor's /data volume. Subscribed to

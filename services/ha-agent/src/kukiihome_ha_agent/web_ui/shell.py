@@ -21,9 +21,11 @@ from typing import Any
 NAV_ITEMS: list[tuple[str, str]] = [
     ("home",        "Home"),
     ("activity",    "Activity"),
+    # Iter 3 (Parts IX+X): Intent + Policies collapse into Memory. The
+    # /intent and /policies URLs 301-redirect for backward-compat with
+    # bookmarks + HA Lovelace card links.
+    ("memory",      "Memory"),
     ("areas",       "Areas"),
-    ("intent",      "Intent"),
-    ("policies",    "Policies"),
     ("review",      "Identities"),
     ("cameras",     "Cameras"),
     ("diagnostics", "Diagnostics"),
@@ -257,6 +259,19 @@ a.camera-tile:hover{border-color:#3a4a64}
 .back-link{display:inline-block;color:#9aa7b8;font-size:12px;
   text-decoration:none;margin-bottom:10px}
 .back-link:hover{color:#cfd6df;text-decoration:underline}
+
+/* ─── /memory unified browse (Iter 3 / Part IX §28) ──────────── */
+.memory-drawer-trigger{margin:18px 0 12px}
+.memory-drawer-trigger .btn{font-size:14px;padding:10px 16px}
+.memory-cut{display:flex;gap:6px;margin-bottom:14px;
+  border-bottom:1px solid #1f2632}
+.memory-cut a{padding:8px 14px;color:#9aa7b8;text-decoration:none;
+  font-size:13px;border-bottom:2px solid transparent;
+  margin-bottom:-1px;transition:color 100ms ease}
+.memory-cut a:hover{color:#cfd6df}
+.memory-cut a.active{color:#cfd6df;border-bottom-color:#5d8aa8}
+.origin-icon{font-size:11px;color:#7e8a9a;cursor:help;margin-left:6px}
+.rule-row .rule-meta{font-size:12px;margin-top:4px}
 """
 
 
