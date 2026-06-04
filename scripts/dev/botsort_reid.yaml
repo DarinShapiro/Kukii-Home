@@ -1,0 +1,23 @@
+# BoT-SORT with appearance ReID, tuned for the LOW-FRAME-RATE event footage
+# (~1 fps), where a subject moves far between frames so motion/IoU association
+# fails and spawns fragment track IDs (the 1-frame top-of-head splinters).
+# ReID re-links those fragments by *appearance* across the motion gap.
+#
+# Use: model.track(..., tracker="scripts/dev/botsort_reid.yaml")
+
+tracker_type: botsort
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+new_track_thresh: 0.25
+track_buffer: 60          # keep lost tracks alive longer (~60s at 1fps) so a
+                          # re-appearing subject can be re-associated, not re-IDed
+match_thresh: 0.8
+fuse_score: True
+gmc_method: sparseOptFlow
+
+# ── ReID ──
+proximity_thresh: 0.1     # LOW: don't require box overlap to consider ReID — at
+                          # 1fps the boxes barely overlap frame-to-frame
+appearance_thresh: 0.7    # appearance similarity to accept a re-link
+with_reid: True           # the whole point: associate by appearance, not just motion
+model: auto               # use the detector's own features as the ReID embedding

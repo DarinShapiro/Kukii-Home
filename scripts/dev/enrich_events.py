@@ -46,7 +46,8 @@ COCO_MAP = {
 
 
 def enrich_event(
-    model, names, event_dir: Path, store: DetectionStore, imgsz: int, embed_pipelines=None
+    model, names, event_dir: Path, store: DetectionStore, imgsz: int, embed_pipelines=None,
+    tracker: str | None = None,
 ) -> int:
     manifest = json.loads((event_dir / "event.json").read_text())
     eid = manifest["event_id"]
@@ -78,8 +79,14 @@ def enrich_event(
         # (an embedding with no track can't be correlated to anything).
         # persist=False on the first frame starts a fresh tracker so IDs +
         # Kalman motion state don't bleed from the previous event into this
-        # one (different time, different scene).
-        r = model.track(im, imgsz=imgsz, conf=floor, persist=tracker_started, verbose=False)[0]
+        # one (different time, different scene). A custom `tracker` config
+        # (e.g. botsort_reid.yaml) enables appearance ReID to re-link fragments.
+        track_kwargs = {
+            "imgsz": imgsz, "conf": floor, "persist": tracker_started, "verbose": False,
+        }
+        if tracker:
+            track_kwargs["tracker"] = tracker
+        r = model.track(im, **track_kwargs)[0]
         tracker_started = True
         frame_rows: list[DetectionRow] = []
         for i in range(len(r.boxes.cls)):
@@ -208,6 +215,9 @@ def main() -> None:
     ap.add_argument("--embed", action="store_true",
                     help="also run the enabled always-embed identity pipelines and persist "
                          "embeddings (config via KUKIIHOME_PREPROCESSOR_* env, e.g. BODY_ID=true)")
+    ap.add_argument("--tracker", default=None,
+                    help="tracker config for model.track (e.g. scripts/dev/botsort_reid.yaml to "
+                         "enable appearance ReID; default = ultralytics BoTSORT, motion-only)")
     args = ap.parse_args()
 
     from ultralytics import YOLO
@@ -236,7 +246,8 @@ def main() -> None:
             eid = ev_dir.name
             if store.is_enriched(eid):
                 continue
-            n = enrich_event(model, names, ev_dir, store, args.imgsz, embed_pipelines)
+            n = enrich_event(model, names, ev_dir, store, args.imgsz, embed_pipelines,
+                             tracker=args.tracker)
             print(f"enriched {eid}: {n} detections", flush=True)
             did += 1
         if not args.loop:
