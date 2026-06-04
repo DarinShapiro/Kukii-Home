@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.19.0...v0.20.0) (2026-06-04)
+
+
+### Features
+
+* **memory:** LLM dispatcher provider + composite fallback (Part X §35) ([35d2af2](https://github.com/DarinShapiro/Kukii-Home/commit/35d2af2c554c6506eda7725d7bd24ebb550b54b5))
+
 ## [0.19.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.18.0...v0.19.0) (2026-06-04)
 
 
