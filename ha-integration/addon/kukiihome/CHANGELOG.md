@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.9.0...v0.10.0) (2026-06-04)
+
+
+### Features
+
+* **dispatcher:** perception + protective action runtime (classes 2 & 3) ([01e46d4](https://github.com/DarinShapiro/Kukii-Home/commit/01e46d49619bdba2db46e815cb934f9369122e38))
+
 ## [0.9.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.8.0...v0.9.0) (2026-06-04)
 
 
