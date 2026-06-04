@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.23.0...v0.24.0) (2026-06-04)
+
+
+### Features
+
+* **memory:** drift detection — suggest re-classification for stale guidance (Part X §39) ([1fb6e21](https://github.com/DarinShapiro/Kukii-Home/commit/1fb6e2163cafc11721f8c07e6116cc13ba6747c2))
+
 ## [0.23.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.22.0...v0.23.0) (2026-06-04)
 
 
