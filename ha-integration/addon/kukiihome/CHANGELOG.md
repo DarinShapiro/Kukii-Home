@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.8.0...v0.9.0) (2026-06-04)
+
+
+### Features
+
+* **intent:** rules editor MVP — store + runtime + UI + CRUD + shortcut firing ([b9751ef](https://github.com/DarinShapiro/Kukii-Home/commit/b9751ef5248031e5a6c558a3d0a4e0c45620ab92))
+
 ## [0.8.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.7.0...v0.8.0) (2026-06-04)
 
 
