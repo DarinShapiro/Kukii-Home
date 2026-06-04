@@ -14,6 +14,10 @@
  */
 'use strict';
 
+// Smoke-tested 2026-06-04 against a workflow_dispatch + a non-releasing push:
+// confirmed semantic-release runs, analyzes commits, classifies chore/ci as
+// non-releasing, and the downstream build skips cleanly.
+
 const fs = require('fs');
 
 const version = process.argv[2];
