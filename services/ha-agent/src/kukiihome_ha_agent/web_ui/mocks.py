@@ -31,20 +31,9 @@ def _coming_soon(
     )
 
 
-def render_areas_page() -> str:
-    return (
-        "<h1>Areas</h1>"
-        "<div class='sub'>Areas are conceptual zones (Pool, Driveway, Front "
-        "porch, Backyard) that group cameras and carry AttentionMode + "
-        "normal-hours + role posture. The reasoner uses these to shape its "
-        "judgment per area.</div>"
-        + _coming_soon(
-            "Coming soon",
-            "Create + rename areas, assign cameras, set AttentionMode + "
-            "normal-hours, view per-area activity.",
-            ref="planning/web-ui-design.md — Part V (Areas).",
-        )
-    )
+# NOTE: render_areas_page() removed in Iter 2.C — /areas is now a live
+# page served from kukiihome_ha_agent.web_ui.areas. See planning/
+# web-ui-design.md Part V + AreaStore in area_store.py.
 
 
 # NOTE: render_intent_page() removed in Task 9 — /intent is now a live page

@@ -204,6 +204,10 @@ class BootState:
     action_store: Any | None = None
     """Task 10: SQLite-backed perception + protective whitelists + audit log.
     Read by the cameras page's whitelist editor and the action runtimes."""
+    area_store: Any | None = None
+    """Iter 2.C: SQLite-backed conceptual zones (Pool, Backyard, ...) +
+    camera assignments + AttentionMode + normal-hours. Read by /areas,
+    /intent rule scope picker, and the reasoner."""
     health_service: Any | None = None
     """Epic 15: resilience watchdog + health registry for this add-on
     process. Drives the F4 (HA down) probe and backs the /health +
@@ -2223,8 +2227,75 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
 
     async def v2_areas(_request: web.Request) -> web.Response:
-        from kukiihome_ha_agent.web_ui.mocks import render_areas_page
-        return _v2_mock_response(active="areas", body_html=render_areas_page())
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.areas import render_areas_list
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        if getattr(boot, "area_store", None) is None:
+            body = "<h1>Areas</h1><div class='empty'>Area store unavailable.</div>"
+        else:
+            body = render_areas_list(boot.area_store.all_areas())
+        return web.Response(
+            text=render_shell("areas", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_area_new(_request: web.Request) -> web.Response:
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.areas import render_area_form
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        body = render_area_form(
+            None, available_cameras=_intent_known_cameras(boot),
+        )
+        return web.Response(
+            text=render_shell("areas", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_area_edit(request: web.Request) -> web.Response:
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.areas import render_area_form
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        if getattr(boot, "area_store", None) is None:
+            return web.HTTPServiceUnavailable(text="area store unavailable")
+        area_id = request.match_info["area_id"]
+        area = boot.area_store.get(area_id)
+        if area is None:
+            return web.HTTPNotFound(text="area not found")
+        body = render_area_form(
+            area, available_cameras=_intent_known_cameras(boot),
+        )
+        return web.Response(
+            text=render_shell("areas", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_area_save(request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.area_store import Area
+        from kukiihome_ha_agent.web_ui.areas import parse_area_form
+
+        if getattr(boot, "area_store", None) is None:
+            return web.HTTPServiceUnavailable(text="area store unavailable")
+        try:
+            patch = parse_area_form(dict(await request.post()))
+        except ValueError as e:
+            return web.HTTPBadRequest(text=str(e))
+        area_id = request.match_info.get("area_id") or ""
+        if area_id:
+            boot.area_store.update(area_id, **patch)
+        else:
+            cameras = patch.pop("cameras", [])
+            new_area = Area(id="", cameras=cameras, **patch)
+            boot.area_store.create(new_area)
+        raise web.HTTPSeeOther(location="areas")
+
+    async def v2_area_delete(request: web.Request) -> web.Response:
+        if getattr(boot, "area_store", None) is None:
+            return web.HTTPServiceUnavailable(text="area store unavailable")
+        boot.area_store.soft_delete(request.match_info["area_id"])
+        raise web.HTTPSeeOther(location="areas")
 
     async def v2_intent(_request: web.Request) -> web.Response:
         # Task 9: real page from RulesStore. Falls back to a brief "rules
@@ -2529,6 +2600,13 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     app.router.add_get("/home", v2_home)
     app.router.add_get("/activity", v2_activity)
     app.router.add_get("/areas", v2_areas)
+    # Iter 2.C: areas CRUD. Specific subpaths register BEFORE the generic
+    # /areas/{id}/edit so URL routing wins on /areas/new.
+    app.router.add_get("/areas/new", v2_area_new)
+    app.router.add_post("/areas", v2_area_save)
+    app.router.add_get("/areas/{area_id}/edit", v2_area_edit)
+    app.router.add_post("/areas/{area_id}", v2_area_save)
+    app.router.add_post("/areas/{area_id}/delete", v2_area_delete)
     app.router.add_get("/intent", v2_intent)
     # Task 9: rules CRUD via the /intent page. The matches subpath is
     # registered before the generic edit route so the URL parser doesn't
@@ -2924,6 +3002,9 @@ async def _run() -> None:
     # cameras page's Authorized actions card reads + writes through it.
     from kukiihome_ha_agent.action_store import ActionStore
     boot.action_store = ActionStore(path="/data/kukiihome/actions.db")
+    # Iter 2.C: areas store. Sister to rules.db / actions.db.
+    from kukiihome_ha_agent.area_store import AreaStore
+    boot.area_store = AreaStore(path="/data/kukiihome/areas.db")
 
     # Epic 10.8.1: per-event persistent store. Lives next to
     # alerts.json in the Supervisor's /data volume. Subscribed to
