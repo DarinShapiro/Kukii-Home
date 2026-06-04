@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.24.0...v0.25.0) (2026-06-04)
+
+
+### Features
+
+* **memory:** wire Cerebras LLM dispatcher + degraded-mode banner ([a9d8a33](https://github.com/DarinShapiro/Kukii-Home/commit/a9d8a33984a5246cd0401c8abe6741c7f8992184))
+
 ## [0.24.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.23.0...v0.24.0) (2026-06-04)
 
 
