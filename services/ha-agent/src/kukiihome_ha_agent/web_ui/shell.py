@@ -218,13 +218,45 @@ a.play{display:inline-block;color:#9aa7b8;text-decoration:none;
 a.play:hover{color:#fff;background:#26344a}
 
 /* ─── Matches table (Task 9) ────────────────────────────────────── */
-table.matches-table{width:100%;border-collapse:collapse;margin-top:12px;
-  font-size:13px;color:#cfd6df}
-table.matches-table th,table.matches-table td{
+table.matches-table,table.matrix-table{width:100%;border-collapse:collapse;
+  margin-top:12px;font-size:13px;color:#cfd6df}
+table.matches-table th,table.matches-table td,
+table.matrix-table th,table.matrix-table td{
   text-align:left;padding:6px 8px;border-bottom:1px solid #1f2632;
   vertical-align:top}
-table.matches-table th{color:#9aa7b8;font-weight:600;font-size:12px;
-  text-transform:uppercase;letter-spacing:0.04em}
+table.matches-table th,table.matrix-table th{color:#9aa7b8;font-weight:600;
+  font-size:12px;text-transform:uppercase;letter-spacing:0.04em}
+
+/* ─── Cameras list + detail (Iter 2.B) ──────────────────────────── */
+.cameras-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:14px;margin-top:18px}
+a.camera-tile{display:block;background:#141a22;border:1px solid #1f2632;
+  border-radius:10px;padding:14px 16px;color:#cfd6df;text-decoration:none;
+  transition:border-color 100ms ease}
+a.camera-tile:hover{border-color:#3a4a64}
+.camera-tile .cam-head{display:flex;align-items:center;
+  justify-content:space-between;gap:10px}
+.camera-tile .cam-head b{color:#e5edf7;font-size:14px}
+.camera-tile .cam-meta{font-size:12px;color:#9aa7b8;margin-top:6px}
+.camera-tile .cam-meta.muted{color:#7e8a9a}
+.camera-tile .err{color:#e08a8a;font-size:12px;margin-top:6px}
+.chip.cam-state.ok{background:#1f3320;color:#9dd5a3}
+.chip.cam-state.warn{background:#332b1f;color:#d5b793}
+.chip.cam-state.bad{background:#3b2530;color:#e08a8a}
+.chip.cam-state.muted{background:#1d2733;color:#9aa7b8}
+.chip.cap-src{font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:10px;letter-spacing:0.05em}
+.chip.cap-src.ok{background:#1f3320;color:#9dd5a3}
+.chip.cap-src.warn{background:#332b1f;color:#d5b793}
+.chip.cap-src.bad{background:#3b2530;color:#e08a8a}
+.chip.cap-src.muted{background:#1d2733;color:#9aa7b8}
+.cam-snap{display:block;width:100%;max-width:480px;border-radius:6px;
+  background:#0a0c10;margin-top:10px}
+.cam-row{font-size:13px;color:#cfd6df}
+.cam-row .err{color:#e08a8a;font-size:12px;margin-top:6px}
+.back-link{display:inline-block;color:#9aa7b8;font-size:12px;
+  text-decoration:none;margin-bottom:10px}
+.back-link:hover{color:#cfd6df;text-decoration:underline}
 """
 
 

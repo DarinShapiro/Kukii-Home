@@ -70,23 +70,9 @@ def render_policies_page() -> str:
     )
 
 
-def render_cameras_page() -> str:
-    return (
-        "<h1>Cameras</h1>"
-        "<div class='sub'>Per-camera detail page (Part II, ratified): "
-        "identity & role, detection capability matrix with delegate "
-        "affordances, privacy posture, tuning, health, active policies. The "
-        "page is intentionally <em>not</em> a mini-NVR — that's Agent DVR's "
-        "job.</div>"
-        + _coming_soon(
-            "Coming soon",
-            "Per-camera detail with the capability matrix (NATIVE / "
-            "AUGMENTED / SUBSTITUTED / DELEGATED / MISSING). Each row "
-            "carries the external-dependency triple: link out, re-scan, "
-            "drift surfaces to home.",
-            ref="planning/web-ui-design.md — Part II (Per-camera detail).",
-        )
-    )
+# NOTE: render_cameras_page() removed in Iter 2.B — /cameras is now a live
+# page served from kukiihome_ha_agent.web_ui.cameras.render_cameras_list +
+# render_camera_detail. See planning/web-ui-design.md Part II.
 
 
 def render_diagnostics_page(legacy_status_path: str = "/") -> str:

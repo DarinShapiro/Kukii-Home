@@ -201,6 +201,9 @@ class BootState:
     """Task 9: SQLite-backed rules + rule_matches persistence. Created on
     boot and shared between the /intent web pages, the /api/intent/rules
     HTTP routes, and the triage gate's per-event evaluation."""
+    action_store: Any | None = None
+    """Task 10: SQLite-backed perception + protective whitelists + audit log.
+    Read by the cameras page's whitelist editor and the action runtimes."""
     health_service: Any | None = None
     """Epic 15: resilience watchdog + health registry for this add-on
     process. Drives the F4 (HA down) probe and backs the /health +
@@ -2369,8 +2372,147 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         return _v2_mock_response(active="policies", body_html=render_policies_page())
 
     async def v2_cameras(_request: web.Request) -> web.Response:
-        from kukiihome_ha_agent.web_ui.mocks import render_cameras_page
-        return _v2_mock_response(active="cameras", body_html=render_cameras_page())
+        # Iter 2.B: live list page reading the registry + alert log.
+        import time as _time
+
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.camera_data import (
+            build_camera_summaries,
+        )
+        from kukiihome_ha_agent.web_ui.cameras import render_cameras_list
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        statuses = (
+            list(boot.camera_registry.all())
+            if getattr(boot, "camera_registry", None) else []
+        )
+        ha_loops = list(getattr(boot, "ha_camera_loops", []) or [])
+        summaries = build_camera_summaries(
+            registry_statuses=statuses, ha_loops=ha_loops,
+            alerts=alert_log.recent(500), now_ts=_time.time(),
+        )
+        body = render_cameras_list(summaries)
+        return web.Response(
+            text=render_shell("cameras", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_camera_detail(request: web.Request) -> web.Response:
+        import time as _time
+
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.camera_data import build_camera_detail
+        from kukiihome_ha_agent.web_ui.cameras import render_camera_detail
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        camera_id = request.match_info["camera_id"]
+        statuses = (
+            list(boot.camera_registry.all())
+            if getattr(boot, "camera_registry", None) else []
+        )
+        ha_loops = list(getattr(boot, "ha_camera_loops", []) or [])
+        perc = (
+            boot.action_store.perception_for(camera_id)
+            if getattr(boot, "action_store", None) else []
+        )
+        prot = (
+            boot.action_store.protective_for(camera_id)
+            if getattr(boot, "action_store", None) else []
+        )
+        vm = build_camera_detail(
+            camera_id=camera_id, registry_statuses=statuses,
+            ha_loops=ha_loops, alerts=alert_log.recent(500),
+            perception_entries=perc, protective_entries=prot,
+            now_ts=_time.time(),
+        )
+        if vm is None:
+            return web.HTTPNotFound(text=f"camera {camera_id!r} not found")
+        body = render_camera_detail(vm)
+        return web.Response(
+            text=render_shell("cameras", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_cam_wl_new_perc(request: web.Request) -> web.Response:
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.cameras import render_perception_form
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        camera_id = request.match_info["camera_id"]
+        body = render_perception_form(camera_id)
+        return web.Response(
+            text=render_shell("cameras", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_cam_wl_new_prot(request: web.Request) -> web.Response:
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.cameras import render_protective_form
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        camera_id = request.match_info["camera_id"]
+        body = render_protective_form(camera_id)
+        return web.Response(
+            text=render_shell("cameras", body, version=__version__),
+            content_type="text/html",
+        )
+
+    async def v2_cam_wl_save_perc(request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.action_store import PerceptionEntry
+        from kukiihome_ha_agent.web_ui.cameras import parse_perception_form
+
+        if getattr(boot, "action_store", None) is None:
+            return web.HTTPServiceUnavailable(text="action store unavailable")
+        camera_id = request.match_info["camera_id"]
+        try:
+            patch = parse_perception_form(dict(await request.post()))
+        except ValueError as e:
+            return web.HTTPBadRequest(text=str(e))
+        boot.action_store.upsert_perception(PerceptionEntry(
+            camera_id=camera_id, **patch,
+        ))
+        raise web.HTTPSeeOther(location=f"cameras/{camera_id}")
+
+    async def v2_cam_wl_save_prot(request: web.Request) -> web.Response:
+        from kukiihome_ha_agent.action_store import ProtectiveEntry
+        from kukiihome_ha_agent.web_ui.cameras import parse_protective_form
+
+        if getattr(boot, "action_store", None) is None:
+            return web.HTTPServiceUnavailable(text="action store unavailable")
+        camera_id = request.match_info["camera_id"]
+        try:
+            patch = parse_protective_form(dict(await request.post()))
+        except ValueError as e:
+            return web.HTTPBadRequest(text=str(e))
+        boot.action_store.upsert_protective(ProtectiveEntry(
+            camera_id=camera_id, **patch,
+        ))
+        raise web.HTTPSeeOther(location=f"cameras/{camera_id}")
+
+    async def v2_cam_wl_del_perc(request: web.Request) -> web.Response:
+        if getattr(boot, "action_store", None) is None:
+            return web.HTTPServiceUnavailable(text="action store unavailable")
+        camera_id = request.match_info["camera_id"]
+        form = await request.post()
+        boot.action_store.delete_perception(
+            camera_id,
+            (form.get("target_kind") or "").strip(),
+            (form.get("target") or "").strip(),
+        )
+        raise web.HTTPSeeOther(location=f"cameras/{camera_id}")
+
+    async def v2_cam_wl_del_prot(request: web.Request) -> web.Response:
+        if getattr(boot, "action_store", None) is None:
+            return web.HTTPServiceUnavailable(text="action store unavailable")
+        camera_id = request.match_info["camera_id"]
+        form = await request.post()
+        boot.action_store.delete_protective(
+            camera_id,
+            (form.get("action_class") or "").strip(),
+            (form.get("service") or "").strip(),
+            (form.get("target") or "").strip(),
+        )
+        raise web.HTTPSeeOther(location=f"cameras/{camera_id}")
 
     async def v2_diagnostics(_request: web.Request) -> web.Response:
         from kukiihome_ha_agent.web_ui.mocks import render_diagnostics_page
@@ -2400,11 +2542,41 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     app.router.add_get("/intent/rules/{rule_id}/matches", v2_intent_rule_matches)
     app.router.add_get("/policies", v2_policies)
     app.router.add_get("/cameras", v2_cameras)
+    # Iter 2.B: per-camera detail + whitelist editor (Task 10 UI surface).
+    # Specific subpaths registered BEFORE the generic /cameras/{id} so
+    # the URL parser doesn't treat "snapshot" / "whitelist" as a camera_id.
+    app.router.add_get(
+        "/cameras/{camera_id}/whitelist/perception/new",
+        v2_cam_wl_new_perc,
+    )
+    app.router.add_get(
+        "/cameras/{camera_id}/whitelist/protective/new",
+        v2_cam_wl_new_prot,
+    )
+    app.router.add_post(
+        "/cameras/{camera_id}/whitelist/perception",
+        v2_cam_wl_save_perc,
+    )
+    app.router.add_post(
+        "/cameras/{camera_id}/whitelist/protective",
+        v2_cam_wl_save_prot,
+    )
+    app.router.add_post(
+        "/cameras/{camera_id}/whitelist/perception/delete",
+        v2_cam_wl_del_perc,
+    )
+    app.router.add_post(
+        "/cameras/{camera_id}/whitelist/protective/delete",
+        v2_cam_wl_del_prot,
+    )
+    # /cameras/{camera_id}/snapshot MUST register before /cameras/{camera_id}
+    # so the specific subpath wins URL matching.
+    app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
+    app.router.add_get("/cameras/{camera_id}", v2_camera_detail)
     app.router.add_get("/diagnostics", v2_diagnostics)
     app.router.add_post("/review/label", review_label)
     app.router.add_post("/review/reject", review_reject)
     app.router.add_post("/review/merge", review_merge)
-    app.router.add_get("/cameras/{camera_id}/snapshot", snapshot_for_camera)
     app.router.add_get("/alerts/{alert_id}/snapshot", snapshot_for_alert)
     app.router.add_get("/alerts/{alert_id}", debug_alert)
     # Epic 10.8.1: notification tap UX — per-alert page + actions.
@@ -2748,6 +2920,10 @@ async def _run() -> None:
     # handlers can reach it without rewiring the api object.
     from kukiihome_ha_agent.rules_store import RulesStore
     boot.rules_store = RulesStore(path="/data/kukiihome/rules.db")
+    # Task 10: action whitelist + audit. Sister store to rules.db; the
+    # cameras page's Authorized actions card reads + writes through it.
+    from kukiihome_ha_agent.action_store import ActionStore
+    boot.action_store = ActionStore(path="/data/kukiihome/actions.db")
 
     # Epic 10.8.1: per-event persistent store. Lives next to
     # alerts.json in the Supervisor's /data volume. Subscribed to
