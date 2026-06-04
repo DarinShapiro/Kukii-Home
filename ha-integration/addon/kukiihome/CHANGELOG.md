@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.14.0...v0.15.0) (2026-06-04)
+
+
+### Features
+
+* **policies:** live Part VII page with PolicyStore + revoke ([bdbcad6](https://github.com/DarinShapiro/Kukii-Home/commit/bdbcad6d142800e460daf0ac659f342bd96c2693))
+
 ## [0.14.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.13.0...v0.14.0) (2026-06-04)
 
 
