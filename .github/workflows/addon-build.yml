@@ -170,6 +170,13 @@ jobs:
         id: semantic
         uses: cycjimmy/semantic-release-action@v4
         with:
+          # Pin semantic-release to v23 — v24's release-notes-generator throws
+          # "Method Date.prototype.toString called on incompatible receiver"
+          # against conventional-changelog-conventionalcommits@7. We hit it on
+          # 5 consecutive commits 2026-06-04 before catching the pattern.
+          # Pin pair: semantic-release@23 + conventional-changelog-
+          # conventionalcommits@7 is the known-good combo.
+          semantic_version: 23
           extra_plugins: |
             @semantic-release/changelog@6
             @semantic-release/git@10
