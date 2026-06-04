@@ -483,7 +483,10 @@ def _render_alert_404(event_id: str) -> str:
     )
 
 
-def _render_alert_page(event: dict[str, Any], event_id: str) -> str:
+def _render_alert_page(
+    event: dict[str, Any], event_id: str,
+    *, audit_chain_html: str = "",
+) -> str:
     """Render the per-alert page the notification tap opens to.
 
     Three zones (per the design discussion):
@@ -620,6 +623,9 @@ def _render_alert_page(event: dict[str, Any], event_id: str) -> str:
         + detection_html
         + "</section>"
         + vlm_html
+        # Iter 2.F: trace audit chain — matched rules + protective actions
+        # + policy hits. Empty when no stores wired (older boot paths).
+        + audit_chain_html
         # Action row — sticky bottom.
         + "<div class='actions'>"
         + (
@@ -1456,8 +1462,21 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
                 text=_render_alert_404(event_id),
                 content_type="text/html",
             )
+        # Iter 2.F: trace audit chain — matched rules + protective actions +
+        # policy hits, all keyed on incident/event_id. Empty when none of
+        # the audit stores have a record for this incident.
+        import time as _time
+
+        from kukiihome_ha_agent.web_ui.trace import build_audit_chain_html
+        audit_html = build_audit_chain_html(
+            incident_id=event_id,
+            rules_store=getattr(boot, "rules_store", None),
+            action_store=getattr(boot, "action_store", None),
+            policy_store=getattr(boot, "policy_store", None),
+            now_ts=_time.time(),
+        )
         return web.Response(
-            text=_render_alert_page(event, event_id),
+            text=_render_alert_page(event, event_id, audit_chain_html=audit_html),
             content_type="text/html",
         )
 
