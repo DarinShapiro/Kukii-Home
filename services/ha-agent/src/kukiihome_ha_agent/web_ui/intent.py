@@ -127,33 +127,83 @@ def _rule_row(rule: Rule, *, now_ts: float) -> str:
     )
 
 
-def _preferences_placeholder() -> str:
-    """Section above the rules list — coming-soon for Preferences."""
+def _preferences_section(prefs) -> str:
+    """Live Preferences section (Iter 2.A). ``prefs`` is a Preferences
+    dataclass or None — when None, renders a brief notice."""
+    if prefs is None:
+        return (
+            "<section class='card'>"
+            "<h2>Preferences</h2>"
+            "<div class='sub'>Preferences store not wired in this build.</div>"
+            "</section>"
+        )
+    vigilance = (prefs.vigilance or "normal").lower()
+    text = prefs.what_i_care_about or ""
+    quiet_count = len(prefs.quiet_hours or [])
+    rel_count = len(prefs.relationships or {})
+    vigilance_radios = "".join(
+        f"<label class='radio'><input type='radio' name='vigilance' "
+        f"value='{v}'{' checked' if v == vigilance else ''}> {label}</label>"
+        for v, label in (
+            ("low", "Low — dismiss generously"),
+            ("normal", "Normal — balanced"),
+            ("high", "High — err on the side of alerting"),
+        )
+    )
+    quiet_summary = (
+        f"{quiet_count} quiet-hour window"
+        f"{'s' if quiet_count != 1 else ''} (life-safety areas ignore these)"
+        if quiet_count else "No quiet hours — alerts fire any time."
+    )
+    rel_summary = (
+        f"{rel_count} actor relationship"
+        f"{'s' if rel_count != 1 else ''} set — Identities → Review to edit."
+        if rel_count else "No actor relationships set yet — label "
+        "identities under Identities → Review."
+    )
     return (
         "<section class='card'>"
         "<h2>Preferences</h2>"
         "<div class='sub'>How the agent reads the rest of your home — "
-        "vigilance baseline, what you care about, per-actor relationships, "
-        "per-area posture, quiet hours. Coming in Iteration 2.</div>"
-        "<div class='coming-soon'>"
-        "<div class='sub'>Iteration 2.A — see "
-        "<code>planning/web-ui-design.md</code> Part VI · Preferences.</div>"
+        "vigilance baseline, what you care about, quiet hours, per-actor "
+        "relationships.</div>"
+        "<form method='post' action='intent/preferences'>"
+        "<h3>Vigilance baseline</h3>"
+        f"<div class='mode-radios' style='flex-direction:column;align-items:flex-start'>"
+        f"{vigilance_radios}</div>"
+        "<h3 style='margin-top:14px'>What I care about</h3>"
+        "<textarea name='what_i_care_about' rows='4' "
+        "placeholder=\"Free-text guidance the VLM reads on every event. "
+        "E.g. 'Winston is our dog — don't alert on him in the backyard.'\">"
+        + _e(text) +
+        "</textarea>"
+        "<div class='hint'>This text is folded into every VLM prompt as "
+        "household baseline — concise, plain-language statements work best.</div>"
+        "<div class='form-actions' style='justify-content:flex-start;margin-top:14px'>"
+        "<button class='btn primary' type='submit'>Save preferences</button>"
+        "</div>"
+        "</form>"
+        "<div class='trust-line' style='margin-top:16px'>"
+        f"{_e(quiet_summary)}<br>{_e(rel_summary)}"
         "</div>"
         "</section>"
     )
 
 
-def render_intent_page(rules: list[Rule], *, now_ts: float | None = None) -> str:
+def render_intent_page(
+    rules: list[Rule], *, now_ts: float | None = None, preferences=None,
+) -> str:
     """Full /intent page. ``rules`` should be the non-retired set (from
     ``store.all_rules()``); disabled rules still render so they're toggleable
-    from the list."""
+    from the list. ``preferences`` is the live Preferences dataclass; pass
+    None to render the storage-unavailable notice."""
     now_ts = now_ts if now_ts is not None else time.time()
     body = (
         "<h1>Intent</h1>"
         "<div class='sub'>How you've told the system what you care about. "
         "Preferences shape the reasoner's baseline; Rules attach named, "
         "scoped intents with explicit severities on top.</div>"
-        + _preferences_placeholder()
+        + _preferences_section(preferences)
         + "<section class='card'>"
         + "<div class='card-head'>"
         + "<h2>Rules</h2>"

@@ -208,6 +208,9 @@ class BootState:
     """Iter 2.C: SQLite-backed conceptual zones (Pool, Backyard, ...) +
     camera assignments + AttentionMode + normal-hours. Read by /areas,
     /intent rule scope picker, and the reasoner."""
+    preferences_store: Any | None = None
+    """Iter 2.A: household-wide reasoner guidance — vigilance baseline,
+    'what I care about' free text, quiet hours, per-actor relationships."""
     health_service: Any | None = None
     """Epic 15: resilience watchdog + health registry for this add-on
     process. Drives the F4 (HA down) probe and backs the /health +
@@ -2314,7 +2317,13 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             )
         else:
             rules = boot.rules_store.all_rules()
-            body = render_intent_page(rules, now_ts=_time.time())
+            prefs = (
+                boot.preferences_store.get()
+                if getattr(boot, "preferences_store", None) else None
+            )
+            body = render_intent_page(
+                rules, now_ts=_time.time(), preferences=prefs,
+            )
         return web.Response(
             text=render_shell("intent", body, version=__version__),
             content_type="text/html",
@@ -2398,6 +2407,21 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             return web.HTTPServiceUnavailable(text="rules store unavailable")
         rule_id = request.match_info["rule_id"]
         boot.rules_store.soft_delete(rule_id)
+        raise web.HTTPSeeOther(location="intent")
+
+    async def v2_intent_preferences_save(request: web.Request) -> web.Response:
+        """Iter 2.A: save Preferences section of /intent. POST handler that
+        validates incoming fields, persists, then 303-redirects back to /intent."""
+        if getattr(boot, "preferences_store", None) is None:
+            return web.HTTPServiceUnavailable(text="preferences store unavailable")
+        form = await request.post()
+        vigilance = (form.get("vigilance") or "normal").strip()
+        if vigilance not in ("low", "normal", "high"):
+            vigilance = "normal"
+        what = (form.get("what_i_care_about") or "").strip()
+        boot.preferences_store.update(
+            vigilance=vigilance, what_i_care_about=what,
+        )
         raise web.HTTPSeeOther(location="intent")
 
     async def v2_intent_rule_matches(request: web.Request) -> web.Response:
@@ -2611,6 +2635,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     # Task 9: rules CRUD via the /intent page. The matches subpath is
     # registered before the generic edit route so the URL parser doesn't
     # treat "matches" as a rule_id.
+    # Iter 2.A: Preferences POST sits BEFORE the rules subpaths to keep
+    # /intent/preferences from being treated as a rule_id-bearing route.
+    app.router.add_post("/intent/preferences", v2_intent_preferences_save)
     app.router.add_get("/intent/rules/new", v2_intent_rule_new)
     app.router.add_post("/intent/rules", v2_intent_rule_save)
     app.router.add_get("/intent/rules/{rule_id}/edit", v2_intent_rule_edit)
@@ -3005,6 +3032,9 @@ async def _run() -> None:
     # Iter 2.C: areas store. Sister to rules.db / actions.db.
     from kukiihome_ha_agent.area_store import AreaStore
     boot.area_store = AreaStore(path="/data/kukiihome/areas.db")
+    # Iter 2.A: preferences store (singleton row + per-actor relationships).
+    from kukiihome_ha_agent.preferences_store import PreferencesStore
+    boot.preferences_store = PreferencesStore(path="/data/kukiihome/preferences.db")
 
     # Epic 10.8.1: per-event persistent store. Lives next to
     # alerts.json in the Supervisor's /data volume. Subscribed to
