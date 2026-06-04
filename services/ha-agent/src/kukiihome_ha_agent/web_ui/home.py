@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from kukiihome_ha_agent.web_ui.shell import _e, friendly_time_html
+from kukiihome_ha_agent.web_ui.shell import _e, camera_display_name, friendly_time_html
 
 
 def _seconds_today(now_ts: float) -> float:
@@ -65,15 +65,52 @@ def _alert_is_action(alert: dict) -> bool:
 
 
 def _alert_headline(alert: dict) -> str:
-    """Verb-phrased headline. Today: best-effort from existing fields. Later:
-    VLM ``findings.scene_description`` (Part III §20). Falls back to camera +
-    rule if no headline."""
+    """Verb-phrased headline. Once the VLM is live this is its
+    ``findings.scene_description`` verbatim (Part III §20). Until then we
+    compose a clean fallback from the alert's existing fields, normalizing
+    the camera name so we don't read like a config file.
+
+    Examples:
+        ``Person detected at Front South Camera``
+        ``Dog detected at Backyard Camera``
+        ``Motion at Front South Camera``  (when no kind classification)
+        ``Bob arrived``  (when an actor name is resolved)
+    """
+    # 1. The VLM verb-phrasing is the canonical answer once it flows.
     h = alert.get("headline")
     if h:
         return str(h)
-    cam = alert.get("camera_id") or "a camera"
-    rule = alert.get("rule") or alert.get("rule_id")
-    return f"Motion · {cam}" + (f" · {rule}" if rule else "")
+
+    cam_name = camera_display_name(
+        alert.get("camera_friendly_name") or alert.get("camera_name")
+    )
+    kind = (alert.get("kind") or "").strip().lower()
+    actor_name = alert.get("actor_name") or alert.get("actor_friendly_name")
+    rule_name = alert.get("rule_name") or alert.get("rule")
+
+    # 2. Identified actor + camera ("Bob arrived at Front South Camera")
+    if actor_name:
+        if cam_name:
+            return f"{actor_name} at {cam_name}"
+        return f"{actor_name} seen"
+
+    # 3. Detected kind + camera ("Person detected at Front South Camera")
+    if kind:
+        kind_phrase = kind.capitalize()
+        if cam_name:
+            return f"{kind_phrase} detected at {cam_name}"
+        return f"{kind_phrase} detected"
+
+    # 4. Rule name (when explicit, no other context) — e.g. "Mail policy"
+    if rule_name and cam_name:
+        return f"{rule_name} at {cam_name}"
+    if rule_name:
+        return str(rule_name)
+
+    # 5. Bare motion fallback
+    if cam_name:
+        return f"Motion at {cam_name}"
+    return "Motion"
 
 
 def _outcome_chip(alert: dict) -> str:
@@ -92,14 +129,29 @@ def _outcome_chip(alert: dict) -> str:
 def _render_activity_row(alert: dict, *, now_ts: float) -> str:
     when_html = friendly_time_html(_alert_when_ts(alert), now=now_ts)
     headline = _alert_headline(alert)
-    cam = alert.get("camera_id", "")
+    cam_slug = alert.get("camera_id", "")
     is_action = _alert_is_action(alert)
     eid = alert.get("event_id") or alert.get("alert_id") or ""
     klass = "activity-row" if is_action else "activity-row passive"
     trace_link = (
         f"<a class='trace' href='alert/{_e(eid)}'>trace</a>" if eid else ""
     )
-    where = f"<span class='where'> · {_e(cam)}</span>" if cam else ""
+    # Only show the slug as a separate where-line if the headline doesn't
+    # already mention the camera (the friendly name normalizer in Task 3
+    # usually means it does). Drops "Person detected at Front South · front_south"
+    # to just "Person detected at Front South Camera."
+    cam_name = camera_display_name(
+        alert.get("camera_friendly_name") or alert.get("camera_name")
+    )
+    headline_lower = headline.lower()
+    camera_already_in_headline = bool(
+        cam_name and (cam_name.lower() in headline_lower)
+    ) or (cam_slug and cam_slug.lower() in headline_lower)
+    where = (
+        f"<span class='where'> · {_e(cam_slug)}</span>"
+        if cam_slug and not camera_already_in_headline
+        else ""
+    )
     # when_html is already HTML-safe (escaped + wrapped in <span title=...>)
     return (
         f"<div class='{klass}'>"

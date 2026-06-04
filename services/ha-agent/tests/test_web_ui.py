@@ -13,6 +13,7 @@ from kukiihome_ha_agent.web_ui.mocks import (
 )
 from kukiihome_ha_agent.web_ui.shell import (
     NAV_ITEMS,
+    camera_display_name,
     friendly_time,
     friendly_time_html,
     relative_time,
@@ -76,6 +77,106 @@ def test_friendly_time_html_wraps_in_title_span():
 def test_relative_time_alias_kept_for_compat():
     # the alias allows callers to migrate at their own pace
     assert relative_time(NOW - 10, now=NOW) == friendly_time(NOW - 10, now=NOW)
+
+
+# ─── camera display-name normalization (Task 3) ──────────────────────
+
+
+def test_camera_display_name_strips_stream_quality_suffixes():
+    # Reolink Fluent suffix — the example that motivated this work
+    assert camera_display_name("Front South Camera Fluent") == "Front South Camera"
+    # other Reolink qualities
+    assert camera_display_name("Backyard Cam Clear") == "Backyard Cam"
+    assert camera_display_name("Driveway Balanced") == "Driveway Camera"
+    # Dahua main/sub
+    assert camera_display_name("Pool Camera Main") == "Pool Camera"
+    assert camera_display_name("Pool Camera Sub") == "Pool Camera"
+    # double suffixes (e.g. "Front Main Stream")
+    assert camera_display_name("Front Main Stream") == "Front Camera"
+
+
+def test_camera_display_name_appends_camera_when_missing():
+    assert camera_display_name("Driveway") == "Driveway Camera"
+    assert camera_display_name("Pool") == "Pool Camera"
+    # already contains "Camera" or "Cam" — no append
+    assert camera_display_name("Backyard Cam") == "Backyard Cam"
+    assert camera_display_name("Front South Camera") == "Front South Camera"
+
+
+def test_camera_display_name_handles_empty_and_intentional_names():
+    assert camera_display_name("") == ""
+    assert camera_display_name(None) == ""
+    # legit name containing a suffix word as a non-suffix prefix — must not strip
+    # ("Sub" appears mid-string, not at the end after whitespace)
+    assert camera_display_name("Submarine Bay Camera") == "Submarine Bay Camera"
+
+
+# ─── headline composition (Task 3) ───────────────────────────────────
+
+
+def test_headline_uses_explicit_headline_when_present():
+    # When the VLM lands, scene_description goes here verbatim
+    from kukiihome_ha_agent.web_ui.home import _alert_headline
+    assert _alert_headline({"headline": "Alice arrived at the front door"}) == \
+        "Alice arrived at the front door"
+
+
+def test_headline_composes_kind_at_friendly_camera():
+    from kukiihome_ha_agent.web_ui.home import _alert_headline
+    assert _alert_headline({
+        "kind": "person",
+        "camera_friendly_name": "Front South Camera Fluent",
+    }) == "Person detected at Front South Camera"
+
+    assert _alert_headline({
+        "kind": "dog",
+        "camera_friendly_name": "Backyard Cam Clear",
+    }) == "Dog detected at Backyard Cam"
+
+
+def test_headline_actor_name_when_resolved():
+    from kukiihome_ha_agent.web_ui.home import _alert_headline
+    assert _alert_headline({
+        "actor_name": "Bob",
+        "camera_friendly_name": "Front South Camera Fluent",
+    }) == "Bob at Front South Camera"
+    assert _alert_headline({"actor_name": "Bob"}) == "Bob seen"
+
+
+def test_headline_motion_fallback():
+    from kukiihome_ha_agent.web_ui.home import _alert_headline
+    # No kind, no actor, no headline — just camera
+    assert _alert_headline({
+        "camera_friendly_name": "Front South Camera Fluent",
+    }) == "Motion at Front South Camera"
+    # Truly bare alert
+    assert _alert_headline({}) == "Motion"
+
+
+def test_activity_row_drops_redundant_slug_when_in_headline():
+    from kukiihome_ha_agent.web_ui.home import _render_activity_row
+    html = _render_activity_row({
+        "event_id": "e1",
+        "camera_id": "front_south",
+        "camera_friendly_name": "Front South Camera Fluent",
+        "kind": "person",
+        "trigger_ts": NOW - 600,
+        "triage_status": "alerted",
+    }, now_ts=NOW)
+    assert "Person detected at Front South Camera" in html
+    # · front_south slug must NOT appear: it's already in the headline
+    assert "· front_south" not in html
+
+    # When the headline really doesn't mention the camera, the slug DOES help
+    html = _render_activity_row({
+        "event_id": "e2",
+        "camera_id": "front_south",
+        "headline": "Unknown delivery",     # nothing about the camera
+        "trigger_ts": NOW - 600,
+        "triage_status": "alerted",
+    }, now_ts=NOW)
+    assert "Unknown delivery" in html
+    assert "· front_south" in html
 
 
 # ─── home page — empty state (win-state) ───────────────────────────

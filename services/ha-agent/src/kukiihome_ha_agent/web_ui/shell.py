@@ -129,6 +129,70 @@ def _e(s: Any) -> str:
     return html.escape(str(s), quote=True)
 
 
+# ─── camera display-name normalization (Task 3) ──────────────────────
+
+
+# Stream-quality suffixes commonly tacked onto camera friendly names by
+# integrations (Reolink: Fluent/Clear/Balanced; Dahua: Main/Sub; etc.).
+# Stripped from display names so headlines don't read
+# *"Front South Camera Fluent"*. Case-insensitive whole-word match at the
+# *end* of the name only.
+_STREAM_QUALITY_SUFFIXES = (
+    "Fluent",
+    "Clear",
+    "Balanced",
+    "Main",
+    "Sub",
+    "Substream",
+    "Mainstream",
+    "Stream",
+    "HD",
+    "SD",
+)
+
+
+def camera_display_name(raw_name: str | None) -> str:
+    """Normalize an HA camera friendly_name into a clean display name.
+
+    Strips trailing stream-quality suffixes (``Fluent``, ``Clear``, ``Main``,
+    ``Sub``, etc.). Conservative: only the final whole word is stripped, and
+    only if it's in the well-known list — so a camera intentionally named
+    ``"Reolink Front"`` keeps its name (no suffix matches).
+
+    Appends ``" Camera"`` only if the result doesn't already contain
+    *Camera* / *Cam* (avoids *"Front South Camera Camera"*).
+
+    Falls back to a humanized version of an entity-id slug
+    (``front_south`` → ``Front South Camera``) when ``raw_name`` is empty.
+    """
+    if not raw_name:
+        return ""
+    name = str(raw_name).strip()
+
+    # Strip well-known stream-quality suffixes, iteratively (handles double
+    # suffixes like "Front Cam Main Stream"). One pass per suffix at a time;
+    # bounded loop so a pathological name can't run forever.
+    for _ in range(4):
+        stripped = False
+        for suffix in _STREAM_QUALITY_SUFFIXES:
+            # case-insensitive whole-word match at end
+            if len(name) > len(suffix) and name[-len(suffix):].lower() == suffix.lower():
+                # require whitespace boundary so we don't eat parts of words
+                if name[-len(suffix) - 1] in " -_":
+                    name = name[: -len(suffix) - 1].rstrip()
+                    stripped = True
+                    break
+        if not stripped:
+            break
+
+    # Tasteful trailing "Camera" only when not already present.
+    lower = name.lower()
+    if "camera" not in lower and "cam" not in lower:
+        name = f"{name} Camera"
+
+    return name or str(raw_name).strip()
+
+
 def render_shell(active: str, content_html: str, *, version: str = "",
                  flash: str | None = None) -> str:
     """Wrap ``content_html`` in the shared shell. ``active`` is the path of
