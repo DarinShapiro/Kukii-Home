@@ -1,28 +1,39 @@
 """Dispatcher — utterance → PlacementProposal (Part X §35).
 
 Defines the `DispatcherProvider` protocol that the drawer calls on each
-user turn. Two implementations:
+user turn. Three implementations:
 
   - **HeuristicDispatcherProvider** — pattern-matches the utterance for
     the four most common shapes (rule / transient_intent / dismissal /
-    preference). Useful by itself until the LLM lands; will become the
-    drift-detection fallback / offline mode.
-  - **LLMDispatcherProvider** — lands in Task 46. Will replace the
-    heuristic provider as the default while keeping it as a fallback
-    when the VLM is unreachable.
+    preference). Always available; doubles as offline / fallback mode.
+  - **LLMDispatcherProvider** — calls a text-mode LLM through a
+    pluggable `LLMClient` protocol and validates its structured output
+    against `PlacementProposal`'s schema. On parse / schema failure,
+    retries once with the schema error in the prompt; second failure
+    raises so the composite can fall back.
+  - **CompositeDispatcherProvider** — try LLM first; on any exception
+    fall back to heuristic. The drawer wires to this in production.
 
-Both return `PlacementProposal` (Part X §35) — the schema-validated
-payload the drawer renders as a preview card and `commit_guidance`
-writes through.
+All three return `PlacementProposal` — the schema-validated payload
+the drawer renders as a preview card and `commit_guidance` writes
+through.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from kukiihome_ha_agent.provenance_store import PlacementProposal
+import structlog
+
+from kukiihome_ha_agent.provenance_store import (
+    PlacementProposal,
+    validate_proposal,
+)
+
+logger = structlog.get_logger(__name__)
 
 # ─── Context for the dispatcher's read-only system state ───────────
 
@@ -247,3 +258,237 @@ def context_from_boot(boot: Any) -> DispatcherContext:
         known_area_names=area_names,
         known_camera_names=camera_names,
     )
+
+
+# ─── LLM-backed implementation ─────────────────────────────────────
+
+
+# Pulled out as a module constant so tests can spy on / replace it.
+DISPATCHER_SYSTEM_PROMPT = """\
+You are the dispatcher for Kukii-Home — a local-first home AI agent.
+Your job: take a user's plain-English utterance about what they want
+the system to watch for, and place it on the right storage class so the
+reasoner reads it correctly later.
+
+The cube has three axes:
+  - Scope: global / area / camera / actor / kind / pattern
+  - Lifecycle: persistent / temporal / fire_once
+  - Fire affordance: alert / shift_prior / dismiss / metadata
+
+Storage classes you may pick:
+  - rule              : persistent + explicit alert. Scoped.
+  - preference        : global + persistent + soft prior shift.
+  - transient_intent  : temporal + explicit alert. Self-prunes.
+  - dismissal_policy  : persistent + dismiss. Suppresses pattern.
+  - situational_context: temporal + soft prior shift. Context window.
+  - area_posture      : metadata-only change on an existing Area.
+  - access_profile    : per-actor expected pattern (defer for v1).
+
+Return STRICT JSON matching this schema (and nothing else):
+
+{
+  "storage_class": "rule" | "preference" | ...,
+  "name": "<short user-facing name>",
+  "scope": {"actor"?, "area"?, "camera"?, "kind"?, "pattern"?,
+            "actor_name"?, "area_name"?, "camera_name"?,
+            "vigilance"?, "attention_mode"?, "role"?},
+  "lifecycle": "persistent" | "temporal" | "fire_once",
+  "lifecycle_ttl_iso": "<ISO-8601>" | null,   // required for temporal
+  "fire_affordance": "alert" | "shift_prior" | "dismiss" | "metadata",
+  "severity": "low" | "normal" | "critical" | null,
+  "intent_text": "<the prose the VLM will read at eval time>",
+  "reasoning": "<ONE sentence explaining why this storage class>",
+  "confidence": 0.0-1.0,
+  "clarifying_questions": ["<question>", ...]   // empty when confident
+}
+
+Rules of thumb:
+  - 'notify / alert / tell me' + persistent → rule
+  - 'don't / ignore / suppress' → dismissal_policy
+  - 'tonight / today / for the next' + alert → transient_intent
+  - household statements ('Winston is our dog') → preference
+  - When you can't tell lifecycle OR fire affordance, return
+    confidence < 0.7 and one or two clarifying_questions targeting
+    those axes.
+
+Use ONLY entities present in the provided known_actor_names /
+known_area_names / known_camera_names lists. If the utterance mentions
+something not in those lists, place it in intent_text but DO NOT
+invent IDs.
+"""
+
+
+class LLMClient(Protocol):
+    """Minimal text-mode client. The drawer's LLM provider only needs
+    one method: send a system + user prompt, get back text. Implementations
+    can wrap whatever HTTP client the boot configures (Anthropic / Gemini /
+    Ollama / etc.); tests inject a deterministic fake."""
+
+    async def complete(
+        self, *, system: str, user: str, max_tokens: int = 800,
+    ) -> str: ...
+
+
+@dataclass
+class _PromptBundle:
+    system: str
+    user: str
+
+
+def _build_user_prompt(
+    utterance: str, *, ctx: DispatcherContext,
+    retry_note: str = "",
+) -> str:
+    """Compose the user-side prompt. The system context (known names) +
+    page/alert context goes here so each call can stand alone — no
+    multi-turn dependence inside the dispatcher."""
+    facts = {
+        "known_actor_names": ctx.known_actor_names,
+        "known_area_names": ctx.known_area_names,
+        "known_camera_names": ctx.known_camera_names,
+        "page_context": ctx.page_context,
+        "alert_context": ctx.alert_context,
+    }
+    parts = [
+        "## System state",
+        json.dumps(facts, indent=2),
+        "",
+        "## User utterance",
+        utterance.strip(),
+    ]
+    if retry_note:
+        parts += [
+            "",
+            "## Retry — previous attempt failed schema validation",
+            retry_note,
+            "Return ONLY the corrected JSON.",
+        ]
+    return "\n".join(parts)
+
+
+def _strip_code_fence(text: str) -> str:
+    """LLMs love wrapping JSON in ```json ... ``` blocks. Tolerate it."""
+    t = text.strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```(?:json)?\s*", "", t)
+        t = re.sub(r"\s*```$", "", t)
+    return t.strip()
+
+
+class LLMDispatcherProvider:
+    """LLM-backed placement. Calls the client once; on schema failure
+    retries once with the error included; on second failure raises so
+    the composite can fall back."""
+
+    def __init__(self, client: LLMClient) -> None:
+        self.client = client
+
+    async def propose_async(
+        self, utterance: str, *, ctx: DispatcherContext,
+    ) -> PlacementProposal:
+        first_attempt_error: str = ""
+        for attempt in (1, 2):
+            user_prompt = _build_user_prompt(
+                utterance, ctx=ctx, retry_note=first_attempt_error,
+            )
+            try:
+                raw = await self.client.complete(
+                    system=DISPATCHER_SYSTEM_PROMPT,
+                    user=user_prompt,
+                )
+            except Exception as e:
+                logger.warning(
+                    "dispatcher.llm_call_failed",
+                    attempt=attempt, error=str(e),
+                )
+                if attempt == 2:
+                    raise
+                first_attempt_error = f"LLM call raised: {e}"
+                continue
+
+            try:
+                data = json.loads(_strip_code_fence(raw))
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    "dispatcher.json_parse_failed",
+                    attempt=attempt, error=str(e),
+                    raw_snippet=raw[:200],
+                )
+                if attempt == 2:
+                    raise ValueError(f"LLM returned non-JSON: {e}") from e
+                first_attempt_error = (
+                    f"Previous response was not valid JSON: {e}. "
+                    "Return ONLY a JSON object, no prose, no code fences."
+                )
+                continue
+
+            try:
+                proposal = validate_proposal(data)
+            except ValueError as e:
+                logger.warning(
+                    "dispatcher.schema_failed",
+                    attempt=attempt, error=str(e),
+                )
+                if attempt == 2:
+                    raise
+                first_attempt_error = (
+                    f"Schema validation failed: {e}. "
+                    "Re-emit the JSON with the field corrected."
+                )
+                continue
+
+            return proposal
+        # Unreachable; the loop either returns or raises.
+        raise RuntimeError("dispatcher: unreachable")
+
+    def propose(
+        self, utterance: str, *, ctx: DispatcherContext,
+    ) -> PlacementProposal:
+        """Sync wrapper for callers that aren't async. Runs the LLM call
+        in a fresh event loop — only safe outside an active loop. The
+        drawer's POST handler awaits ``propose_async`` directly."""
+        import asyncio
+        return asyncio.run(self.propose_async(utterance, ctx=ctx))
+
+
+# ─── Composite — try LLM, fall back to heuristic ──────────────────
+
+
+class CompositeDispatcherProvider:
+    """Wired in production. Tries the LLM provider; on any exception
+    (network, schema, etc.) falls back to the heuristic so the drawer
+    never deadends. Both providers return PlacementProposal — the
+    fallback is invisible to the caller except for the lower
+    confidence + the reasoning hint."""
+
+    def __init__(
+        self, *, llm: LLMDispatcherProvider | None,
+        heuristic: HeuristicDispatcherProvider | None = None,
+    ) -> None:
+        self.llm = llm
+        self.heuristic = heuristic or HeuristicDispatcherProvider()
+
+    async def propose_async(
+        self, utterance: str, *, ctx: DispatcherContext,
+    ) -> PlacementProposal:
+        if self.llm is not None:
+            try:
+                return await self.llm.propose_async(utterance, ctx=ctx)
+            except Exception as e:
+                logger.warning(
+                    "dispatcher.composite.fallback_to_heuristic",
+                    error=str(e),
+                )
+        proposal = self.heuristic.propose(utterance, ctx=ctx)
+        # Tag the fallback in reasoning so the audit row makes it visible.
+        if self.llm is not None:
+            proposal.reasoning = (
+                f"(LLM unavailable; heuristic placement.) {proposal.reasoning}"
+            )
+        return proposal
+
+    def propose(
+        self, utterance: str, *, ctx: DispatcherContext,
+    ) -> PlacementProposal:
+        import asyncio
+        return asyncio.run(self.propose_async(utterance, ctx=ctx))

@@ -1,11 +1,16 @@
-"""Heuristic dispatcher provider (Part X §35) — utterance → placement."""
+"""Heuristic + LLM dispatcher providers (Part X §35) — utterance →
+placement, with the composite fallback for production."""
 
 from __future__ import annotations
 
+import pytest
 from kukiihome_ha_agent.dispatcher import (
+    CompositeDispatcherProvider,
     DispatcherContext,
     HeuristicDispatcherProvider,
+    LLMDispatcherProvider,
 )
+from kukiihome_ha_agent.provenance_store import PlacementProposal
 
 
 def _ctx(**kw):
@@ -167,3 +172,151 @@ def test_rule_proposal_carries_a_default_severity():
     # Heuristic provider doesn't infer severity from text in v1 — defaults to
     # 'normal' for rules so the rule can fire without VLM grading.
     assert p.severity in ("low", "normal", "critical")
+
+
+# ─── LLM provider — happy path, schema retry, raise on second failure ──
+
+
+class _FakeLLMClient:
+    """Deterministic test double — returns canned responses in order
+    so we can simulate first-call failures + retry success."""
+
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = list(responses)
+        self.calls: list[tuple[str, str]] = []
+
+    async def complete(
+        self, *, system: str, user: str, max_tokens: int = 800,
+    ) -> str:
+        self.calls.append((system, user))
+        if not self.responses:
+            raise RuntimeError("test ran out of canned responses")
+        return self.responses.pop(0)
+
+
+def _good_response_json():
+    return (
+        '{"storage_class": "rule", "name": "Winston front yard", '
+        '"scope": {"actor": "winston", "area": "front_yard"}, '
+        '"lifecycle": "persistent", "lifecycle_ttl_iso": null, '
+        '"fire_affordance": "alert", "severity": "critical", '
+        '"intent_text": "Winston in Front yard alone — critical.", '
+        '"reasoning": "explicit fire + persistent → Rule.", '
+        '"confidence": 0.92, "clarifying_questions": []}'
+    )
+
+
+@pytest.mark.asyncio
+async def test_llm_provider_happy_path_returns_proposal():
+    client = _FakeLLMClient([_good_response_json()])
+    provider = LLMDispatcherProvider(client)
+    p = await provider.propose_async(
+        "Tell me when Winston is alone in the Front yard", ctx=_ctx(),
+    )
+    assert isinstance(p, PlacementProposal)
+    assert p.storage_class == "rule"
+    assert p.severity == "critical"
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_llm_provider_tolerates_code_fence():
+    fenced = f"```json\n{_good_response_json()}\n```"
+    provider = LLMDispatcherProvider(_FakeLLMClient([fenced]))
+    p = await provider.propose_async("alert when Winston is alone", ctx=_ctx())
+    assert p.storage_class == "rule"
+
+
+@pytest.mark.asyncio
+async def test_llm_provider_retries_on_invalid_json_then_succeeds():
+    client = _FakeLLMClient(["not json at all", _good_response_json()])
+    provider = LLMDispatcherProvider(client)
+    p = await provider.propose_async("Tell me when Winston is alone", ctx=_ctx())
+    assert p.storage_class == "rule"
+    # The retry happened — second call carries the error in its user prompt
+    assert "not valid JSON" in client.calls[1][1]
+
+
+@pytest.mark.asyncio
+async def test_llm_provider_retries_on_schema_failure_then_succeeds():
+    bad = '{"storage_class": "garbage", "name": "x", "scope": {}, ' \
+          '"lifecycle": "persistent", "fire_affordance": "alert", ' \
+          '"intent_text": "x", "reasoning": "x"}'
+    client = _FakeLLMClient([bad, _good_response_json()])
+    p = await LLMDispatcherProvider(client).propose_async(
+        "Tell me when Winston is alone", ctx=_ctx(),
+    )
+    assert p.storage_class == "rule"
+    # Retry prompt mentions schema failure
+    assert "Schema validation failed" in client.calls[1][1]
+
+
+@pytest.mark.asyncio
+async def test_llm_provider_raises_after_two_bad_responses():
+    client = _FakeLLMClient(["not json", "still not json"])
+    provider = LLMDispatcherProvider(client)
+    with pytest.raises(ValueError):
+        await provider.propose_async("anything", ctx=_ctx())
+
+
+@pytest.mark.asyncio
+async def test_llm_provider_raises_when_client_errors_twice():
+    class _BoomClient:
+        async def complete(self, *, system, user, max_tokens=800):
+            raise RuntimeError("network down")
+
+    with pytest.raises(RuntimeError):
+        await LLMDispatcherProvider(_BoomClient()).propose_async(
+            "anything", ctx=_ctx(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_llm_provider_user_prompt_includes_system_state():
+    client = _FakeLLMClient([_good_response_json()])
+    provider = LLMDispatcherProvider(client)
+    await provider.propose_async("Tell me about Winston", ctx=_ctx())
+    user_prompt = client.calls[0][1]
+    # Known actor / area / camera names + utterance present
+    assert "Winston" in user_prompt
+    assert "Pool" in user_prompt
+    assert "Pool Camera" in user_prompt
+    assert "Tell me about Winston" in user_prompt
+
+
+# ─── Composite — LLM success path + fallback path ────────────────
+
+
+@pytest.mark.asyncio
+async def test_composite_uses_llm_when_available():
+    client = _FakeLLMClient([_good_response_json()])
+    composite = CompositeDispatcherProvider(llm=LLMDispatcherProvider(client))
+    p = await composite.propose_async(
+        "Tell me when Winston is alone", ctx=_ctx(),
+    )
+    assert p.storage_class == "rule"
+    # Reasoning is the LLM's own — no fallback marker
+    assert not p.reasoning.startswith("(LLM unavailable")
+
+
+@pytest.mark.asyncio
+async def test_composite_falls_back_to_heuristic_on_llm_error():
+    client = _FakeLLMClient(["not json", "still not json"])
+    composite = CompositeDispatcherProvider(llm=LLMDispatcherProvider(client))
+    p = await composite.propose_async(
+        "Notify me when Winston is in the Front yard", ctx=_ctx(),
+    )
+    # Heuristic produced a placement; reasoning carries the fallback marker
+    assert p.reasoning.startswith("(LLM unavailable")
+    assert p.storage_class == "rule"
+
+
+@pytest.mark.asyncio
+async def test_composite_with_no_llm_uses_heuristic_directly():
+    composite = CompositeDispatcherProvider(llm=None)
+    p = await composite.propose_async(
+        "Notify me when Winston is in the Front yard", ctx=_ctx(),
+    )
+    # No fallback marker since the LLM was never tried
+    assert not p.reasoning.startswith("(LLM unavailable")
+    assert p.storage_class == "rule"
