@@ -114,6 +114,20 @@ h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:#9aa7b8;
 .system-stripe .lines{margin-top:8px;padding-left:8px;border-left:2px solid #262c36}
 .system-stripe .lines div{padding:3px 0}
 
+/* ─── activity filter strip (Task 7 / Part IV) ──────────────────── */
+form.filters{display:flex;gap:14px;flex-wrap:wrap;align-items:center;
+  padding:10px 12px;background:#13171e;border:1px solid #1c2129;
+  border-radius:10px;margin:6px 0 14px;font-size:13px;color:#cfd6df;
+  position:sticky;top:54px;z-index:5}
+form.filters label{display:flex;align-items:center;gap:6px;color:#cfd6df}
+form.filters select{background:#0c0f14;border:1px solid #2a3140;
+  color:#e6e6e6;border-radius:6px;padding:4px 8px;font-size:13px;
+  min-width:120px}
+form.filters button{background:#2e6ad1;border:0;color:#fff;border-radius:6px;
+  padding:5px 12px;font-size:13px;cursor:pointer}
+form.filters a.clear{color:#7e8a9a;font-size:12px;text-decoration:none}
+form.filters a.clear:hover{color:#cfd6df;text-decoration:underline}
+
 /* ─── mock-page treatment ──────────────────────────────────────── */
 .coming-soon{background:#13171e;border:1px dashed #262c36;border-radius:12px;
   padding:36px 24px;text-align:center;color:#9aa7b8;margin-top:24px}

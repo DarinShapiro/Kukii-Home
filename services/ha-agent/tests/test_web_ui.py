@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from kukiihome_ha_agent.web_ui.home import render_home_page
 from kukiihome_ha_agent.web_ui.mocks import (
-    render_activity_page,
     render_areas_page,
     render_cameras_page,
     render_diagnostics_page,
@@ -270,8 +269,9 @@ def test_home_unresolved_tracks_disappears_when_zero():
 
 
 def test_each_mock_renders_explainer():
+    # Activity is no longer a mock (Task 7); the remaining mocks are still
+    # credible "Coming soon" skeletons.
     pages = {
-        "Activity": render_activity_page(),
         "Areas": render_areas_page(),
         "Intent": render_intent_page(),
         "Policies": render_policies_page(),

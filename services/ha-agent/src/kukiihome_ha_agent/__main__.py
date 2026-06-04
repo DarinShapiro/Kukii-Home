@@ -2120,9 +2120,28 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             content_type="text/html",
         )
 
-    async def v2_activity(_request: web.Request) -> web.Response:
-        from kukiihome_ha_agent.web_ui.mocks import render_activity_page
-        return _v2_mock_response(active="activity", body_html=render_activity_page())
+    async def v2_activity(request: web.Request) -> web.Response:
+        # Task 7 / Part IV: real activity page with filter chips + pagination.
+        import time as _time
+
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.activity import (
+            parse_filters,
+            render_activity_page,
+        )
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        # Pull the full alert log (capped at 500 — alert_log itself trims; this
+        # is the page-side over-fetch ceiling for the filter+page pipeline).
+        all_alerts = alert_log.recent(500)
+        filters = parse_filters(dict(request.rel_url.query))
+        content = render_activity_page(
+            alerts_all=all_alerts, now_ts=_time.time(), **filters,
+        )
+        return web.Response(
+            text=render_shell("activity", content, version=__version__),
+            content_type="text/html",
+        )
 
     async def v2_areas(_request: web.Request) -> web.Response:
         from kukiihome_ha_agent.web_ui.mocks import render_areas_page

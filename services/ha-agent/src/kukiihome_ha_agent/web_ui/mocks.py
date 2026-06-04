@@ -31,21 +31,6 @@ def _coming_soon(
     )
 
 
-def render_activity_page() -> str:
-    return (
-        "<h1>Activity</h1>"
-        "<div class='sub'>The home page already shows the N most recent "
-        "incidents. This is where depth + filters live: search, focused "
-        "views by camera / person / area, day-picker, export.</div>"
-        + _coming_soon(
-            "Coming soon",
-            "Search across all incidents; refocused views; day-picker; "
-            "trace deep-links.",
-            ref="planning/web-ui-design.md — Part IV (Activity depth & filters).",
-        )
-    )
-
-
 def render_areas_page() -> str:
     return (
         "<h1>Areas</h1>"
