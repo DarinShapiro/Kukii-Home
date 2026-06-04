@@ -19,14 +19,17 @@ triple) apply across all parts unless a part says otherwise.
 
 | Part | Surface | Status |
 |---|---|---|
-| **I** | Identity & Review (Inbox, track detail, candidate confirm, merge/split) | Ratified + partially built (§1–9) |
-| **II** | Per-camera detail | Ratified, not built (§10–16) |
-| **III** | Home page (Needs Attention + Activity + Trace) | Ratified, not built (§17–24) |
-| **IV** | Activity depth & filters (search, focused views) | TBD |
-| **V** | Areas | TBD |
-| **VI** | Policies (VLM-authored, viewable + revocable) | TBD — next |
-| **VII** | Diagnostics + dev loop | TBD |
-| **VIII** | HA Companion / Lovelace surfaces | partial (§6 below, push only) |
+| **I** | Identity & Review (Inbox, track detail, candidate confirm, merge/split) | Ratified + built (§1–9) |
+| **II** | Per-camera detail + Authorized actions whitelist | Ratified + built (§10–16) |
+| **III** | Home page (Needs Attention + Activity + Trace + audit chain) | Ratified + built (§17–24) |
+| **IV** | Activity depth & filters | Ratified + built (placeholder §below) |
+| **V** | Areas | Ratified + built (Iter 2.C) |
+| **VI** | Intent — Preferences + Rules | Ratified + built (Iter 2.A + Task 9) |
+| **VII** | Policies (dismissals + transient intents) | Ratified + built (Iter 2.D) |
+| **VIII** | Diagnostics + dev loop | Ratified + built (Iter 2.E roll-up; audit-edge browser deferred) |
+| **IX** | **Memory architecture — guidance vs evidence, unified /memory + /identities + /system** | **Ratified, not built** (§25–32) |
+| **X** | **Conversational dispatcher — drawer + LLM placement + audit thread** | **Ratified, not built** (§33–41) |
+| n/a | HA Companion / Lovelace surfaces | partial (§6 below, push only) |
 
 ---
 
@@ -1278,4 +1281,640 @@ These cascade — surfaces designed in later parts must honor them:
 TBD. Refocused views (by camera, by person, by area), search across all
 incidents, day-pickers, export. Shares row schema with Part III; this is
 *affordances on the home stream*, not a separate destination.
+
+---
+
+# PART IX — Memory architecture
+
+Ratified 2026-06-04. After Iteration 2 shipped six page-level surfaces
+(Rules, Preferences, Policies, Areas, Cameras, Diagnostics), an
+architectural pattern surfaced: **the page-per-concept layout was
+hiding the fact that almost all of those concepts are the same kind of
+thing.** A Rule, a Preference, a TransientIntent, a DismissalPolicy, a
+KnownActor.access_profile, and an Area.attention_mode are all
+user-authored guidance the VLM reads when reasoning. They differ on
+lifecycle, scope, and whether they carry an explicit fire target — not
+on what they ARE.
+
+Part IX collapses that surface into one unified *Memory* model: a
+single browse, a single authoring surface (Part X), and a clean
+separation between *guidance* (instruction) and *evidence* (citation).
+This is the architectural reframe that lets the conversational layer
+in Part X be possible at all.
+
+## 25. The cut that makes the rest legible — guidance vs evidence
+
+Every piece of state the system holds falls into one of two roles
+relative to the VLM:
+
+- **Guidance** — *user-authored signals that shape VLM judgment.*
+  Rules, Preferences, SituationalContexts, TransientIntents,
+  DismissalPolicies, KnownActor access profiles, Area attention modes,
+  per-camera authorized-action whitelists. The VLM reads these as
+  *instructions*. They have one job: change what the reasoner decides.
+
+- **Evidence** — *system-observed data the VLM cites.* Episodic events,
+  identity galleries (embeddings), VisitLedger counters,
+  system-learned behavioral profiles, raw frames, audit logs. The VLM
+  reads these as *facts*. They have one job: ground the reasoner in
+  what actually happened.
+
+These two classes have **completely different admin needs:**
+
+| Guidance admin | Evidence admin |
+|---|---|
+| Author, refine, deprecate | Purge, retain, re-embed |
+| Conversational entry (Part X) | Bulk delete by date / actor / camera |
+| Versioning + provenance | Storage hygiene + privacy ops |
+| "Why did this fire" trace | "Stop recognizing X" |
+
+Part IX organizes both halves. The guidance half (mostly built across
+Iterations 1 + 2) gets a unified browse surface (`/memory`). The
+evidence half (mostly unbuilt) gets two new surfaces (`/identities`
+for the identity gallery, `/system` for storage + privacy operations).
+
+## 26. The five memory layers and who admins them
+
+Folding the memory-model concepts (`memory/memory-model-concepts.md`)
+into the design surface:
+
+| Layer | What it holds | Class | Admin surface |
+|---|---|---|---|
+| **1. Working** | In-prompt assembly per VLM call | (transient) | none — visible via Trace (Part III §22) |
+| **2. Session** | In-flight journey object incl. drawer conversation state | (transient) | none directly; conversation transcripts surface in audit |
+| **3. Episodic** | Closed event records + vector embeddings | evidence | `/system` (retention, purge, re-embed) |
+| **4. Identity** | KnownActors, galleries, access profiles, behavioral profiles | mixed: galleries are evidence; profiles are guidance | `/identities` (the unified people + pets + vehicles surface) |
+| **5. Semantic** | Rules, SituationalContexts, TransientIntents, DismissalPolicies, Preferences | guidance | `/memory` (unified browse + per-entry detail) |
+
+Working + Session are pure runtime — they have no admin page. Their
+*outputs* are auditable via the Trace audit chain (Part III §22 +
+Iter 2.F's matched-rules / protective-actions / policy-hits sections),
+which is sufficient.
+
+## 27. Load-bearing principle — identity is never lost, only corrected
+
+An identity record IS the audit history. Deleting it is impossible
+without losing *"did we ever recognize this actor; when; under what
+confidence."* The operations the user thinks of as *"forget Bob"* are
+actually two separate, narrower operations on different stores:
+
+- **Stop recognizing Bob** — delete the embeddings under his identity
+  record. The record persists with name + history; future events
+  cannot match him.
+- **Delete rules referencing Bob** — operate on the guidance side, in
+  `/memory`. Each rule mentioning Bob is independently removable.
+
+There is no "purge everything about person X" in v1. The vocabulary
+across the UI reflects this:
+
+| User language | What it actually does | Where |
+|---|---|---|
+| "Stop recognizing Bob" | Delete embeddings under his identity | `/identities/{id}` |
+| "Correct identity" | Merge / re-label; record persists | `/identities/{id}` |
+| "Delete rules about Bob" | Per-rule action on guidance entries | `/memory` (filtered by actor) |
+| "Erase last hour of events" | Bulk delete events + frames in time window | `/system` |
+| ~~"Forget Bob everywhere"~~ | Not offered as a single op — see above | n/a |
+
+This is the trust contract. If a future jurisdiction (GDPR-style)
+demands a true single-purge primitive, the design accepts that as a
+follow-up; v1 errs on the side of preserving audit.
+
+## 28. `/memory` — the unified guidance browse
+
+Replaces the separate `/intent`, `/policies`, and the latent
+SituationalContexts surface. One list, every guidance entry,
+filterable two ways.
+
+**Default cut — by context** (how humans think):
+
+```
+┌ Memory ─────────────────────────────────────────────────────────┐
+│  ✨ Tell me what to watch for…       [ by context ▾ ] [ by type ] │
+│                                                                  │
+│  About Winston                                          12 items │
+│    ▸ Rule: Winston unsupervised front yard  · critical · 3 hits  │
+│    ▸ DismissalPolicy: dog at front cam      · 7 hits             │
+│    ▸ KnownActor.access_profile: Backyard 4–7pm                   │
+│    ▸ … 9 more                                                    │
+│                                                                  │
+│  About the Pool                                          5 items │
+│    ▸ Area.attention_mode: attention (continuous monitoring)      │
+│    ▸ Rule: Person at pool after dusk        · critical           │
+│    ▸ … 3 more                                                    │
+│                                                                  │
+│  About tonight                                           2 items │
+│    ▸ TransientIntent: Watch for Bob's car   · expires 11pm       │
+│    ▸ SituationalContext: dinner party 6–11pm                     │
+│                                                                  │
+│  About my preferences                                    4 items │
+│    ▸ Preferences.vigilance: normal                               │
+│    ▸ Preferences.what_i_care_about: "Winston is our dog…"        │
+│    ▸ Preferences.quiet_hours: 11pm–6am                           │
+│    ▸ Preferences.relationships: 3 actors labeled                 │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Toggle cut — by type** (for debugging + power users):
+
+```
+Rules (3) · Preferences (1) · Policies (8) · Transient intents (2)
+· Situational contexts (1) · Access profiles (4) · Area postures (5)
+```
+
+Same underlying list, two facets. Each entry renders the same row
+schema:
+
+**`name · type-chip · scope · lifecycle · last-applied · provenance-icon`**
+
+Click any row → its detail view (existing per-type forms — they
+become the *edit* surfaces, not the *authoring* surfaces; authoring
+happens via the conversational drawer in Part X).
+
+The conversational ✨ trigger lives at the top of the page. Clicking
+it opens the drawer (Part X) with `/memory`-blank context. Clicking
+any entry's "Refine conversationally" action opens the drawer
+pre-loaded with that entry as context.
+
+## 29. `/identities` — the unified actor surface
+
+Replaces the standalone Review page. **People, pets, and vehicles are
+all identities; one surface manages all three.** Two states per
+record, one underlying list:
+
+- **Review** — unresolved tracks awaiting label (current Build #292
+  surface; unchanged behavior)
+- **Enrolled** — labeled actors with full lifecycle management
+
+```
+┌ Identities ─────────────────────────────────────────────────────┐
+│  [ Review (5) ] [ Enrolled (12) ]  filter: all ▾                 │
+│                                                                  │
+│  Enrolled                                                        │
+│    👤 Bob          household        face + body          ▸       │
+│    👤 Alice        guest            face                 ▸       │
+│    🐕 Winston      pet              pet + gait           ▸       │
+│    🚗 Bob's car    vehicle          vehicle + plate      ▸       │
+│    …                                                             │
+│                                                                  │
+│  Review (5 unresolved tracks)                                    │
+│    track 1248  ·  Pool cam  ·  3h ago         [ Label ]          │
+│    …                                                             │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Per-identity detail page** — `/identities/{id}`:
+
+| Section | R/W | Contents |
+|---|---|---|
+| At a glance | R | Friendly name, kind (person/pet/vehicle), recognition quality, last seen |
+| Templates (gallery) | R + curate | All embeddings backing this identity, by modality. Click to inspect a template; remove a misleading one. |
+| Access profile | W | Areas, hours, expected pattern — the guidance fields the VLM reads. *This is a guidance entry; it also surfaces under `/memory` "About X."* |
+| Behavioral profile | R (system-learned) + override | "Walks fast, sits often, …" — system-inferred from episodic; user can override specific claims. |
+| VisitLedger summary | R | Visits per area per week, last visit timestamp |
+| Linked guidance | R + link out | Rules, policies, dismissals mentioning this actor (link to `/memory` filtered view) |
+| Operations | action | **Stop recognizing** (delete embeddings) · **Correct/merge** (re-label) · **Edit access profile** |
+
+**Vehicles is new pipeline work.** The UI pattern slots in identically
+to people + pets, but the embeddings + plate-recognition layer is not
+built. Flag as its own arc; the `/identities` page handles vehicles
+the day the pipeline lands without UI changes.
+
+## 30. `/system` — storage + privacy operations
+
+A new top-level surface — *not* under Diagnostics. Diagnostics answers
+*"is it working"*; `/system` answers *"what's it holding and who can
+see it."* Three cards, top-to-bottom:
+
+**Card 1 — Storage usage:**
+
+```
+┌ Storage usage ──────────────────────────────────────────────────┐
+│  Episodic events       12,483 events   ·  142 MB    [ details ▾ ]│
+│    by camera: Pool 4,201 (47 MB) · Front 3,189 (38 MB) · …       │
+│  Frame snapshots       9,840 frames    ·  3.8 GB    [ details ▾ ]│
+│    by age: <24h 612 (240 MB) · 1-7d 3,201 (1.2 GB) · …           │
+│  Identity embeddings   2,840 templates ·  68 MB                  │
+│    by modality: face 1,201 · body 940 · gait 412 · pet 287       │
+│  Audit logs            48,201 rows     ·  31 MB                  │
+│  Stores combined       7 SQLite DBs    ·  14 MB                  │
+│                                                                  │
+│  Total                                  ~4.1 GB used             │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Card 2 — Retention policy** (per-class editor):
+
+| Class | Knob | Default |
+|---|---|---|
+| Episodic events | Keep `N days` *or* `N GB`, whichever lower → prune oldest | 90 days, 10 GB |
+| Frame snapshots | Keep `N days` (separately tuned; frames dominate disk) | 14 days |
+| Identity embeddings | **Never auto-prune** — gallery is precious | n/a |
+| Audit logs | Keep `N days` | 365 days |
+
+Per-camera overrides optional — a privacy-sensitive camera can retain
+less than the global default.
+
+**Card 3 — Operations:**
+
+- **Erase last hour** — panic button. Bulk-deletes recent events +
+  frames + clips across all cameras. Confirms; audit-logged.
+- **Purge from `[camera]` between `[start, end]`** — surgical bulk
+  delete. Audit-logged.
+- **Export everything about `[actor | camera | timeframe]`** —
+  portable JSON + frames archive (.zip).
+
+**Admin audit log** at the bottom — every storage/privacy operation
+shows here with timestamp + scope + bytes removed. Read-only. This is
+the trust contract: anything destructive is recorded.
+
+## 31. Nav collapse + URL backward-compat
+
+Iteration 2's nav was:
+
+```
+Home · Activity · Areas · Intent · Policies · Cameras · Identities · Diagnostics
+```
+
+After Part IX:
+
+```
+Home · Activity · Memory · Areas · Cameras · Identities · System · Diagnostics
+```
+
+Changes:
+
+- `/intent` and `/policies` → both folded into `/memory`. Both URLs
+  301-redirect to `/memory?type=rule` and `/memory?type=policy`
+  respectively for backward-compat with bookmarks + HA Lovelace links.
+- `/identities` retained — its scope expanded (Review + Enrolled), not
+  its URL.
+- `/system` is new — the storage + privacy surface.
+- `/diagnostics` retained — same purpose, narrower (system health,
+  reasoner roll-up, dev loop).
+- Areas + Cameras stay separate — they're *config primitives* that
+  *carry* guidance fields (attention_mode, role, whitelists), but
+  they're not themselves guidance entries. They surface in `/memory`
+  as filtered context groups, but their config lives under their own
+  nav for direct authoring.
+
+## 32. Implications upstream (other parts must honor these)
+
+- **Iter 2 page renderers stay, but their nav entries move.** The
+  current `intent.py` / `policies.py` rendering becomes detail views
+  reachable from `/memory` rather than top-level nav targets.
+- **Every guidance entry gets a `provenance` JSON field.** Old rows
+  get backfilled with `{"origin": "pre-provenance", "transcript_id":
+  null}`. The provenance shape is the contract Part X writes against.
+- **The audit chain on `/alert/{id}` (Part III §22) already surfaces
+  matched rules + protective actions + policy hits; under Part IX it
+  also surfaces any guidance entries' provenance trails** so the user
+  can follow "why did this fire" → "from which authored intent" →
+  "from which conversation turn."
+- **`KnownActor.access_profile` and `Area.attention_mode` get
+  promoted to first-class guidance entries** with their own
+  provenance + `/memory` row representation. They were always
+  guidance; the model just acknowledges it now.
+
+---
+
+# PART X — Conversational dispatcher
+
+Ratified 2026-06-04. The unifying authoring surface for every
+guidance type — Rules, Preferences, TransientIntents,
+DismissalPolicies, SituationalContexts, access profiles, area
+postures. The user expresses intent in natural language; the system
+classifies, previews, and writes to the correct store with full
+provenance.
+
+This is what separates Kukii-Home from other AI surveillance
+products: every other system makes the user think in terms of
+*"is this a rule, a preference, an automation, a tag, a smart
+alert"* — buckets they had no reason to learn. Kukii-Home lets the
+user speak in sentences and places the result on the right axis.
+
+## 33. The cube — three axes, every guidance entry is a point
+
+Every guidance type sits at one corner of:
+
+- **Scope** — global · area · camera · actor · kind · pattern
+- **Lifecycle** — persistent · temporal (TTL) · fire-once
+- **Fire affordance** — explicit alert · soft prior shift · dismiss / suppress · metadata only
+
+The familiar storage classes are corners of this cube:
+
+| Storage class | Scope | Lifecycle | Fire affordance |
+|---|---|---|---|
+| **Rule** | scoped (area / actor / kind) | persistent | explicit alert |
+| **Preference** | global | persistent | soft prior shift |
+| **TransientIntent** | scoped | temporal | explicit alert |
+| **DismissalPolicy** | scoped (pattern) | persistent | dismiss |
+| **SituationalContext** | global or area | temporal | soft prior shift |
+| **KnownActor.access_profile** | actor | persistent | soft prior shift |
+| **Area.attention_mode** | area | persistent | metadata (changes pipeline) |
+
+The user doesn't see the cube. The dispatcher sees it and routes.
+
+## 34. The drawer — the conversational surface
+
+A persistent right-side drawer, available from every page via the ✨
+trigger in the header. Renders in any web client — including HA
+Companion's WebView, which is how Kukii-Home reaches mobile (no
+separate mobile app or API surface).
+
+**Drawer requirements:**
+
+- **Persistent across page navigation.** State lives server-side
+  (`sessions.db`); the drawer reattaches to the active thread on
+  every page load. Closing the drawer doesn't end the conversation.
+- **Page-context aware.** Opening on `/alert/{id}` prefills with that
+  incident as context. Opening on `/memory` entry detail prefills with
+  that entry. Opening from the header is blank.
+- **Inline preview cards.** Placement proposals render as compact
+  cards inside the conversation flow (not a separate panel). Confirm
+  or refine inline.
+- **"Open in editor" escape hatch.** Every preview card has a link to
+  the full per-type form for adjustments the conversation didn't
+  capture.
+- **Refinement-as-thread.** Refinements on an existing entry append
+  to the same thread, so the audit view shows the conversation arc,
+  not just the last turn.
+- **WebView-safe.** No Service Workers, no APIs unavailable to HA
+  Companion's WebView. Touch-friendly sizing.
+
+```
+┌── /memory ─────────────────────────┬── ✨ Conversation ──────────┐
+│  Memory                            │  Authoring                  │
+│                                    │                             │
+│  About Winston            12 items │  > I want to know when      │
+│    ▸ Rule: Winston unsupervised…   │    Winston is out front     │
+│    …                               │    without anyone with him  │
+│                                    │                             │
+│  About Pool               5 items  │  ┌─ proposing ─────────────┐│
+│    …                               │  │ Rule · persistent · alert││
+│                                    │  │ Name: Winston            ││
+│                                    │  │   unsupervised front yard││
+│                                    │  │ Scope: front_yard area   ││
+│                                    │  │ Severity: critical       ││
+│                                    │  │                          ││
+│                                    │  │ Because: you said        ││
+│                                    │  │ 'when' + 'always' → Rule.││
+│                                    │  │ Scope inferred from      ││
+│                                    │  │ Winston's home areas.    ││
+│                                    │  │                          ││
+│                                    │  │ [ Confirm ] [ Refine ]   ││
+│                                    │  │ [ Open in editor ]       ││
+│                                    │  └──────────────────────────┘│
+└────────────────────────────────────┴─────────────────────────────┘
+```
+
+## 35. The dispatcher — LLM-only, schema-validated
+
+One LLM call per turn. Read-only access to the system state (stores,
+KnownActors, areas, recent events) via tool calls. Single
+write surface (§37). Returns a typed placement proposal:
+
+```typescript
+PlacementProposal = {
+  storage_class: 'rule' | 'preference' | 'transient_intent' |
+                 'dismissal_policy' | 'situational_context' |
+                 'access_profile' | 'area_posture',
+  name: string,
+  scope: { actor?, area?, camera?, kind?, pattern? },
+  lifecycle: 'persistent' | 'temporal' | 'fire_once',
+  lifecycle_ttl_iso?: string,         // when temporal
+  fire_affordance: 'alert' | 'shift_prior' | 'dismiss' | 'metadata',
+  severity?: 'low' | 'normal' | 'critical',
+  intent_text: string,                // the prose the VLM reads at eval time
+  reasoning: string,                  // ONE SENTENCE explaining the placement
+  confidence: number,                 // 0..1
+  clarifying_questions: string[],     // empty when confidence high
+}
+```
+
+**Schema-validated.** Malformed responses retry with the schema in the
+retry prompt. Same pattern as the workflow harness's structured-output
+agents.
+
+**Two-axis disambiguation** when `confidence < 0.7`: the dispatcher
+returns clarifying questions targeting the two cube axes that matter
+most — **lifecycle** (*"just for tonight, or always?"*) and **fire
+affordance** (*"should it ping you, or just change how I judge things?"*).
+Scope is usually inferred from the utterance + KnownActor data; when
+it's not, scope becomes a third clarifying question.
+
+**The `reasoning` field is the audit primitive.** Not chain-of-thought
+— a one-sentence human-readable justification: *"You said 'always' +
+'tell me' → Rule. Scope inferred from Winston's home areas + 'out
+front' utterance."* This is what appears under the "How this was
+authored" card on every entry's detail page.
+
+## 36. The session model
+
+A new SQLite store, `sessions.db`, sister to the existing five:
+
+```sql
+CREATE TABLE sessions (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL,      -- HA user id (inherited via ingress auth)
+  opened_at     REAL NOT NULL,
+  closed_at     REAL,
+  page_context  TEXT,               -- where the drawer was first opened
+  alert_context TEXT                -- pre-loaded alert_id when relevant
+);
+
+CREATE TABLE transcripts (
+  id            TEXT PRIMARY KEY,
+  session_id    TEXT NOT NULL,
+  turn_index    INTEGER NOT NULL,
+  role          TEXT NOT NULL,      -- 'user' | 'system'
+  utterance     TEXT NOT NULL,
+  proposal_json TEXT,               -- the PlacementProposal when role='system'
+  committed_to  TEXT,               -- guidance entry id when confirmed
+  ts            REAL NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE TABLE guidance_provenance (
+  guidance_id   TEXT PRIMARY KEY,   -- the entry id in its own store
+  origin        TEXT NOT NULL,      -- 'conversation' | 'form' | 'system_proposed'
+  transcript_id TEXT,               -- pointer to the originating turn
+  user_utterance TEXT,              -- denormalized for fast audit reads
+  placement_reasoning TEXT,         -- the LLM's one-sentence justification
+  user_confirmed_at REAL,
+  refinement_transcript_ids TEXT    -- JSON array of later refinement turns
+);
+```
+
+**Session lifetime.** A session lives until 24h of inactivity, then
+closes. A new utterance after that opens a new session. Transcripts
+persist forever (cheap; the audit value depends on it).
+
+**Forms write through the dispatcher too.** When the user authors via
+a per-type form (e.g., the existing Rules editor under `/memory`), the
+form synthesizes a fake transcript turn ("authored via form") and
+calls `commit_guidance` the same way. Provenance origin becomes
+`'form'` instead of `'conversation'`, but the audit view is uniform.
+
+## 37. `commit_guidance` — the single write surface
+
+Every guidance write — conversational, form-authored, or
+system-proposed — funnels through one function:
+
+```
+commit_guidance(
+  proposal: PlacementProposal,
+  transcript_id: str | None,
+  origin: 'conversation' | 'form' | 'system_proposed',
+) -> guidance_id
+```
+
+The function:
+
+1. Validates the proposal against the storage class's schema
+2. Routes to the right store (RulesStore, PreferencesStore, etc.)
+3. Writes the entry
+4. Writes the `guidance_provenance` row
+5. Returns the new entry id
+
+**Refinement uses the same path.** Editing an existing entry calls
+`commit_guidance` with the refined proposal + the new transcript
+turn; the provenance row's `refinement_transcript_ids` gets appended.
+The entry itself is updated, not duplicated.
+
+## 38. Provenance + audit primitives
+
+On any guidance entry's detail view, a *"How this was authored"* card
+shows:
+
+```
+┌─ How this was authored ───────────────────────────────────────────┐
+│  You said (2026-06-04 19:42):                                     │
+│    "I want to know when Winston is out front without anyone       │
+│     with him."                                                    │
+│                                                                   │
+│  System placed this as a Rule because:                            │
+│    "You said 'always' + 'tell me' → Rule. Scope inferred from     │
+│     Winston's home areas + 'out front' utterance."                │
+│                                                                   │
+│  Confirmed: 2026-06-04 19:43                                      │
+│                                                                   │
+│  Refinements (2):                                                 │
+│    ▸ 2026-06-05: "…also if my brother isn't with him"             │
+│    ▸ 2026-06-12: "drop severity from critical to normal"          │
+│                                                                   │
+│  [ Refine conversationally ]   [ Open in editor ]                 │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+Three trust guarantees this enforces:
+
+1. **Preview before save.** The dispatcher NEVER silently writes. The
+   preview card with the type chip, scope, lifecycle, and reasoning
+   appears for confirmation on every commit.
+2. **Storage class is visible.** The user always sees *"this becomes
+   a Rule"* (or whichever class) before confirming. Misclassification
+   gets caught at the preview step.
+3. **Round-trip from every entry.** Click any guidance row in
+   `/memory` → see the originating conversation → re-enter that
+   thread to refine. The audit isn't a separate log; it's the
+   authoring trail.
+
+## 39. Misclassification backstops
+
+Even with preview + disambiguation, the LLM will occasionally place
+wrong. Three backstops:
+
+1. **Preview-before-save** (§38) — primary line of defense.
+2. **Reversible by re-typing.** Every entry detail view has a
+   *"Convert to a different type"* action. The dispatcher takes the
+   existing intent_text + a target class hint, re-runs placement, and
+   moves the entry to the new store with a new provenance trail
+   linked back.
+3. **Drift detection.** A nightly sweep flags:
+   - Rules with 0 fires in 30 days → suggest *"this rule hasn't
+     fired; maybe a Preference?"*
+   - TransientIntents that outlived their TTL via manual extension
+     twice → suggest *"convert to a Rule?"*
+   - DismissalPolicies with 0 hits in 30 days → suggest *"revoke?"*
+
+   Drift suggestions surface in `/memory` as a small banner row at
+   the top of the affected entry's context group. Never auto-applied.
+
+## 40. Push-reply via fragment-load
+
+The highest-leverage authoring moment is *right after an alert
+fires*, when the user is looking at the push notification and
+context is fresh. Kukii-Home reaches this without any special HA
+Companion protocol:
+
+1. `kukiihome_alert` fires → HA Companion delivers push
+2. User taps push → HA Companion opens add-on at `/alert/{event_id}#drawer`
+3. The `#drawer` fragment + `alert={id}` context auto-opens the
+   drawer pre-loaded with that alert
+4. User types *"this is fine — Winston was with me"* → standard
+   utterance flow
+5. Dispatcher recognizes the context (alert_id + the rule that fired)
+   → proposes a refinement of that rule
+6. User confirms → rule updated with new refinement transcript turn
+
+**Zero new push-side infrastructure.** The drawer just listens for
+the URL fragment and prefills.
+
+## 41. Implications upstream (other parts must honor these)
+
+- **Part IX's `/memory` browse depends on this part.** The ✨ trigger,
+  the per-entry "Refine conversationally" action, and the "How this
+  was authored" card all live here; `/memory` references but does not
+  duplicate.
+- **Part III §22 trace audit chain extends to include provenance.**
+  When a rule fires, the trace already shows the rule. Under Part X
+  the trace also shows the originating conversation turn (one-line
+  excerpt + link to full transcript).
+- **Forms become structured authoring shortcuts.** The existing Iter 2
+  rule / preference / area / policy / whitelist forms still work —
+  they just feed `commit_guidance` with a synthetic transcript instead
+  of writing directly. No user-facing change; the audit becomes
+  uniform.
+- **HA Companion is the mobile client.** No separate mobile API
+  surface, no separate mobile UI, no separate auth. The same web
+  endpoints serve HA Companion's WebView; ingress auth carries
+  through. Voice input is HA Assist's concern, not Kukii-Home's.
+
+---
+
+# Build state — after Iteration 2 + Parts IX/X ratification
+
+Page-level surfaces:
+
+| Surface | State |
+|---|---|
+| `/home` | built (Task 7-era + audit chain) |
+| `/activity` | built |
+| `/intent`, `/policies` | built; collapse into `/memory` per Part IX |
+| `/areas`, `/cameras` | built (Iter 2.B / 2.C) |
+| `/identities` (Review only) | built; expand to Enrolled per Part IX §29 |
+| `/diagnostics` | built (Iter 2.E) |
+| `/memory` | unbuilt (Part IX §28) |
+| `/system` | unbuilt (Part IX §30) |
+| Drawer + dispatcher | unbuilt (Part X) |
+| `/identities/{id}` detail | unbuilt (Part IX §29) |
+
+Backend stores:
+
+| Store | State |
+|---|---|
+| RulesStore, ActionStore, AreaStore, PreferencesStore, PolicyStore | built |
+| `sessions.db` (transcripts + provenance) | unbuilt (Part X §36) |
+| Storage + retention enforcement | unbuilt (Part IX §30) |
+| Vehicle identity pipeline | unbuilt (Part IX §29 note) |
+| SituationalContexts store + reasoner integration | unbuilt (dispatched as guidance under Part X) |
+
+Cross-cutting:
+
+- Provenance backfill for existing entries: one-time migration writing
+  `{"origin": "pre-provenance"}` rows for everything authored before
+  Part X lands.
+- Nav reorganization: redirects from old URLs.
+- Audit-chain extension on `/alert/{id}` to surface provenance one-line
+  excerpts.
 
