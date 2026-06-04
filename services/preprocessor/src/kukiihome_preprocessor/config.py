@@ -111,9 +111,21 @@ class PreprocessorConfig:
     rtsp_buffer_horizon_seconds: float = 300.0
     rtsp_buffer_max_entries_per_camera: int = 1024
     rtsp_capture_interval_seconds: float = 1.0
-    """Target keyframe cadence. 1.0s matches typical sub-stream GOP
-    intervals; lower numbers buy higher temporal resolution at the
-    cost of buffer footprint."""
+    """**Tracking frame rate.** Target keyframe cadence: 1.0s = 1 fps. *Lower it
+    for better tracking* — at 1 fps a subject moves far between frames so the
+    tracker fragments into single-frame splinters (design §7.6); 0.2-0.5s
+    (2-5 fps) gives the continuity the tracker + ReID need, at the cost of
+    buffer RAM + offline-enrich compute. The VLM is insulated from the density
+    by ``vlm_window_max_frames`` — capture dense, reason sparse."""
+
+    vlm_window_max_frames: int = 0
+    """**VLM frame budget.** Cap on how many frames the ``/frame_window`` RPC
+    returns to the VLM/alert side — the downsample that lets capture run dense
+    (above) without blowing up VLM cost/context. ``0`` = no cap (return every
+    frame). When set, the endpoint keeps ~this many evenly-spaced keyframes
+    (first + last preserved); detections/identities stay full (cheap metadata).
+    The event recorder pulls frames straight from the buffer, so it is
+    unaffected — only the VLM hop thins."""
 
     # ─── Detection (Phase 10.3) ────────────────────────────────────
     detection_enabled: bool = False
@@ -363,6 +375,7 @@ def load_from_env() -> PreprocessorConfig:
             "KUKIIHOME_PREPROCESSOR_BUFFER_MAX_ENTRIES", 1024
         ),
         rtsp_capture_interval_seconds=_env_float("KUKIIHOME_PREPROCESSOR_CAPTURE_INTERVAL_S", 1.0),
+        vlm_window_max_frames=_env_int("KUKIIHOME_PREPROCESSOR_VLM_WINDOW_MAX_FRAMES", 0),
         detection_enabled=os.environ.get("KUKIIHOME_PREPROCESSOR_DETECTION", "false").lower()
         in ("1", "true", "yes", "on"),
         detection_backend=os.environ.get("KUKIIHOME_PREPROCESSOR_DETECTION_BACKEND", "pytorch"),

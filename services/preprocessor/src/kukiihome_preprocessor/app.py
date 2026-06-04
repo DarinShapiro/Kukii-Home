@@ -219,6 +219,18 @@ def create_app(state: AppState) -> FastAPI:
             enrich=enrich,
             cache=state.cache,
         )
+        # Decouple tracking-fps from VLM-fps: capture/persist dense (for
+        # tracking + embedding), but thin the VLM-facing window to a keyframe
+        # budget here. The event recorder reads the buffer directly and is
+        # unaffected. Detections/identities are kept whole (cheap metadata);
+        # only the (expensive) frame images are downsampled.
+        cap = state.config.vlm_window_max_frames
+        if cap and len(result.frames) > cap:
+            from kukiihome_preprocessor.keyframes import select_keyframes
+
+            result = result.model_copy(
+                update={"frames": select_keyframes(result.frames, cap)}
+            )
         state.frame_windows_served_total += 1
         return result
 

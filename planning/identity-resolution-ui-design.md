@@ -512,9 +512,14 @@ proximity gate to force appearance-only association also risks merging
 feature, not a bug.)
 
 **Conclusion + actions:**
-- **Frame rate is the structural fix.** Decouple tracking-fps (dense — every
-  frame, so detections are continuous and IoU association just works) from
-  VLM-fps (sparse keyframes, downsampled only at the VLM hop). The offline event
+- **Frame rate is the structural fix — and the decoupling is now built.**
+  Tracking-fps and VLM-fps are separated: capture dense (lower
+  `rtsp_capture_interval_seconds`, e.g. 0.2-0.5s) so detections are continuous
+  and IoU association just works; the event recorder + enrich worker stay dense;
+  and the `/frame_window` RPC thins to a keyframe budget (`vlm_window_max_frames`
+  via `keyframes.select_keyframes` — evenly spaced, first+last preserved,
+  detections kept whole) so dense capture never blows up VLM cost. Both default
+  off (1 fps, no cap) — the operator enables the pair. The offline event
   recordings are ~1 fps; the live continuous pipeline runs denser, so this
   fragmentation is largely an artifact of the offline low-fps path.
 - **Quality declutter** (§ in 0.6.x) is the right *current* defense — these
