@@ -84,8 +84,11 @@ def register_identity_routes(app: FastAPI, state: AppState) -> None:
         status: str | None = Query(default=None),
         kind: str | None = Query(default=None),
         limit: int = Query(default=200, ge=1, le=1000),
+        fragments: bool = Query(default=False),  # include faceless-short splinters
     ) -> JSONResponse:
-        tracks = identity.track_summaries(status=status, kind=kind, limit=limit)
+        tracks = identity.track_summaries(
+            status=status, kind=kind, limit=limit, include_fragments=fragments
+        )
         return JSONResponse({"tracks": [_summary_dict(t) for t in tracks]})
 
     @app.get("/identity/tracks/{event_id}/{track_id}/thumb.jpg")

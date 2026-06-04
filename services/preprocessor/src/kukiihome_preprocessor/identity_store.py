@@ -188,9 +188,22 @@ class IdentityStore:
         status: str | None = None,   # unresolved | resolved | None=all
         kind: str | None = None,     # person | pet | None=all
         limit: int = 200,
+        include_fragments: bool = False,
+        min_substantial_frames: int = 2,
     ) -> list[TrackSummary]:
-        """Group persisted embeddings into per-track cards, joined to the
-        best detection crop + any current resolution. Newest tracks first."""
+        """Group persisted embeddings into per-track cards, joined to the best
+        detection crop + any current resolution. Newest tracks first.
+
+        Quality, not just length, decides what's worth labelling. A track is a
+        **fragment** — a tracker splinter with no identifiable content (the
+        classic top-of-head glimpse) — when it has **no face** *and* too few
+        frames to be a solid body track. Those are hidden by default
+        (``include_fragments=False``); a clear face is always kept (the face
+        detector only embeds a face it actually found, so a ``face`` modality
+        means there *is* something identifiable, even in 1 frame), as is any
+        body/pet track that clears ``min_substantial_frames``. Hidden fragments
+        stay in the store — still auto-resolvable, still in the detection log —
+        they just don't demand a manual label."""
         rows = self._conn.execute(
             """SELECT event_id, camera_id, track_id,
                       COUNT(DISTINCT frame_ts) AS n_frames,
@@ -223,6 +236,20 @@ class IdentityStore:
                 verdict=res["verdict"] if res else None,
             )
             if status is not None and summary.status != status:
+                continue
+            # Quality gate (people only): a person track is a fragment — a
+            # tracker splinter with no identifiable content, the top-of-head
+            # glimpse — when it has no face AND too few frames to be a solid
+            # body track. Pets are never gated (their DINOv2 embedding is the
+            # identity signal; pets have no face modality). Default threshold=2
+            # targets exactly the 1-frame splinters; raise it to cull 2-frame
+            # ones too.
+            is_fragment = (
+                summary.kind == "person"
+                and "face" not in summary.modalities
+                and summary.n_frames < min_substantial_frames
+            )
+            if is_fragment and not include_fragments:
                 continue
             out.append(summary)
             if len(out) >= limit:

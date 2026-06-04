@@ -283,6 +283,35 @@ def _seed_two_people(db_path):
     return ds, IdentityStore(db_path)
 
 
+def test_fragments_decluttered_by_quality_not_length(tmp_path):
+    """Faceless short splinters hide; a face (even 1 frame) or a substantial
+    body track stays. Quality, not frame count."""
+    ds = DetectionStore(tmp_path / "det.db")
+    ds.register_event(event_id="e1", camera_id="pool", captured_ts=100.0)
+    ds.add_detections([
+        DetectionRow("e1", "pool", t, f"{t}.jpg", "person", 0.9, (0.1, 0.1, 0.5, 0.9), tid)
+        for tid, t in [("body", 1.0), ("body", 2.0), ("body", 3.0),  # 3-frame body
+                       ("frag", 4.0),                                  # 1-frame, no face
+                       ("face", 5.0)]                                  # 1-frame, but face
+    ])
+    v = _unit([1.0, 0.0])
+    ds.add_embeddings([
+        EmbeddingRow("e1", "pool", "body", 1.0, "body", "body_id_osnet", v),
+        EmbeddingRow("e1", "pool", "body", 2.0, "body", "body_id_osnet", v),
+        EmbeddingRow("e1", "pool", "body", 3.0, "body", "body_id_osnet", v),
+        EmbeddingRow("e1", "pool", "frag", 4.0, "body", "body_id_osnet", v),   # top-of-head
+        EmbeddingRow("e1", "pool", "face", 5.0, "face", "face_arcface", v),     # clear face
+    ])
+    idn = IdentityStore(tmp_path / "det.db")
+
+    kept = {t.track_id for t in idn.track_summaries()}
+    assert kept == {"body", "face"}        # substantial body + clear face kept
+    assert "frag" not in kept              # faceless 1-frame splinter hidden
+    # toggle reveals everything (nothing is truly lost)
+    assert {t.track_id for t in idn.track_summaries(include_fragments=True)} == {
+        "body", "frag", "face"}
+
+
 def test_track_frames_ordered(tmp_path):
     _ds, idn = _seed_two_people(tmp_path / "det.db")
     frames = idn.track_frames("e1", "t1")
