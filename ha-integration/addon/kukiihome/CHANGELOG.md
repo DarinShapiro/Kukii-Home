@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.21.0...v0.22.0) (2026-06-04)
+
+
+### Features
+
+* **memory:** /system storage + privacy page + RetentionStore (Part IX §30) ([d360198](https://github.com/DarinShapiro/Kukii-Home/commit/d3601981a2d167b189ec117e9c67576bd1966020))
+
 ## [0.21.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.20.0...v0.21.0) (2026-06-04)
 
 
