@@ -19,12 +19,12 @@ triple) apply across all parts unless a part says otherwise.
 
 | Part | Surface | Status |
 |---|---|---|
-| **I** | Identity & Review (Inbox, track detail, candidate confirm, merge/split) | Ratified + partially built (§1–9 below) |
-| **II** | Per-camera detail | Ratified, not built (§10) |
-| **III** | Home page (*Needs Attention*) | TBD — next |
-| **IV** | Activity stream | TBD |
+| **I** | Identity & Review (Inbox, track detail, candidate confirm, merge/split) | Ratified + partially built (§1–9) |
+| **II** | Per-camera detail | Ratified, not built (§10–16) |
+| **III** | Home page (Needs Attention + Activity + Trace) | Ratified, not built (§17–24) |
+| **IV** | Activity depth & filters (search, focused views) | TBD |
 | **V** | Areas | TBD |
-| **VI** | Policies (VLM-authored, viewable + revocable) | TBD |
+| **VI** | Policies (VLM-authored, viewable + revocable) | TBD — next |
 | **VII** | Diagnostics + dev loop | TBD |
 | **VIII** | HA Companion / Lovelace surfaces | partial (§6 below, push only) |
 
@@ -866,4 +866,280 @@ them as constraints:
 - **Drift detection writes to the home page's *Needs Attention* lane**, not
   here. The per-camera page shows the *current* state; the home page shows
   *what changed.* (Part III.)
+
+---
+
+# PART III — Home page: Needs Attention + Activity + Trace
+
+Ratified 2026-06-04. The home page is the **front door** of the add-on —
+what loads at `/` and what the operator opens first in any session. It is
+**not** a system-status page (that's diagnostics, subordinated to a bottom
+stripe), and it is **not** a live-state dashboard (that competes with HA's
+own Lovelace surfaces and would demand server-push). It is a snapshot of
+*"what needs you, what just happened, and is everything healthy"* — in that
+order, top to bottom, on one page.
+
+The collapse this ratifies: **Home and Activity are the same surface.** The
+activity stream IS the home page's primary content, with Needs Attention
+pinned on top and a small system stripe at the bottom. What we previously
+called Part IV — Activity Stream as a separate destination — does not exist
+as such; it becomes "depth & filter affordances *on* the home stream"
+(refocused views, search, day-pickers — TBD, Part IV below).
+
+## 17. Principle
+
+> **Visibility builds trust; reaction is what matters. The passive lane is
+> the wallpaper that proves the system is awake; actions are the foreground.
+> Neither hides the other by default.**
+
+In a household where most days nothing of consequence happens, an empty
+activity page would make it impossible to tell whether *nothing happened* or
+*the system died*. Showing passive events — *"motion · dog in backyard ·
+auto-dismissed"* — at a quieter visual weight keeps the page **alive** on
+quiet days without competing with the actions when they matter. The home
+page must honor this principle structurally, not as a footnote.
+
+This composes with the earlier principles: the activity stream displays
+**incidents the system reasoned about** (P1 — permissive at capability,
+selective at content — applied at the *outcome* layer), each carrying the
+provenance per row (P2 — emit a normalized EvidencePacket regardless of
+source), and dependency drift surfaces here, not on the page where the
+dependency lives (P3 — be a good citizen, surface state changes centrally).
+
+## 18. Page shape
+
+Three zones, fixed order, top-to-bottom:
+
+```
+┌ Kukii-Home ──────────────────── [↻] [Settings] ─────────────────┐
+│  🟢 All quiet · 12 events today · 0 unhandled                   │ status line
+│                                                                  │
+│  ─── NEEDS ATTENTION (3) ────────────────────────────────────── │ Zone 1
+│  ⓘ  Pool cam: native person detection disappeared yesterday     │
+│     — substituted by preprocessor    [Open camera] [Accept]     │ drift (Part II §16)
+│  👤  5 unnamed tracks to review                  [Review →]     │ identity inbox (Part I)
+│  ⚠  Driveway: package detection MISSING            [Configure]  │ capability gap
+│                                                                  │
+│  ─── ACTIVITY ────────  passive ✓ · actions ✓ · [Cam ▾] [Who ▾] │ Zone 2
+│                                                                  │
+│  5m ago    👤 Unknown person walking yard at dusk ·             │
+│            pool · driveway · ✓ asked you  ⓘ trace               │ ACTION (foreground)
+│  2h ago    ✓ Alice arrived · front door · alerted you           │ ACTION
+│  3h ago    Bob left · driveway · passive                        │ passive (muted)
+│  yesterday Rex in backyard · ×4 today · auto-dismissed          │ passive, grouped
+│            (dog policy)                                          │
+│  Tuesday   Mail carrier · front door · auto-dismissed           │ passive
+│                                              ↓ See all          │
+│                                                                  │
+│  Today: 2 actions · 14 passive — system is reasoning             │ trust contract
+│                                                                  │
+│  ──────────────────────────────────────────────────────────────  │ Zone 3
+│  ● 4 cams OK · 1 dependent on preprocessor                       │ system stripe
+│  ● Preprocessor on inference-box · last contact 4s ago           │ (collapsed by default,
+│  ● HA connected · 18 entities watched                            │  expandable on tap)
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Top-line state in plain English, not a status indicator.** *"All quiet.
+12 events today, 0 unhandled"* is information; the green dot complements but
+doesn't substitute. On a problem day: *"⚠ Pool cam offline · 1 unhandled
+alert."*
+
+**Empty state IS the win.** *Needs Attention (0)* should feel rewarding, not
+blank: *"Nothing needs you. The system handled everything."* A truly empty
+day collapses to the status line + a one-line activity reassurance + system
+stripe — not three near-empty sections.
+
+**No live-updating widgets.** `[↻]` + auto-refresh on tab-focus is enough.
+Server-push is over-engineered for a home dashboard; HA's Lovelace handles
+the live-state job natively if the operator wants it.
+
+## 19. The unit is a Tier-2 incident, not a Tier-1 detection
+
+Each row in the activity stream is a **Canonical Incident Path** in the
+sense of Epic 10's three-tier memory model — a coherent thing the system
+reasoned about (Approach → Linger → Interaction → Departure → Anomaly, or a
+variant). Concretely, an incident has:
+
+- **1..N cameras.** A single incident may span "motion at pool cam, then
+  motion at driveway cam, then VLM-reasoned 'unknown person casing the
+  house'" — one row, two cameras, one reasoned outcome.
+- **A temporal span**, not a single timestamp. The row shows the *peak* or
+  *first* relative time; the trace shows the arc.
+- **A single VLM-authored headline** (the verb phrasing — see §20).
+- **A single outcome** (action / passive / pending), with the per-flavor
+  reason inline.
+
+Raw per-camera detections (the per-frame YOLO boxes, the embedding events)
+do **not** appear in this stream. They live in **Diagnostics** (Part VII),
+which keeps the *observed* stream. Home shows the *reasoned* stream.
+
+This shifts what "12 events today" means everywhere it's used — including
+the per-camera page's link out to filtered activity — to **incidents that
+touched this camera**, not raw motion events.
+
+## 20. Row schema
+
+Every row is one shape regardless of where it appears (home, focused views,
+per-alert page sliver):
+
+```
+{relative-time}  {kind-glyph} {VLM scene_description} · {camera(s) joined} ·
+                 {outcome-chip}  {trace-link}
+```
+
+- **Verb-phrased headline = the VLM's `findings.scene_description`.** It
+  reads like a person telling you because a reasoner generated it from the
+  EvidencePacket: *"Alice arrived"* / *"Unknown person walking yard at
+  dusk"* / *"Delivery left at door"*. Unlabeled subjects fall back to
+  *"Unknown person at front door — [label]"* — which doubles as a gentle
+  nudge into the Inbox.
+- **Camera(s) comma-joined** when an incident spanned multiple — *"pool ·
+  driveway"*. The primary camera is the one the VLM's citations point to
+  most heavily (extractable from `findings.citations`), with a tiebreaker
+  to the first-triggered.
+- **Outcome chip** uses the action / passive vocabulary in §21.
+- **Trace link** opens the event-detail page (§22) — the *why* behind the
+  *what*.
+
+**Visual weight is the lane separator, not stream position.** Actions get
+the full row treatment: bold headline, thumbnail, clear outcome chip,
+inline ✓/✗/reassign feedback affordance. Passives are muted: single line,
+no thumbnail, lower-contrast text, smaller outcome chip. Same scrollable
+list; the eye knows the difference.
+
+## 21. The passive lane — three flavors + grouping
+
+"Passive" is not a single state. The system can decide *not to act* in three
+internally-distinct ways, and the row surfaces *which* in plain words; the
+trace shows the full mechanism:
+
+1. **Policy-matched** — a dismissal policy short-circuited before the VLM
+   was called. *"Rex in backyard · matched dismissal policy {dog} until
+   Wed 8pm."* The cheapest outcome; reflects the system having previously
+   *learned* a pattern. Links directly to the policy (Part VI) for revoke.
+2. **VLM-considered, nothing actionable** — VLM called at tier_0 / tier_1,
+   returned no recommendations. *"Considered by VLM (tier_0); no
+   recommendations."* Reflects *"I looked, this is genuinely fine."*
+3. **Recommended-but-gated** — VLM recommended an action; dispatcher gated
+   it (below confidence threshold, time-of-day rule, redundancy check).
+   *"VLM suggested 'announce' (conf 0.42); dispatcher gated (threshold 0.6
+   at this hour)."* Reflects *policy* (dispatcher) overriding *reasoning*
+   (VLM) — the kind of thing the operator might want to investigate.
+
+**Grouping repetitive passives.** Same subject + same location + same
+outcome flavor → collapses into a single row with a count:
+
+```
+yesterday   Rex in backyard · ×4 today · auto-dismissed (dog policy)
+            ↳ tap to expand
+```
+
+Expand shows individual rows. Active grouping, not truncation — a real
+signal that happens to look like the dog (a stranger crossing the yard
+while the dog policy is active) **gets its own row** because its trace
+differs from the grouped pattern.
+
+**Loop-1 feedback on passives** is first-class. A ✗ on a passive row
+("system dismissed this, I disagree") is high-signal correction — often
+*higher* than a ✓ on an action — because it surfaces over-broad dismissal
+policies. The affordance is smaller on passive rows than on actions, but
+it's there.
+
+## 22. The trace (event-detail page)
+
+Clicking any row opens the **incident trace** — the full causality chain
+through the system. This is the page that makes the agent *legible*; it
+operationalizes the architecture's no-silent-decisions principle as UI.
+
+```
+┌ Unknown person walking through yard at dusk ──── 17:10–17:14 ─┐
+│  Outcome: ✓ asked you (push, 17:11) — no response yet          │
+│  Cameras: pool, driveway                                       │
+│                                                                │
+│  ── Trace ───────────────────────────────────────────────────  │
+│                                                                │
+│  17:10:04   pool cam · motion (Dahua native) ────────┐         │
+│             1 person (preprocessor YOLO, 0.87)       │ Tier-1  │
+│  17:10:34   driveway cam · motion (Dahua native) ────┘ events  │
+│             1 person (preprocessor YOLO, 0.84)                 │
+│                                                                │
+│  17:10:36   Triage: no active dismissal policy matched         │
+│  17:10:36   Context: 3 similar past incidents retrieved (RAG)  │
+│                                                                │
+│  17:10:38   VLM (qwen2.5-vl-7b, tier_1, 1.4s)                  │
+│             Findings: "Unknown person walking yard at dusk;     │
+│                       not approaching house; possibly neighbor."│
+│             Confidence: 0.62                                   │
+│             Citations: evt_7f2c, evt_9a1d, cam_pool, area_yard │
+│             Recommendations: ask_user_confirm (medium)         │
+│             Authored policy: none (low-confidence assessment)  │
+│                                                                │
+│  17:11:02   Dispatcher → notify.darins_iphone — sent ✓         │
+│                                                                │
+│  Feedback: [✓ Good catch] [✗ False alarm] [Reassign…]          │
+└────────────────────────────────────────────────────────────────┘
+```
+
+Every line is something the system did and *why*. The trace IS the
+existing audit chain the architecture already mandates (trigger events
+→ policy check → context assembled → VLM decision → dispatcher → action)
+— so building this is largely rendering existing logs, not generating
+new audit data.
+
+- **Default collapsed sections.** Tier-1 events folded by default (count +
+  expand); VLM payload folded by default (headline + expand to see
+  citations/recommendations/policies). For trust-debug, expand-all is one
+  affordance away.
+- **Feedback bar closes Loop 1 here, in context.** Not on a separate review
+  surface — the user is *looking at the reasoning*; the correction belongs
+  next to it.
+- **Stable URL.** Each incident gets an `incident_id` minted at incident
+  formation (composite of first-triggering event + correlation key);
+  `/activity/{incident_id}` is the shareable, link-stable address.
+
+## 23. Time semantics — N-recent + relative, no day boundaries
+
+The home stream shows the **N most recent incidents** with relative
+timestamps that graduate naturally:
+
+`Just now · 5m ago · An hour ago · 3h ago · Yesterday · Tuesday · Mar 12`
+
+Default N = 6 on home; *"↓ See all"* opens the focused activity view (Part
+IV) for depth. No "today" boundary — relative time handles the read fluidly
+without a hard midnight cliff. A quiet day still shows the most-recent
+passive ("Yesterday · Rex in backyard ×4") so the stream is never empty
+without reason.
+
+## 24. Ripples to other parts (constraints these set)
+
+These cascade — surfaces designed in later parts must honor them:
+
+- **Diagnostics (Part VII) keeps the raw-observation stream.** Home is the
+  reasoned stream (incidents); Diagnostics is the observed stream
+  (per-frame detections, per-track embeddings, per-VLM-call raw payloads).
+  Separate audiences, separate surfaces — never mixed.
+- **Identity Inbox (Part I) rows link to the incident, not just the track.**
+  Labeling a track *inside its incident context* is meaningfully better UX
+  than labeling a contextless thumbnail — the user sees the reasoning chain
+  that surfaced the unknown person before naming them.
+- **Per-camera "N events today" semantics (Part II §16).** Filtering means
+  *incidents that touched this camera*, not *Tier-1 motion events anchored
+  there*. A two-camera incident shows once on each camera's filtered view.
+- **Policies (Part VI) need a reverse-link from the passive row.** Every
+  policy-matched passive shows *"matched policy {X}"* with the policy as a
+  link out for revoke. The policy page lists the incidents the policy
+  dismissed — completing the loop.
+- **HA Companion push (Part VIII)** carries the verb-phrased headline + the
+  outcome chip + a deep-link to the trace. The push notification on mobile
+  uses the same row schema as a home stream row — written once, rendered
+  twice.
+
+---
+
+# PART IV — Activity depth & filters (placeholder)
+
+TBD. Refocused views (by camera, by person, by area), search across all
+incidents, day-pickers, export. Shares row schema with Part III; this is
+*affordances on the home stream*, not a separate destination.
 
