@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.13.0...v0.14.0) (2026-06-04)
+
+
+### Features
+
+* **intent:** live Preferences section + PreferencesStore ([3970fa9](https://github.com/DarinShapiro/Kukii-Home/commit/3970fa9353baf2cfdf8703518e5fd40cd633e94d)), closes [#292](https://github.com/DarinShapiro/Kukii-Home/issues/292)
+
 ## [0.13.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.12.0...v0.13.0) (2026-06-04)
 
 
