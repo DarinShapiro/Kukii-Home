@@ -218,7 +218,15 @@ def main() -> None:
     ap.add_argument("--tracker", default=None,
                     help="tracker config for model.track (e.g. scripts/dev/botsort_reid.yaml to "
                          "enable appearance ReID; default = ultralytics BoTSORT, motion-only)")
+    ap.add_argument("--reid-model", default=None,
+                    help="path to an OSNet ONNX to use as the BoTSORT ReID encoder (a trained "
+                         "person-ReID descriptor; pair with --tracker scripts/dev/botsort_osnet.yaml)")
     args = ap.parse_args()
+
+    if args.reid_model:
+        from kukiihome_preprocessor.pipelines.osnet_reid import install
+        install(args.reid_model)
+        print(f"tracker ReID encoder: OSNet ({args.reid_model})", flush=True)
 
     from ultralytics import YOLO
     model = YOLO("yolo11x.pt")

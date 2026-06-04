@@ -1,0 +1,27 @@
+# BoT-SORT with OSNet (trained person-ReID) as the appearance encoder, tuned
+# for low-frame-rate event footage. `model: osnet` is a non-"auto" placeholder
+# so Ultralytics takes the ReID-encoder path; the worker's --reid-model installs
+# OSNet via osnet_reid.install(), ignoring this string.
+#
+# Use: enrich_events.py --tracker scripts/dev/botsort_osnet.yaml --reid-model <osnet.onnx>
+
+tracker_type: botsort
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+new_track_thresh: 0.25
+track_buffer: 60
+match_thresh: 0.8
+fuse_score: True
+gmc_method: sparseOptFlow
+
+# ── ReID (OSNet) ──
+# Sensible defaults for DENSE footage (where ReID earns its keep: mid-track
+# occlusions, not low-fps boundary splinters). Experiment finding: on 1-fps
+# footage no proximity/appearance setting re-linked the fragments — they're
+# isolated single-frame detections with nothing temporally adjacent to
+# associate to. Gate fully open also risks merging co-present look-alikes
+# (t1/t2 @ 0.96 cosine). Frame rate is the real fix; this is for later/dense use.
+proximity_thresh: 0.5
+appearance_thresh: 0.6
+with_reid: True
+model: osnet               # placeholder (non-"auto") — overridden by --reid-model

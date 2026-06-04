@@ -489,6 +489,43 @@ thresholds).
 
 ---
 
+## 7.6 Tracking & fragmentation — empirical finding (2026-06-03)
+
+Tracker splinters (the 1-frame top-of-head tracks that clutter the review
+queue) were investigated end-to-end on the real pool event. **Result: the
+tracker is not the bottleneck — detection density (frame rate) is.**
+
+Three tracker configs gave **byte-identical** track structure (5 tracks:
+19/8/1/1/1):
+1. **Motion-only** (Ultralytics BoT-SORT default).
+2. **ReID, `auto` features** (detector backbone — weak, untrained for ReID).
+3. **ReID, OSNet** (a *trained* person-ReID encoder, wired via
+   `pipelines/osnet_reid.py` so the tracker and identity layer share a model) —
+   even with the proximity gate fully open and appearance permissive.
+
+Why nothing moved: the fragments are **isolated single-frame detections** at the
+event boundaries (subject entering/leaving), with a 2–3s gap of *no detection*
+before the main track forms. A tracker can only associate detections that
+exist; there's nothing temporally adjacent to link them to. (Opening the
+proximity gate to force appearance-only association also risks merging
+*co-present look-alikes* — t1/t2 sat at 0.96 OSNet cosine — so the gate is a
+feature, not a bug.)
+
+**Conclusion + actions:**
+- **Frame rate is the structural fix.** Decouple tracking-fps (dense — every
+  frame, so detections are continuous and IoU association just works) from
+  VLM-fps (sparse keyframes, downsampled only at the VLM hop). The offline event
+  recordings are ~1 fps; the live continuous pipeline runs denser, so this
+  fragmentation is largely an artifact of the offline low-fps path.
+- **Quality declutter** (§ in 0.6.x) is the right *current* defense — these
+  boundary singletons are low-value noise.
+- **OSNet ReID encoder is built + proven-to-engage** (`osnet_reid.py`,
+  `--reid-model`, `botsort_osnet.yaml`) — opt-in, off by default. No payoff on
+  sparse footage; the right tool for **dense footage + mid-track occlusions**
+  later.
+
+---
+
 ## 8. Build state & sequencing (for when we leave design)
 
 **Built (Build #292):** `track_embeddings` + `EmbeddingRow`, `TrackEmbedding`
