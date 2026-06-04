@@ -197,6 +197,34 @@ form.filters a.clear:hover{color:#cfd6df;text-decoration:underline}
   flex-wrap:wrap;color:#cfd6df;font-size:13px}
 .rule-form .form-actions{display:flex;justify-content:flex-end;
   gap:10px;margin-top:20px}
+
+/* ─── Event clip play affordance (Task 1) ───────────────────────── */
+.thumb-wrap{position:relative;display:inline-block;width:100%}
+.thumb-wrap .play-overlay{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,0.25);color:#fff;font-size:28px;line-height:1;
+  text-decoration:none;border-radius:6px;opacity:0;transition:opacity 100ms ease;
+}
+.thumb-wrap:hover .play-overlay,.thumb-wrap:focus-within .play-overlay{opacity:1}
+.thumb-wrap .play-overlay span{
+  display:flex;align-items:center;justify-content:center;
+  width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,0.55);
+  font-size:18px;padding-left:3px /* visually center the ▶ glyph */;
+}
+video.event-clip{display:block;width:100%;max-width:720px;border-radius:8px;
+  background:#0a0c10;margin:8px auto;}
+a.play{display:inline-block;color:#9aa7b8;text-decoration:none;
+  margin-left:8px;padding:0 4px;border-radius:3px;font-size:12px}
+a.play:hover{color:#fff;background:#26344a}
+
+/* ─── Matches table (Task 9) ────────────────────────────────────── */
+table.matches-table{width:100%;border-collapse:collapse;margin-top:12px;
+  font-size:13px;color:#cfd6df}
+table.matches-table th,table.matches-table td{
+  text-align:left;padding:6px 8px;border-bottom:1px solid #1f2632;
+  vertical-align:top}
+table.matches-table th{color:#9aa7b8;font-weight:600;font-size:12px;
+  text-transform:uppercase;letter-spacing:0.04em}
 """
 
 

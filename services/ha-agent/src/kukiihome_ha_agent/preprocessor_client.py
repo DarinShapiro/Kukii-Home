@@ -151,6 +151,13 @@ class PreprocessorClient:
         """GET the animated track-clip GIF bytes for the track-detail page."""
         return await self._fetch_bytes(f"/identity/tracks/{event_id}/{track_id}/clip.gif")
 
+    async def fetch_event_clip_mp4(self, event_id: str) -> bytes | None:
+        """Task 1 stop-gap: pull the on-demand-muxed event clip from the
+        preprocessor. First call triggers the mux (CPU-bound on the prep
+        box); subsequent calls hit the cached file. Returns None when
+        no event matches or the preprocessor can't reach its frames."""
+        return await self._fetch_bytes(f"/events/{event_id}/clip.mp4")
+
     async def get_track_detail(self, event_id: str, track_id: str) -> dict | None:
         """GET the track-detail JSON (summary + ranked candidates)."""
         return await self._get_json(f"/identity/tracks/{event_id}/{track_id}/detail")

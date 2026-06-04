@@ -274,4 +274,56 @@ def create_app(state: AppState) -> FastAPI:
         register_identity_routes(app, state)
         logger.info("preprocessor.identity_api.registered")
 
+    # Task 1 stop-gap: on-demand mux of frame_*.jpg into a playable MP4 +
+    # cache as clip.mp4 alongside the frames. The UI's ▶ play affordance
+    # hits this through the ha-agent proxy. Real recorder-time clip writes
+    # (Design A) land separately; this keeps existing on-disk events usable
+    # today.
+    @app.get("/events/{event_id}/clip.mp4")
+    async def event_clip(event_id: str) -> Response:
+        from pathlib import Path
+
+        from kukiihome_preprocessor.clip_writer import (
+            frame_count_in_event,
+            get_or_build_clip,
+        )
+
+        # event_store_dir is camera-scoped under the root; we have to search
+        # since the URL only carries event_id (camera_id is in the event's
+        # own manifest, but the dir layout is store_dir/<camera>/<event>).
+        # First match wins — event_ids are unique within a deployment.
+        root = Path(state.event_store_dir or "events")
+        # Path.glob is synchronous I/O; offload to a thread so the event
+        # loop isn't blocked on filesystem listing.
+        def _find_event_dir():
+            for p in root.glob(f"*/{event_id}"):
+                if p.is_dir():
+                    return p
+            return None
+
+        import asyncio as _asyncio  # local: keep top-level imports tidy
+        event_dir = await _asyncio.to_thread(_find_event_dir)
+        if event_dir is None:
+            raise HTTPException(status_code=404, detail="event not found")
+        if await _asyncio.to_thread(frame_count_in_event, event_dir) == 0:
+            raise HTTPException(
+                status_code=404, detail="event has no frames to mux"
+            )
+        try:
+            clip_path = await get_or_build_clip(event_dir=event_dir)
+        except Exception as e:
+            logger.exception("clip_mux_failed", event_id=event_id, error=str(e))
+            raise HTTPException(
+                status_code=500, detail=f"clip mux failed: {e}"
+            ) from e
+        # Plain Response with the bytes — HTTP range support is what
+        # browsers need for <video> seek. FastAPI's FileResponse handles
+        # ranges automatically, so use that here.
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            path=str(clip_path),
+            media_type="video/mp4",
+            filename=f"{event_id}.mp4",
+        )
+
     return app

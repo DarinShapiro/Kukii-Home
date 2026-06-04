@@ -578,8 +578,17 @@ def _render_alert_page(event: dict[str, Any], event_id: str) -> str:
         + "</head><body>"
         # Hero
         f"<div class='hero'>"
-        f"<img src='{safe_id}/annotated.jpg' alt='alert frame' "
-        f"onerror=\"this.style.display='none'\"/>"
+        # Task 1: prefer the playable clip when the preprocessor has
+        # muxed one (or can mux on demand). The browser only fetches
+        # clip.mp4 if it decides to play (preload metadata = a small
+        # HEAD-ish probe, not the whole file).
+        f"<video class='event-clip' controls preload='metadata' "
+        f"poster='{safe_id}/annotated.jpg' "
+        f"onerror=\"this.outerHTML='<img src=\\\"{safe_id}/annotated.jpg\\\" alt=\\\"alert frame\\\"/>'\">"
+        f"<source src='{safe_id}/clip.mp4' type='video/mp4'>"
+        # Fallback for browsers that won't render <video>: a plain image.
+        f"<img src='{safe_id}/annotated.jpg' alt='alert frame'/>"
+        "</video>"
         f"<div class='hero-caption'>"
         f"<h1>{headline}</h1>"
         f"<div class='meta'>{camera_label} · {when} · "
@@ -1444,6 +1453,32 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         if path is None:
             return web.Response(status=404, text="no frame for this alert")
         return web.FileResponse(path)
+
+    async def alert_clip(request: web.Request) -> web.Response:
+        """Task 1 stop-gap: proxy the preprocessor's on-demand-muxed clip.
+
+        Three paths in priority order (mirrors planning/web-ui-iteration-1.md
+        Task 1 §Stop-gap):
+          1. external_clip (Agent DVR delegated mode) — not yet implemented;
+             returns 404 so the UI falls through.
+          2. Local cached event-dir clip.mp4 (Design A future) — not present
+             today, also passes through.
+          3. Preprocessor mux of legacy JPEGs (the stop-gap path) — what
+             this implementation actually does today.
+
+        Returns raw bytes for now (no range-request support on this proxy
+        leg). For long clips this means the browser's <video> seek bar will
+        work but seeking re-fetches the whole file; acceptable for stop-gap
+        scope. A streaming proxy with Range pass-through is the obvious
+        follow-up if events grow long.
+        """
+        event_id = request.match_info["event_id"]
+        if boot.preprocessor_client is None:
+            return web.Response(status=503, text="preprocessor not configured")
+        data = await boot.preprocessor_client.fetch_event_clip_mp4(event_id)
+        if data is None:
+            return web.Response(status=404, text="no clip for this event")
+        return web.Response(body=data, content_type="video/mp4")
 
     async def alert_annotated_frame(request: web.Request) -> web.Response:
         """The preprocessor's marked-up version of the frame. Falls
@@ -2376,6 +2411,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     app.router.add_get("/alert/{event_id}", alert_page)
     app.router.add_get("/alert/{event_id}/frame.jpg", alert_frame)
     app.router.add_get("/alert/{event_id}/annotated.jpg", alert_annotated_frame)
+    # Task 1: event clip playback (stop-gap path 3 — preprocessor muxes on
+    # demand). The home / activity rows surface this as a ▶ play overlay
+    # on the thumbnail; the alert detail page plays it inline.
+    app.router.add_get("/alert/{event_id}/clip.mp4", alert_clip)
     app.router.add_post("/alert/{event_id}/dismiss", alert_dismiss)
     app.router.add_post("/alert/{event_id}/feedback", alert_feedback)
     app.router.add_get("/logs", logs_handler)

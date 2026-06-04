@@ -152,12 +152,21 @@ def _render_activity_row(alert: dict, *, now_ts: float) -> str:
         if cam_slug and not camera_already_in_headline
         else ""
     )
+    # Task 1: ▶ play affordance. The trace page handles inline playback;
+    # the activity row just exposes the same URL so the user has one click
+    # to start watching without the trace round-trip. Hidden when no
+    # event_id (notification-only alerts can't replay).
+    play_link = (
+        f"<a class='play' href='alert/{_e(eid)}/clip.mp4' "
+        f"title='Play clip'>▶</a>" if eid else ""
+    )
     # when_html is already HTML-safe (escaped + wrapped in <span title=...>)
     return (
         f"<div class='{klass}'>"
         f"<div class='when'>{when_html}</div>"
         f"<div class='what'>{_e(headline)}{where}</div>"
         f"{_outcome_chip(alert)}"
+        f"{play_link}"
         f"{trace_link}"
         "</div>"
     )
