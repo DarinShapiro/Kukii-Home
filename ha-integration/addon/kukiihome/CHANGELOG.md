@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.12.0...v0.13.0) (2026-06-04)
+
+
+### Features
+
+* **areas:** live Part V page with AreaStore + AttentionMode + camera assignment ([a725f45](https://github.com/DarinShapiro/Kukii-Home/commit/a725f45a9a6bd2116de9e1c4018b8e7d9a8b7662))
+
 ## [0.12.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.11.0...v0.12.0) (2026-06-04)
 
 
