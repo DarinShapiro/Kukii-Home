@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from kukiihome_ha_agent.web_ui.home import render_home_page
-from kukiihome_ha_agent.web_ui.mocks import render_diagnostics_page
+
+# Iter 2: the mocks module is now empty — every page has a live renderer.
 from kukiihome_ha_agent.web_ui.shell import (
     NAV_ITEMS,
     camera_display_name,
@@ -259,24 +260,7 @@ def test_home_unresolved_tracks_disappears_when_zero():
     assert "unnamed track" not in html  # no row when none unresolved
 
 
-# ─── mock pages: nav targets render with explanatory content ───────
-
-
-def test_each_mock_renders_explainer():
-    # Activity (Task 7) and Intent (Task 9) are no longer mocks — they're
-    # served by their own renderers. The remaining mocks are still credible
-    # "Coming soon" skeletons.
-    pages = {
-        "Diagnostics": render_diagnostics_page(),
-    }
-    for title, html in pages.items():
-        assert f"<h1>{title}</h1>" in html
-        assert "Coming soon" in html or "coming-soon" in html
-        # each mock anchors to the design doc so future me knows where to look
-        assert "web-ui-design.md" in html
-
-
-def test_diagnostics_mock_links_back_to_legacy_status():
-    html = render_diagnostics_page("/")
-    assert "legacy status page" in html.lower()
-    assert "href='/'" in html
+# Iter 2: every page now has a live renderer; the test_each_mock_renders
+# helper + the diagnostics legacy-link test moved to their respective
+# page-specific test modules (test_cameras_page, test_areas, test_policies,
+# test_diagnostics_page).

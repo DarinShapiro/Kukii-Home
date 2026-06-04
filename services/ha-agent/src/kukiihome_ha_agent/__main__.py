@@ -2633,8 +2633,54 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         raise web.HTTPSeeOther(location=f"cameras/{camera_id}")
 
     async def v2_diagnostics(_request: web.Request) -> web.Response:
-        from kukiihome_ha_agent.web_ui.mocks import render_diagnostics_page
-        return _v2_mock_response(active="diagnostics", body_html=render_diagnostics_page())
+        import os
+        import time as _time
+
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.diagnostics import (
+            build_diagnostics_vm,
+            render_diagnostics_page,
+        )
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        prep_ok: bool | None = None
+        prep_url = os.environ.get("KUKIIHOME_PREPROCESSOR_URL") or None
+        if boot.preprocessor_client is not None:
+            try:
+                prep_ok = await boot.preprocessor_client.healthz()
+            except Exception:
+                prep_ok = False
+        ha_connected = bool(getattr(boot, "client", None)) and (
+            getattr(boot.client, "is_connected", False)
+        )
+        ha_entities = 0
+        try:
+            snap = await boot.tools.get_snapshot() if boot.tools else []
+            ha_entities = len(list(snap))
+        except Exception as e:
+            logger.debug("v2.diagnostics.snapshot_failed", error=str(e))
+
+        vm = build_diagnostics_vm(
+            version=__version__,
+            preprocessor_ok=prep_ok, preprocessor_url=prep_url,
+            ha_connected=ha_connected, ha_entities=ha_entities,
+            rules_store=getattr(boot, "rules_store", None),
+            action_store=getattr(boot, "action_store", None),
+            area_store=getattr(boot, "area_store", None),
+            policy_store=getattr(boot, "policy_store", None),
+            registry_statuses=(
+                list(boot.camera_registry.all())
+                if getattr(boot, "camera_registry", None) else []
+            ),
+            ha_loops=list(getattr(boot, "ha_camera_loops", []) or []),
+            alerts=alert_log.recent(500),
+            now_ts=_time.time(),
+        )
+        return web.Response(
+            text=render_shell("diagnostics", render_diagnostics_page(vm),
+                              version=__version__),
+            content_type="text/html",
+        )
 
     app = web.Application()
     app.router.add_get("/", status_page)

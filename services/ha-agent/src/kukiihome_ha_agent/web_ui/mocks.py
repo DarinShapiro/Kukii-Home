@@ -51,26 +51,6 @@ def _coming_soon(
 # render_camera_detail. See planning/web-ui-design.md Part II.
 
 
-def render_diagnostics_page(legacy_status_path: str = "/") -> str:
-    """Diagnostics — placeholder note + link out to the existing status page
-    (which lives at ``/`` for now). Eventually this page hosts the raw
-    detection stream + audit edge browser + the dev loop dashboard."""
-    return (
-        "<h1>Diagnostics</h1>"
-        "<div class='sub'>Raw observations + audit + dev loop. Home shows "
-        "the <em>reasoned</em> incident stream; this is the <em>observed</em> "
-        "stream (per-frame detections, per-track embeddings, per-VLM-call "
-        "raw payloads) + the dev loop dashboard.</div>"
-        + _coming_soon(
-            "Coming soon",
-            "Raw detection stream, audit-edge browser (CITED / INFLUENCED / "
-            "YIELDED), dev loop dashboard (replay alert, cross-backend diff, "
-            "unresolved-feedback queue), trust metrics per camera + per VLM.",
-            ref="planning/web-ui-design.md — Part VIII (Diagnostics + dev loop).",
-        )
-        + (
-            "<div class='notice'>For now, the legacy status page (topology, "
-            f"capabilities, cameras, logs) lives at <a href='{_e(legacy_status_path)}'>"
-            f"{_e(legacy_status_path)}</a>.</div>"
-        )
-    )
+# NOTE: render_diagnostics_page() removed in Iter 2.E — /diagnostics is
+# now a live page from kukiihome_ha_agent.web_ui.diagnostics. See planning/
+# web-ui-design.md Part VIII.
