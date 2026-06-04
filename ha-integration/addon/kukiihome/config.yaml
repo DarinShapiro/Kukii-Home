@@ -91,6 +91,29 @@ options:
   # an annotated frame). Leave blank if you don't run a separate
   # preprocessor — alerts still fire with the HA snapshot + rule.
   preprocessor_url: ''
+
+  # Iter 3 / Part X §35: text LLM endpoint for the conversational
+  # dispatcher. When set, /memory's drawer routes natural-language
+  # utterances through the LLM to place them on the right guidance
+  # storage class (Rule / Preference / TransientIntent / Dismissal /
+  # SituationalContext / area_posture) with a one-sentence reasoning
+  # field for the audit trail. When EITHER url or api_key is blank,
+  # the drawer falls back to a heuristic pattern matcher — still
+  # functional, just less nuanced. The /memory page renders a
+  # degraded-mode banner when the LLM is configured but unreachable.
+  #
+  # Any OpenAI-compatible chat-completions endpoint works:
+  #   Cerebras   : https://api.cerebras.ai/v1   (recommended; fast)
+  #   Ollama     : http://YOUR_HOST:11434/v1    (local)
+  #   LM Studio  : http://YOUR_HOST:1234/v1     (local)
+  #   OpenAI     : https://api.openai.com/v1
+  #   Together   : https://api.together.xyz/v1
+  #   Groq       : https://api.groq.com/openai/v1
+  # The base URL needs the /v1 suffix; the add-on tolerates it
+  # either way.
+  llm_url: ''
+  llm_api_key: ''
+  llm_model: 'llama-3.3-70b'
 schema:
   profile: list(yellow_single_box|yellow_plus_inference|distributed)
   household_id: str
@@ -99,6 +122,11 @@ schema:
   log_level: list(DEBUG|INFO|WARNING|ERROR)?
   auto_discover: bool?
   preprocessor_url: str?
+  # LLM endpoint for the conversational dispatcher (Part X §35).
+  # api_key is a password so Supervisor masks it in the UI + logs.
+  llm_url: str?
+  llm_api_key: password?
+  llm_model: str?
 
   # Structured adapter config — renders as repeatable form items.
   # See DOCS.md for examples. Two adapter kinds are commonly used today:
