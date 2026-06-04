@@ -70,18 +70,43 @@ prefix to begin with.
    on every push and every PR.
 2. **s6-scripts** — verify the s6 service launchers point at the venv python.
    Runs on every push and every PR.
-3. **release** — semantic-release. Runs only on push to `main`. Outputs
-   `new_release_published` (true / false), and on true, also
-   `new_release_version` and the SHA of the bump commit it just pushed.
-4. **build** — Docker build (aarch64). Runs on PRs (load only, no push — a
-   sanity check) and on push-to-`main` *only when* a release was published
-   (push to GHCR using the bumped version). Skipped on push-to-`main`
-   commits that didn't produce a release.
-5. **verify-published** — re-pull the manifest at the published version for
-   every arch listed in `config.yaml`'s `arch:` field. Red here means
-   Supervisor would 404 on Update.
+3. **release** (push to `main` only) — semantic-release runs the **full release
+   sequence in one job**, with a critical ordering invariant: the version on
+   `main` only advances *after* the image at that version is already live in
+   GHCR.
 
-If steps 1-5 are green, the new version is safe to install in HA.
+   In order, inside the release job:
+
+   1. Analyze commits since the last `v*` tag → decide bump (or skip entirely).
+   2. Generate release notes.
+   3. Prepend a CHANGELOG entry (in workspace).
+   4. Write the new version into `config.yaml` + `manifest.json` (in workspace).
+   5. **Build the aarch64 image with the bumped files → push to GHCR.**
+   6. **Verify the image is live in GHCR** (`docker manifest inspect`).
+   7. If 5 + 6 succeeded: commit the bump to `main` with `[skip ci]` + push
+      a `vX.Y.Z` git tag.
+   8. Create the GitHub Release with the generated notes.
+
+   **If steps 5 or 6 fail, steps 7 + 8 never run.** `main` stays at the old
+   version. Supervisor (which polls `main`) therefore never sees a newer
+   version than what's actually in GHCR — the auto-update 404 is structurally
+   impossible.
+
+4. **build** (PR only) — Docker build with `--load`, no push. Catches
+   Dockerfile regressions before merge. Doesn't run on `main` pushes
+   because the release job already builds (and pushes) authoritative images.
+
+If the release job is green, the new version is safe to install in HA — the
+verify step is *inside* the release job, so green = published + verified.
+
+## What happens on each commit type
+
+| Push to main | Validate | s6-scripts | Release | Effect |
+|---|---|---|---|---|
+| `feat:` / `fix:` / `perf:` / breaking | ✓ | ✓ | runs full sequence | New version published; HA can Update safely |
+| `chore:` / `docs:` / `refactor:` / `test:` / `style:` / `build:` / `ci:` | ✓ | ✓ | runs but exits early (`new_release_published=false`) | Nothing changes; CI confirms code still passes lint + structural checks |
+| Anything failing validate or s6-scripts | ✓ red | ✓ red | not reached | Nothing changes; fix and re-push |
+| Anything failing docker build or GHCR verify | ✓ | ✓ | red at the build step | Nothing on `main` changes; image at the failed version may be an orphan in GHCR (harmless). Fix and re-push. |
 
 ## Local checks before pushing
 

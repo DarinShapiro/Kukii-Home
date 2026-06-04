@@ -1,19 +1,24 @@
 name: Add-on build
 
-# Workflow shape (post-CD-adoption):
+# Workflow shape (race-free CD, post-build-first refactor):
 #
-#   validate ─┬─► s6-scripts ─┬─► release  ─► build ─► verify-published
-#             │               │   (push,         (only when release
-#             │               │    main only,     published a new
-#             │               │    skips on       version)
-#             │               │    chore/docs)
-#             └───────────────┘
-#                 (always run, including PRs — they catch syntax + image
-#                  breakage even when no release is in scope)
+#   validate ─► s6-scripts ─┬─► release    (push to main only, all-in-one:
+#                           │               build + push image + verify GHCR,
+#                           │               THEN commit bump + tag + Release)
+#                           │
+#                           └─► build      (PR only, --load no --push,
+#                                           Dockerfile sanity check)
 #
-# release/build/verify are all gated on (push to main AND semantic-release
-# produced a new version). Conventional Commit prefix decides the bump:
-#   feat: → minor    fix:/perf: → patch    feat!:/BREAKING CHANGE → major
+# THE INVARIANT: the version on main can only advance AFTER the image at that
+# version is already live in GHCR. Eliminates the race where Supervisor reads
+# a newly-bumped main, tries to pull the image, and 404s because it hadn't
+# been pushed yet. Implemented by sequencing semantic-release's plugins so
+# @semantic-release/exec's publishCmd (which calls docker-build-and-push.sh)
+# runs BEFORE @semantic-release/git's commit step. If the build or GHCR push
+# fails, semantic-release aborts; main stays at the old version.
+#
+# Conventional Commit prefix decides the bump:
+#   feat: → minor   fix:/perf: → patch   feat!: or BREAKING CHANGE → major
 #   chore:/docs:/refactor:/test:/style:/build:/ci: → no release
 # See RELEASING.md for the full table.
 on:
@@ -111,27 +116,34 @@ jobs:
           done
           echo "All s6 run scripts correctly target the venv python"
 
-  # ── semantic-release: decide if there's a release + bump version + tag ──
+  # ── release: bump + build + push + verify GHCR + commit (in that order) ──
   #
-  # Reads commits since the last v* tag, decides bump type from Conventional
-  # Commits, writes the new version into config.yaml + manifest.json (via
-  # .github/scripts/bump-version.cjs), prepends a CHANGELOG entry, commits
-  # with `[skip ci]` so this workflow doesn't re-fire on its own commit, and
-  # creates a GitHub Release + git tag.
+  # All in one job because the ordering invariant is load-bearing: if anything
+  # before the commit step fails, the bump must not land on main. semantic-
+  # release's @semantic-release/exec publishCmd runs docker-build-and-push.sh
+  # BEFORE @semantic-release/git commits (plugin order = execution order). So:
   #
-  # Only runs on push to main — never on PRs (we don't release from a PR;
-  # the build + sanity-run on PR still runs to catch breakage).
+  #   1. analyze commits → decide version (or skip)
+  #   2. write CHANGELOG.md to workspace
+  #   3. write new version to config.yaml + manifest.json in workspace
+  #   4. docker buildx build + push to GHCR (publishCmd)
+  #   5. docker manifest inspect to verify image is live in GHCR (publishCmd)
+  #   6. @semantic-release/git commits the bump to main with [skip ci]
+  #   7. @semantic-release/github creates the GitHub Release + git tag
+  #
+  # If 4 or 5 fail, 6 + 7 never run → main stays at the old version → Supervisor
+  # never sees an image-less new version. The image at the new tag may end up
+  # as an orphan in GHCR if push succeeded but verify failed; harmless.
   release:
-    name: Determine next version
+    name: Release (bump → build → publish → verify → commit)
     runs-on: ubuntu-latest
     needs: s6-scripts
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
-      # @semantic-release/git pushes the bump commit; @semantic-release/github
-      # creates the GitHub Release + git tag.
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: write       # @semantic-release/git pushes bump commit + tag
+      issues: write         # @semantic-release/github (release comments)
+      pull-requests: write  # @semantic-release/github (PR comments)
+      packages: write       # docker push to ghcr.io
     outputs:
       new_release_published: ${{ steps.semantic.outputs.new_release_published }}
       new_release_version: ${{ steps.semantic.outputs.new_release_version }}
@@ -144,7 +156,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Run semantic-release
+      - name: Set up QEMU (cross-arch emulation for aarch64)
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run semantic-release (build + push BEFORE commit)
         id: semantic
         uses: cycjimmy/semantic-release-action@v4
         with:
@@ -155,109 +177,35 @@ jobs:
             conventional-changelog-conventionalcommits@7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
 
-  # Build the aarch64 image. Runs on PRs (load only, no push — sanity that
-  # the Dockerfile builds) AND on push-to-main when a release was published
-  # (push to GHCR using the bumped version). Skips on push-to-main commits
-  # that didn't trigger a release (chore:/docs:/etc).
+  # PR Dockerfile sanity check (load only, no push). On PR pushes, builds
+  # the image locally to verify the Dockerfile + build args still produce a
+  # working image. No release pipeline runs on PRs; this is the only way
+  # Dockerfile regressions get caught before merge.
   #
-  # amd64 dropped 2026-06-04: the only known user runs HA Yellow (aarch64);
-  # amd64 was 1/2 of every CI cycle for no shipped consumer. Trivially
-  # restorable by re-adding the matrix entry + the arch to config.yaml.
+  # amd64 dropped 2026-06-04: only known user runs HA Yellow (aarch64).
+  # Restorable by re-adding the matrix entry + the arch to config.yaml.
   build:
-    name: Build add-on image (aarch64)
+    name: Build add-on image (aarch64, PR sanity)
     runs-on: ubuntu-latest
-    needs: [s6-scripts, release]
-    if: |
-      always() &&
-      needs.s6-scripts.result == 'success' &&
-      (
-        github.event_name == 'pull_request' ||
-        (github.event_name == 'push' && needs.release.outputs.new_release_published == 'true')
-      )
+    needs: s6-scripts
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
-        with:
-          # On release: the bump commit semantic-release just pushed (carries
-          # the new version in config.yaml). On PR: the trigger SHA.
-          ref: ${{ needs.release.outputs.new_release_git_head || github.sha }}
       - name: Set up QEMU (cross-arch emulation for aarch64)
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Compute image ref + tags
-        id: img
-        run: |
-          owner=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          version=$(python -c "import yaml; print(yaml.safe_load(open('ha-integration/addon/kukiihome/config.yaml'))['version'])")
-          image="ghcr.io/${owner}/aarch64-kukiihome-addon"
-          {
-            echo "image=${image}"
-            echo "version=${version}"
-            echo "tags=${image}:${version},${image}:latest"
-            echo "ref=${image}:${version}"
-          } >> "$GITHUB_OUTPUT"
-          echo "Building aarch64 -> ${image}:${version}"
-      - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build (and push on release) the add-on image
+      - name: Build (load only, no push)
         uses: docker/build-push-action@v6
         with:
           context: ha-integration/addon/kukiihome
           platforms: linux/arm64
           load: true
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.img.outputs.tags }}
+          push: false
+          tags: kukiihome-addon-pr-check:${{ github.sha }}
           build-args: |
             BUILD_FROM=ghcr.io/home-assistant/aarch64-base-debian:bookworm
-            KUKIIHOME_REF=${{ needs.release.outputs.new_release_git_head || github.sha }}
-            CACHEBUST=${{ needs.release.outputs.new_release_git_head || github.sha }}
-
-  # The "safe to update" gate. config.yaml's `image:` makes Supervisor pull
-  # `ghcr.io/.../<arch>-kukiihome-addon:<version>` with NO local-build
-  # fallback — if that tag isn't actually in GHCR, the update 404s. Re-pulls
-  # the manifest for the version config.yaml currently declares, for every
-  # arch listed in config.yaml's `arch:` field, AFTER build+push.
-  #
-  # Runs only when semantic-release published a new release.
-  verify-published:
-    name: Verify GHCR images match config.yaml version
-    runs-on: ubuntu-latest
-    needs: [release, build]
-    if: github.event_name == 'push' && needs.release.outputs.new_release_published == 'true'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release.outputs.new_release_git_head }}
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Manifest for config.yaml's version must exist for every arch
-        run: |
-          owner=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          version=$(python -c "import yaml; print(yaml.safe_load(open('ha-integration/addon/kukiihome/config.yaml'))['version'])")
-          arches=$(python -c "import yaml; print(' '.join(yaml.safe_load(open('ha-integration/addon/kukiihome/config.yaml'))['arch']))")
-          echo "Verifying ${arches} images for version ${version} ..."
-          fail=0
-          for arch in $arches; do
-            ref="ghcr.io/${owner}/${arch}-kukiihome-addon:${version}"
-            if docker manifest inspect "$ref" >/dev/null 2>&1; then
-              echo "  OK  $ref"
-            else
-              echo "  MISSING  $ref"
-              fail=1
-            fi
-          done
-          if [ "$fail" = "1" ]; then
-            echo "::error::config.yaml declares image:/version that is not fully published to GHCR — a user update would 404."
-            exit 1
-          fi
-          echo "All declared-arch images for ${version} are live in GHCR — safe to update."
+            KUKIIHOME_REF=${{ github.sha }}
+            CACHEBUST=${{ github.sha }}

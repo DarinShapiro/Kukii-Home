@@ -35,7 +35,8 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "node .github/scripts/bump-version.cjs ${nextRelease.version}"
+        "prepareCmd": "node .github/scripts/bump-version.cjs ${nextRelease.version}",
+        "publishCmd": "bash .github/scripts/docker-build-and-push.sh ${nextRelease.version}"
       }
     ],
     [
