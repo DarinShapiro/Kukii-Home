@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.1 — 2026-06-03
+
+**Fix: Identity Review actions no longer show a false "action failed."**
+
+Labeling a track, **✗ not them**, and **Merge** sometimes reported "preprocessor
+unreachable or rejected it" even though the change *had* been saved — a stale
+pooled connection to the preprocessor that the add-on didn't recover for writes
+(page loads, which retry automatically, were unaffected). The add-on now retires
+idle connections promptly and retries a write once on a transient blip, so the
+confirmation matches reality. (On 0.5.0 the workaround was to refresh — the edit
+had actually landed.)
+
+Also new, preprocessor-side (no add-on change needed): **face recognition is now
+an enrollable identity signal** — the most durable one, recognizing a person
+across days, outfits, and lighting whenever a face is visible. It shows up in
+Review as a `face` badge once your preprocessor is enriching with face enabled.
+
 ## 0.5.0 — 2026-06-03
 
 **New: Identity Review — name the people & pets your cameras see.**
