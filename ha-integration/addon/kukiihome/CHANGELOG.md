@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.16.0...v0.17.0) (2026-06-04)
+
+
+### Features
+
+* **events:** trace audit chain on alert detail (Part III §22 extension) ([1c53788](https://github.com/DarinShapiro/Kukii-Home/commit/1c53788af50aea1c1e7a4492b8fc839a62fcabb5))
+
 ## [0.16.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.15.0...v0.16.0) (2026-06-04)
 
 
