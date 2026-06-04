@@ -36,8 +36,12 @@ def test_shell_renders_nav_with_active_highlight():
 
 def test_shell_flash_is_rendered_and_escaped():
     html = render_shell("home", "x", flash="<script>alert(1)</script>")
-    assert "<script>" not in html
-    assert "alert(1)" in html
+    # The flash text must be escaped — the literal <script>alert(1) tag
+    # must not appear in the flash region. (The shell does include its
+    # own framework <script> for the drawer fragment-rewrite, which is
+    # tested separately in test_push_reply.)
+    assert "<script>alert(1)" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
 
 
 def test_friendly_time_graduates():

@@ -528,6 +528,7 @@ def _render_alert_404(event_id: str) -> str:
 def _render_alert_page(
     event: dict[str, Any], event_id: str,
     *, audit_chain_html: str = "",
+    drawer_html: str = "",
 ) -> str:
     """Render the per-alert page the notification tap opens to.
 
@@ -684,6 +685,10 @@ def _render_alert_page(
         + "</div>"
         # FP form, in-page (sticky button anchors here).
         + ("" if feedback else _render_fp_form(safe_id))
+        # Iter 3 / Part X §40: drawer aside for push-reply flow. Tapping
+        # the kukiihome_alert push opens /alert/{id}?drawer=1 which
+        # renders this with the alert pre-loaded as conversation context.
+        + drawer_html
         + "</body></html>"
     )
 
@@ -1509,6 +1514,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # the audit stores have a record for this incident.
         import time as _time
 
+        from kukiihome_ha_agent.web_ui.drawer import is_drawer_requested
         from kukiihome_ha_agent.web_ui.trace import build_audit_chain_html
         audit_html = build_audit_chain_html(
             incident_id=event_id,
@@ -1517,8 +1523,23 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             policy_store=getattr(boot, "policy_store", None),
             now_ts=_time.time(),
         )
+        # Iter 3 / Part X §40: push-reply fragment-load. When the URL
+        # carries ?drawer=1 (HA Companion's notification action URL is
+        # /alert/{id}?drawer=1), render the conversational drawer
+        # pre-loaded with this alert as context so the user's reply
+        # routes through the dispatcher with the alert_id known.
+        drawer_html = ""
+        if is_drawer_requested(dict(request.rel_url.query)):
+            drawer_html = _build_drawer_html(
+                request, alert_context=event_id,
+                page_context=f"alert/{event_id}",
+            )
         return web.Response(
-            text=_render_alert_page(event, event_id, audit_chain_html=audit_html),
+            text=_render_alert_page(
+                event, event_id,
+                audit_chain_html=audit_html,
+                drawer_html=drawer_html,
+            ),
             content_type="text/html",
         )
 

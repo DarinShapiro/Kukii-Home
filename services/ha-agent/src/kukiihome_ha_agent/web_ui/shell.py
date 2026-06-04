@@ -405,7 +405,19 @@ def render_shell(active: str, content_html: str, *, version: str = "",
         # base ./ → relative URLs resolve against the current dir (top-level),
         # identically under HA Ingress + direct port. Same trick as /review.
         "<base href='./'>"
-        f"<title>Kukii-Home</title><style>{_STYLE}</style></head><body>"
+        f"<title>Kukii-Home</title><style>{_STYLE}</style>"
+        # Iter 3 / Part X §40: push-reply fragment-load. HA Companion
+        # opens push notifications at /alert/{id}#drawer; the URL
+        # fragment is client-side only (server can't see it), so we
+        # rewrite it to a real ?drawer=1 query and reload. The reload
+        # is a no-op when ?drawer=1 is already present.
+        "<script>"
+        "if(location.hash==='#drawer'&&!/[?&]drawer=/.test(location.search)){"
+        "var sep=location.search?'&':'?';"
+        "location.replace(location.pathname+location.search+sep+'drawer=1');"
+        "}"
+        "</script>"
+        "</head><body>"
         "<header>"
         "<span class='brand'>Kukii-Home</span>"
         f"<nav>{nav}</nav>"
