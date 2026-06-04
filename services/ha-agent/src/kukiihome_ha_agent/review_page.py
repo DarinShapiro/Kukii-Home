@@ -18,6 +18,7 @@ from __future__ import annotations
 import html
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 _KIND_GLYPH = {"person": "🧍", "pet": "🐾", "dog": "🐕", "cat": "🐈"}
 
@@ -65,6 +66,18 @@ form.merge select{background:#0c0f14;border:1px solid #2a3140;color:#e6e6e6;
 form.merge button{background:#3a2f6a;border:0;color:#fff;border-radius:6px;
   padding:6px 12px;font-size:13px;cursor:pointer}
 form.merge span{color:#9aa7b8;font-size:13px}
+.card a{display:block}
+.detail{max-width:540px}
+.clip{width:100%;max-width:360px;border-radius:10px;border:1px solid #262c36;
+  background:#0a0c10;display:block;margin:0 auto 16px}
+.cand{display:flex;align-items:center;gap:10px;margin:8px 0}
+.cand form{margin:0}
+.cand button{background:#23502f;border:1px solid #2e7d46;color:#cdeccf;border-radius:6px;
+  padding:7px 12px;font-size:14px;cursor:pointer;white-space:nowrap}
+.cand .score{color:#9aa7b8;font-size:13px;white-space:nowrap}
+.bar{height:6px;border-radius:3px;background:#222936;flex:1;max-width:120px;overflow:hidden}
+.bar > i{display:block;height:100%;background:#3a7bd5}
+.divider{color:#5b6675;text-align:center;margin:16px 0}
 """
 
 
@@ -111,9 +124,12 @@ def _track_card(t: dict) -> str:
             "<input type='text' name='name' placeholder='name…' autocomplete='off' required>"
             "<button type='submit'>Label</button></form>"
         )
+    # Thumbnail links to the track-detail page (animated clip + candidates).
+    detail_url = f"review-track?e={quote(str(t.get('event_id', '')))}&t={quote(str(t.get('track_id', '')))}"
     return (
         "<div class='card'>"
-        f"<img src='{thumb}' alt='track {tid}' loading='lazy'>"
+        f"<a href='{detail_url}' title='Open track — animated, with candidates'>"
+        f"<img src='{thumb}' alt='track {tid}' loading='lazy'></a>"
         f"<div class='meta'>{glyph} <b>{cam}</b> {when}"
         f"<div class='sub'>{nframes} frames · {mods or '—'}</div></div>"
         f"{action}</div>"
@@ -204,6 +220,94 @@ def render_review_html(
         "</header>"
         f"<div class='wrap'>{flash_html}{body}</div>"
         "</body></html>"
+    )
+
+
+def _candidate_row(detail: dict, c: dict) -> str:
+    """One ranked candidate: a one-tap Confirm + a similarity bar."""
+    e, t = _e(detail.get("event_id", "")), _e(detail.get("track_id", ""))
+    name = _e(c.get("name", "?"))
+    score = c.get("score", 0.0)
+    modality = _e(c.get("modality", ""))
+    pct = int(max(0.0, min(1.0, score if isinstance(score, (int, float)) else 0.0)) * 100)
+    return (
+        "<div class='cand'>"
+        "<form method='post' action='review/label'>"
+        f"<input type='hidden' name='event_id' value='{e}'>"
+        f"<input type='hidden' name='track_id' value='{t}'>"
+        f"<input type='hidden' name='name' value='{name}'>"
+        f"<button type='submit'>Confirm {name}</button></form>"
+        f"<div class='bar'><i style='width:{pct}%'></i></div>"
+        f"<span class='score'>{_e(f'{score:.2f}') if isinstance(score, (int, float)) else '?'}"
+        f" ({modality})</span></div>"
+    )
+
+
+def render_track_detail_html(detail: dict, *, version: str = "", flash: str | None = None) -> str:
+    """The track-detail page: the whole track animated (padded crops) + the
+    small-gallery candidate ranking with one-tap Confirm — the fix for "one
+    crop isn't enough to tell who this is.\""""
+    e, t = _e(detail.get("event_id", "")), _e(detail.get("track_id", ""))
+    clip = f"review-track-clip?e={quote(str(detail.get('event_id', '')))}" \
+           f"&t={quote(str(detail.get('track_id', '')))}"
+    glyph = _KIND_GLYPH.get(detail.get("kind", ""), "•")
+    cam = _e(detail.get("camera_id", "?"))
+    nframes = _e(detail.get("n_frames", 0))
+    mods = "".join(f"<span class='badge'>{_e(m)}</span>" for m in detail.get("modalities", []))
+    flash_html = f"<div class='flash'>{_e(flash)}</div>" if flash else ""
+
+    status_html = ""
+    if detail.get("status") == "resolved":
+        conf = detail.get("confidence")
+        conf_txt = f" {conf:.2f}" if isinstance(conf, (int, float)) else ""
+        status_html = (
+            f"<p><span class='resolved'>✓ {_e(detail.get('subject_name') or '?')}"
+            f"{_e(conf_txt)}</span>"
+            "<form class='reject' method='post' action='review/reject' "
+            "style='display:inline;margin-left:10px'>"
+            f"<input type='hidden' name='event_id' value='{e}'>"
+            f"<input type='hidden' name='track_id' value='{t}'>"
+            "<button type='submit'>✗ not them</button></form></p>"
+        )
+
+    cands = detail.get("candidates", [])
+    if cands:
+        margin = detail.get("margin")
+        margin_html = (
+            f"<div class='score'>top-2 margin {margin:.2f}</div>"
+            if isinstance(margin, (int, float)) else ""
+        )
+        cand_html = (
+            "<h2>We think this is…</h2>"
+            + "".join(_candidate_row(detail, c) for c in cands)
+            + margin_html
+        )
+    else:
+        cand_html = "<div class='empty'>No one enrolled to compare against yet.</div>"
+
+    label_new = (
+        "<div class='divider'>— or —</div>"
+        "<form class='label' method='post' action='review/label'>"
+        f"<input type='hidden' name='event_id' value='{e}'>"
+        f"<input type='hidden' name='track_id' value='{t}'>"
+        "<input type='text' name='name' placeholder='label as someone new…' "
+        "autocomplete='off' required><button type='submit'>Label new</button></form>"
+    )
+
+    body = (
+        f"<img class='clip' src='{clip}' alt='track {t} clip'>"
+        f"<p>{glyph} <b>{cam}</b> · {nframes} frames · {mods or '—'}</p>"
+        f"{status_html}{cand_html}{label_new}"
+    )
+    return (
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<base href='./'>"
+        f"<title>Track · Kukii-Home</title><style>{_STYLE}</style></head><body>"
+        "<header><h1>🔎 Track</h1><a href='review'>← Review</a>"
+        f"<span style='margin-left:auto;color:#5b6675;font-size:12px'>{_e(version)}</span>"
+        "</header>"
+        f"<div class='wrap detail'>{flash_html}{body}</div></body></html>"
     )
 
 

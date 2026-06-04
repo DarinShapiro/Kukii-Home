@@ -68,6 +68,7 @@ from kukiihome_ha_agent.review_page import (
     parse_merge_form,
     parse_reject_form,
     render_review_html,
+    render_track_detail_html,
 )
 from kukiihome_ha_agent.supervisor import (
     get_ingress_url_prefix,
@@ -2018,10 +2019,41 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         result = await client.merge_subjects(parsed["from_id"], parsed["into_id"])
         raise web.HTTPSeeOther(location="../review?merged=1" if result else "../review?err=1")
 
+    async def review_track(request: web.Request) -> web.Response:
+        # Track-detail page (depth-1 path + query so base-href relatives resolve
+        # under ingress): animated clip + ranked candidates with one-tap Confirm.
+        from kukiihome_ha_agent import __version__
+
+        client = boot.preprocessor_client
+        e = request.rel_url.query.get("e", "")
+        t = request.rel_url.query.get("t", "")
+        if client is None or not e or not t:
+            raise web.HTTPSeeOther(location="review")
+        detail = await client.get_track_detail(e, t)
+        if detail is None:
+            raise web.HTTPSeeOther(location="review?err=1")
+        return web.Response(
+            text=render_track_detail_html(detail, version=__version__),
+            content_type="text/html",
+        )
+
+    async def review_track_clip(request: web.Request) -> web.Response:
+        client = boot.preprocessor_client
+        e = request.rel_url.query.get("e", "")
+        t = request.rel_url.query.get("t", "")
+        if client is None or not e or not t:
+            return web.Response(status=404, text="no track")
+        data = await client.fetch_track_clip(e, t)
+        if not data:
+            return web.Response(status=404, text="no clip")
+        return web.Response(body=data, content_type="image/gif")
+
     app = web.Application()
     app.router.add_get("/", status_page)
     app.router.add_get("/review", review_page)
     app.router.add_get("/review/thumb/{event_id}/{track_id}.jpg", review_thumb)
+    app.router.add_get("/review-track", review_track)
+    app.router.add_get("/review-track-clip", review_track_clip)
     app.router.add_post("/review/label", review_label)
     app.router.add_post("/review/reject", review_reject)
     app.router.add_post("/review/merge", review_merge)

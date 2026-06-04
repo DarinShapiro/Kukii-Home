@@ -479,9 +479,13 @@ who *could* appear is open. Most recognition tuning targets open-world galleries
   look alike (measure inter-subject similarity at enroll); loosen it for a
   visually distinct household.
 
-**Status:** design direction, not built. Targets a later version (0.6.x),
-bundled with the track-detail view — together they make "abstain" rare and
-labeling a one-tap confirm.
+**Status:** the *ranking* half is **built (0.6.0)** — `IdentityStore.candidates`
+ranks the enrolled set by best-across-modality cosine + margin, surfaced as
+one-tap "Confirm" on the track-detail page; enrollment now *accumulates*
+(frame-count-weighted centroid) so each confirm strengthens the template. The
+*commit* half — open-set floor + margin gating in auto-resolve, per-gallery
+calibration — is still a direction (resolve still uses fixed per-modality
+thresholds).
 
 ---
 
@@ -505,8 +509,13 @@ the **UI layer**.
   `GaitPipeline.embed_sequence()` (no-match analogue of `run_sequence`) +
   `collect_track_embeddings()`. *Built* (the pipeline capability; the worker
   that *drives* it is E4).
-- **E4 · gait Stage-2 worker** — the deferred cascade below. *The remaining
-  embed-layer work; medium.*
+- **E4 · gait Stage-2 worker** ✅ — the worker now builds each person track's
+  frame sequence across an event and runs the temporal pipeline(s) over it
+  (`collect_track_embeddings`), persisting one gait row/track. Gated by config
+  (no gait pipeline → no-op) + the pipeline's min-frames floor. *Built.* The
+  capture-quality `gait_pending` gate (only gait what face/body missed) remains
+  a live-path optimization; the offline worker gaits every track clearing
+  min-frames.
 - **E5 · thresholds** — confirm/tune `DEFAULT_RESOLVE_THRESHOLDS` for `pet` +
   `gait` on real footage (entries already exist).
 

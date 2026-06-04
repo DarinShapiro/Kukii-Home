@@ -295,7 +295,33 @@ class IdentityStore:
         enrolled: list[str] = []
         now = time.time()
         for modality, vecs in by_modality.items():
-            template = _unit(np.mean(np.stack(vecs), axis=0).astype(np.float32))
+            enrolled.append(modality)
+            # Idempotent per (subject, modality, event, track): a track only
+            # contributes once, so double-confirming doesn't over-weight it.
+            if self._conn.execute(
+                "SELECT 1 FROM template_provenance "
+                "WHERE subject_id=? AND modality=? AND event_id=? AND track_id=?",
+                (subject_id, modality, event_id, track_id),
+            ).fetchone():
+                continue
+            this_mean = _unit(np.mean(np.stack(vecs), axis=0).astype(np.float32))
+            this_n = len(vecs)
+            # Accumulate into the running centroid (frame-count weighted) rather
+            # than overwrite — so confirming a subject across several tracks
+            # *strengthens* the template instead of replacing it with the last
+            # track's (possibly worse) frames.
+            existing = self._conn.execute(
+                "SELECT dim, embedding, source_track_n FROM subject_templates "
+                "WHERE subject_id=? AND modality=?",
+                (subject_id, modality),
+            ).fetchone()
+            if existing and existing["dim"] == this_mean.shape[0]:
+                old = np.frombuffer(existing["embedding"], dtype="<f4")
+                old_n = existing["source_track_n"]
+                template = _unit((old * old_n + this_mean * this_n).astype(np.float32))
+                total_n = old_n + this_n
+            else:
+                template, total_n = this_mean, this_n
             self._conn.execute(
                 """INSERT INTO subject_templates
                      (subject_id, modality, dim, embedding, source_track_n, updated_ts)
@@ -304,19 +330,15 @@ class IdentityStore:
                      dim=excluded.dim, embedding=excluded.embedding,
                      source_track_n=excluded.source_track_n, updated_ts=excluded.updated_ts""",
                 (subject_id, modality, int(template.shape[0]),
-                 np.ascontiguousarray(template, dtype="<f4").tobytes(), len(vecs), now),
+                 np.ascontiguousarray(template, dtype="<f4").tobytes(), total_n, now),
             )
-            # Provenance: which track built this template (for undo + merge
-            # re-averaging). Idempotent on (subject, modality, event, track).
             self._conn.execute(
                 """INSERT INTO template_provenance
                      (subject_id, modality, event_id, track_id, frame_count, added_ts)
                    VALUES (?,?,?,?,?,?)
-                   ON CONFLICT(subject_id, modality, event_id, track_id) DO UPDATE SET
-                     frame_count=excluded.frame_count, added_ts=excluded.added_ts""",
-                (subject_id, modality, event_id, track_id, len(vecs), now),
+                   ON CONFLICT(subject_id, modality, event_id, track_id) DO NOTHING""",
+                (subject_id, modality, event_id, track_id, this_n, now),
             )
-            enrolled.append(modality)
         self._conn.commit()
         return enrolled
 
@@ -392,6 +414,117 @@ class IdentityStore:
         return ActorEnrollmentEvent(
             actor_id=subject_id, action="enrolled", name=s["display_name"], **kwargs
         )
+
+    # ── track detail: animated clip + candidate ranking ────────────────
+
+    def track_frames(self, event_id: str, track_id: str) -> list[dict]:
+        """Ordered (by frame_ts) per-frame crop sources for a track — the input
+        to the animated clip. One crop is rarely enough to ID someone (a
+        top-down head, or no face); the sequence gives motion + multiple
+        angles. Each entry: camera_id, frame_name, bbox (normalized)."""
+        rows = self._conn.execute(
+            """SELECT camera_id, frame_name, bbox, frame_ts FROM detections
+               WHERE event_id=? AND track_id=? AND frame_name IS NOT NULL
+               ORDER BY frame_ts""",
+            (event_id, track_id),
+        ).fetchall()
+        return [
+            {"camera_id": r["camera_id"], "frame_name": r["frame_name"],
+             "bbox": _json_bbox(r["bbox"]), "frame_ts": r["frame_ts"]}
+            for r in rows
+        ]
+
+    def candidates(self, event_id: str, track_id: str, *, top_k: int = 5) -> dict:
+        """Rank the enrolled subjects by similarity to this track — the
+        small-gallery "who do we think this is?" list (propose aggressively
+        against the tiny known set; the UI commits on confirm).
+
+        For each modality the track has, cosine the track's **mean** embedding
+        against every subject's template; a subject's score is its **best
+        across modalities** (so a strong face beats a so-so body). Returns the
+        top-K ``{subject_id, name, kind, score, modality}`` sorted desc, plus
+        ``margin`` (top1 - top2). Compares against *all* subjects regardless of
+        threshold — ranking + margin, not a hard cutoff. Empty when nothing is
+        enrolled for the track's modalities (cross-kind never matches: a pet
+        track shares no modality with a person subject)."""
+        rows = self._conn.execute(
+            "SELECT modality, embedding, dim FROM track_embeddings "
+            "WHERE event_id=? AND track_id=?",
+            (event_id, track_id),
+        ).fetchall()
+        by_mod: dict[str, list[np.ndarray]] = {}
+        for r in rows:
+            emb = np.frombuffer(r["embedding"], dtype="<f4")
+            if emb.shape[0] == r["dim"]:
+                by_mod.setdefault(r["modality"], []).append(emb)
+        track_means = {
+            m: _unit(np.mean(np.stack(v), axis=0).astype(np.float32))
+            for m, v in by_mod.items()
+        }
+        if not track_means:
+            return {"candidates": [], "margin": None}
+
+        best: dict[str, tuple[float, str]] = {}
+        names: dict[str, str] = {}
+        kinds: dict[str, str] = {}
+        for r in self._conn.execute(
+            """SELECT t.subject_id, t.modality, t.embedding, t.dim,
+                      s.display_name, s.kind
+               FROM subject_templates t JOIN subjects s ON s.subject_id=t.subject_id
+               WHERE s.active=1""",
+        ).fetchall():
+            if r["modality"] not in track_means:
+                continue
+            tmpl = np.frombuffer(r["embedding"], dtype="<f4")
+            if tmpl.shape[0] != r["dim"]:
+                continue
+            sim = float(np.dot(track_means[r["modality"]], tmpl))
+            sid = r["subject_id"]
+            if sid not in best or sim > best[sid][0]:
+                best[sid] = (sim, r["modality"])
+            names[sid], kinds[sid] = r["display_name"], r["kind"]
+
+        ranked = sorted(best.items(), key=lambda kv: kv[1][0], reverse=True)[:top_k]
+        cands = [
+            {"subject_id": sid, "name": names[sid], "kind": kinds[sid],
+             "score": round(min(1.0, sc), 4), "modality": mod}
+            for sid, (sc, mod) in ranked
+        ]
+        margin = round(cands[0]["score"] - cands[1]["score"], 4) if len(cands) >= 2 else None
+        return {"candidates": cands, "margin": margin}
+
+    def track_detail(self, event_id: str, track_id: str, *, top_k: int = 5) -> dict | None:
+        """Everything the track-detail page needs in one call: kind, frame
+        count, modalities present, current resolution, and the ranked
+        candidates. ``None`` if the track has no embeddings."""
+        frames = self.track_frames(event_id, track_id)
+        mods = [
+            r["modality"]
+            for r in self._conn.execute(
+                "SELECT DISTINCT modality FROM track_embeddings "
+                "WHERE event_id=? AND track_id=? ORDER BY modality",
+                (event_id, track_id),
+            ).fetchall()
+        ]
+        if not mods:
+            return None
+        det = self._best_detection(event_id, track_id)
+        res = self._best_resolution(event_id, track_id)
+        cand = self.candidates(event_id, track_id, top_k=top_k)
+        return {
+            "event_id": event_id,
+            "track_id": track_id,
+            "kind": self._subject_kind(det["kind"] if det else None),
+            "camera_id": det["camera_id"] if det else None,
+            "n_frames": len(frames),
+            "modalities": mods,
+            "status": "resolved" if res else "unresolved",
+            "subject_id": res["subject_id"] if res else None,
+            "subject_name": res["display_name"] if res else None,
+            "confidence": res["confidence"] if res else None,
+            "candidates": cand["candidates"],
+            "margin": cand["margin"],
+        }
 
     # ── corrections (merge / split) ─────────────────────────────────────
 

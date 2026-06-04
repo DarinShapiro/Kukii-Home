@@ -145,19 +145,49 @@ def _buffered_frame(fp: Path, ts: float, w: int, h: int):
 
 
 async def _embed_and_store(embed_pipelines, store, eid, camera_id, embed_inputs) -> int:
-    """Run the always-embed pipelines over each frame and persist the
-    embeddings. Stamps event_id + camera_id (which the pipeline-side
-    TrackEmbedding doesn't carry) onto each store row."""
-    from kukiihome_preprocessor.pipelines.identity import collect_embeddings
+    """Run the always-embed pipelines and persist the embeddings — both the
+    per-frame modalities (body/pet/face) and the temporal one (gait, one
+    descriptor per track from its frame sequence). Stamps event_id + camera_id
+    (which the pipeline-side TrackEmbedding doesn't carry) onto each store row.
+
+    The gait (Stage-2 / E4) pass: build each person track's frame sequence
+    across the event and run the temporal pipelines once over it. Gated by
+    config (no gait pipeline → no-op) and by the pipeline's own min-frames
+    floor (short tracks yield nothing) — the cheap cost control. The capture-
+    quality gate (only gait the tracks face/body couldn't capture cleanly) is a
+    live-path optimization; the offline worker embeds every track that clears
+    min-frames."""
+    from collections import defaultdict
+
+    from kukiihome_preprocessor.pipelines.identity import (
+        collect_embeddings,
+        collect_track_embeddings,
+    )
+
+    def _row(te):
+        return EmbeddingRow(
+            event_id=eid, camera_id=camera_id, track_id=te.track_id,
+            frame_ts=te.frame_ts, modality=te.modality, match_method=te.match_method,
+            embedding=_np().asarray(te.embedding, dtype="float32"),
+        )
 
     rows: list[EmbeddingRow] = []
+    # ── per-frame (body / pet / face) ──
     for frame, tags in embed_inputs:
         for te in await collect_embeddings(embed_pipelines, frame=frame, detections=tags):
-            rows.append(EmbeddingRow(
-                event_id=eid, camera_id=camera_id, track_id=te.track_id,
-                frame_ts=te.frame_ts, modality=te.modality, match_method=te.match_method,
-                embedding=_np().asarray(te.embedding, dtype="float32"),
-            ))
+            rows.append(_row(te))
+
+    # ── temporal (gait): one descriptor per person track ──
+    sequences: dict[str, list] = defaultdict(list)
+    for frame, tags in embed_inputs:
+        for d in tags:
+            if d.kind == "person" and d.track_id is not None:
+                sequences[d.track_id].append((frame, d.bbox))
+    tracks = {tid: tuple(items) for tid, items in sequences.items()}
+    if tracks:
+        for te in await collect_track_embeddings(embed_pipelines, tracks=tracks):
+            rows.append(_row(te))
+
     if rows:
         store.add_embeddings(rows)
     return len(rows)

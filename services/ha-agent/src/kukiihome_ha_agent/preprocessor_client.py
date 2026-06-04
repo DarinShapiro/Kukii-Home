@@ -145,12 +145,21 @@ class PreprocessorClient:
 
     async def fetch_track_thumb(self, event_id: str, track_id: str) -> bytes | None:
         """GET the cropped track thumbnail bytes for the Review page to re-serve."""
+        return await self._fetch_bytes(f"/identity/tracks/{event_id}/{track_id}/thumb.jpg")
+
+    async def fetch_track_clip(self, event_id: str, track_id: str) -> bytes | None:
+        """GET the animated track-clip GIF bytes for the track-detail page."""
+        return await self._fetch_bytes(f"/identity/tracks/{event_id}/{track_id}/clip.gif")
+
+    async def get_track_detail(self, event_id: str, track_id: str) -> dict | None:
+        """GET the track-detail JSON (summary + ranked candidates)."""
+        return await self._get_json(f"/identity/tracks/{event_id}/{track_id}/detail")
+
+    async def _fetch_bytes(self, path: str) -> bytes | None:
         try:
-            resp = await self._http.get(
-                f"{self._base}/identity/tracks/{event_id}/{track_id}/thumb.jpg"
-            )
+            resp = await self._http.get(f"{self._base}{path}")
         except httpx.HTTPError as e:
-            logger.info("preprocessor_client.thumb_failed", track_id=track_id, error=str(e))
+            logger.info("preprocessor_client.fetch_failed", path=path, error=str(e))
             return None
         if resp.status_code >= 400 or not resp.content:
             return None

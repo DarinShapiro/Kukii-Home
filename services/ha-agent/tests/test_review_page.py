@@ -7,6 +7,7 @@ from kukiihome_ha_agent.review_page import (
     parse_merge_form,
     parse_reject_form,
     render_review_html,
+    render_track_detail_html,
 )
 
 
@@ -109,6 +110,55 @@ def test_parse_merge_form():
     }
     assert parse_merge_form({"from_id": "a", "into_id": "a"}) is None  # self-merge
     assert parse_merge_form({"from_id": "a"}) is None
+
+
+def test_card_thumbnail_links_to_detail():
+    html = render_review_html([_track("t1")], [], configured=True)
+    assert "review-track?e=e1&t=t1" in html  # thumbnail opens the track-detail page
+
+
+# ─── track-detail page (T3) ─────────────────────────────────────────
+
+
+def _detail(**kw):
+    base = {
+        "event_id": "e1", "track_id": "t1", "kind": "person", "camera_id": "pool",
+        "n_frames": 15, "modalities": ["body", "face"], "status": "unresolved",
+        "subject_id": None, "subject_name": None, "confidence": None,
+        "candidates": [
+            {"subject_id": "alice", "name": "Alice", "kind": "person",
+             "score": 0.78, "modality": "face"},
+            {"subject_id": "bob", "name": "Bob", "kind": "person",
+             "score": 0.41, "modality": "body"},
+        ],
+        "margin": 0.37,
+    }
+    base.update(kw)
+    return base
+
+
+def test_track_detail_clip_and_candidates():
+    html = render_track_detail_html(_detail())
+    assert "review-track-clip?e=e1&t=t1" in html          # animated clip
+    assert "Confirm Alice" in html and "Confirm Bob" in html
+    assert "action='review/label'" in html                # confirm posts a label
+    assert "0.78" in html and "0.41" in html              # similarity scores
+    assert "label as someone new" in html                 # fallback
+    assert "href='review'" in html                        # back link
+
+
+def test_track_detail_no_candidates_still_labelable():
+    html = render_track_detail_html(_detail(candidates=[], margin=None))
+    assert "No one enrolled to compare against yet" in html
+    assert "label as someone new" in html
+
+
+def test_track_detail_resolved_shows_reject():
+    html = render_track_detail_html(
+        _detail(status="resolved", subject_name="Alice", confidence=0.9)
+    )
+    assert "✓ Alice" in html
+    assert "action='review/reject'" in html
 
 
 def test_parse_label_form():

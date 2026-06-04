@@ -261,6 +261,92 @@ def test_relabel_after_reject_overrides(client):
     assert _d1(client)["status"] == "resolved" and _d1(client)["subject_name"] == "Rex"
 
 
+# ─── T1/T2: track detail — clip frames + candidate ranking ──────────
+
+
+def _seed_two_people(db_path):
+    """Two distinct person tracks on one event: t1 (2 frames) + t2 (1 frame)."""
+    ds = DetectionStore(db_path)
+    ds.register_event(event_id="e1", camera_id="pool", captured_ts=100.0)
+    alice, bob = _unit([0.2, 0.9, 0.1, 0.3]), _unit([0.9, 0.1, 0.2, 0.1])
+    ds.add_detections([
+        DetectionRow("e1", "pool", 5.0, "f5.jpg", "person", 0.9, (0.1, 0.1, 0.5, 0.9), "t1"),
+        DetectionRow("e1", "pool", 5.5, "f5b.jpg", "person", 0.85, (0.12, 0.1, 0.5, 0.9), "t1"),
+        DetectionRow("e1", "pool", 6.0, "f6.jpg", "person", 0.8, (0.5, 0.1, 0.9, 0.9), "t2"),
+    ])
+    ds.add_embeddings([
+        EmbeddingRow("e1", "pool", "t1", 5.0, "body", "body_id_osnet", alice),
+        EmbeddingRow("e1", "pool", "t1", 5.5, "body", "body_id_osnet", alice),
+        EmbeddingRow("e1", "pool", "t2", 6.0, "body", "body_id_osnet", bob),
+    ])
+    ds.mark_enriched("e1", 130.0)
+    return ds, IdentityStore(db_path)
+
+
+def test_track_frames_ordered(tmp_path):
+    _ds, idn = _seed_two_people(tmp_path / "det.db")
+    frames = idn.track_frames("e1", "t1")
+    assert [f["frame_name"] for f in frames] == ["f5.jpg", "f5b.jpg"]
+    assert all(f["camera_id"] == "pool" and f["bbox"] is not None for f in frames)
+
+
+def test_candidates_rank_and_margin(tmp_path):
+    ds, idn = _seed_two_people(tmp_path / "det.db")
+    a = idn.upsert_subject(display_name="Alice", kind="person")
+    idn.enroll_from_track(ds, subject_id=a, event_id="e1", track_id="t1")
+    b = idn.upsert_subject(display_name="Bob", kind="person")
+    idn.enroll_from_track(ds, subject_id=b, event_id="e1", track_id="t2")
+
+    c = idn.candidates("e1", "t1")
+    cands = c["candidates"]
+    assert cands[0]["name"] == "Alice" and cands[0]["score"] > 0.9      # self, top
+    assert cands[1]["name"] == "Bob" and cands[1]["score"] < cands[0]["score"]
+    assert c["margin"] > 0                                              # ranked, separated
+    assert cands[0]["modality"] == "body"
+
+
+def test_candidates_empty_when_nothing_enrolled(tmp_path):
+    _ds, idn = _seed_two_people(tmp_path / "det.db")
+    assert idn.candidates("e1", "t1") == {"candidates": [], "margin": None}
+
+
+def test_track_detail_shape(tmp_path):
+    ds, idn = _seed_two_people(tmp_path / "det.db")
+    a = idn.upsert_subject(display_name="Alice", kind="person")
+    idn.enroll_from_track(ds, subject_id=a, event_id="e1", track_id="t1")
+    d = idn.track_detail("e1", "t1")
+    assert d["kind"] == "person" and d["modalities"] == ["body"] and d["n_frames"] == 2
+    assert d["status"] == "unresolved"  # enrolled but not resolved yet
+    assert any(x["name"] == "Alice" for x in d["candidates"])
+    assert idn.track_detail("e1", "nope") is None
+
+
+def test_api_clip_gif_and_detail(tmp_path):
+    import cv2
+
+    db = tmp_path / "det.db"
+    ds, idn = _seed_two_people(db)
+    ev = tmp_path / "events" / "pool" / "e1"
+    ev.mkdir(parents=True)
+    for name in ("f5.jpg", "f5b.jpg", "f6.jpg"):
+        cv2.imwrite(str(ev / name), np.full((400, 300, 3), 110, np.uint8))
+    state = AppState(
+        config=_min_config(), cache=ActorCache(), frame_buffer=object(), started_ts=0.0,
+        detection_store=ds, identity_store=idn, event_store_dir=str(tmp_path / "events"),
+    )
+    c = TestClient(create_app(state))
+
+    r = c.get("/identity/tracks/e1/t1/clip.gif")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/gif"
+    assert r.content[:6] in (b"GIF87a", b"GIF89a")  # real GIF
+
+    rd = c.get("/identity/tracks/e1/t1/detail")
+    assert rd.status_code == 200
+    body = rd.json()
+    assert body["kind"] == "person" and body["n_frames"] == 2
+    assert c.get("/identity/tracks/e1/nope/detail").status_code == 404
+
+
 def test_api_reject_and_merge_endpoints(client):
     client.post("/identity/label", json={"event_id": "e1", "track_id": "t1", "name": "Alice"})
     assert any(
