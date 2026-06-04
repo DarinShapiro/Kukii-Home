@@ -22,6 +22,27 @@ def _track(track_id, kind="person", status="unresolved", **kw):
     return base
 
 
+def test_renderers_return_body_only_not_full_document():
+    """Tasks 4+6: review_page renderers return body-only HTML; the route
+    handlers wrap them in render_shell() so the shared nav + sticky header
+    apply uniformly. Each renderer's output must not carry its own
+    <!doctype>, <html>, or <body> tags."""
+    for html in [
+        render_review_html([], [], configured=False),
+        render_review_html([_track("t1")], [], configured=True),
+        render_track_detail_html(
+            {"event_id": "e1", "track_id": "t1", "kind": "person",
+             "camera_id": "pool", "n_frames": 5, "modalities": ["body"],
+             "status": "unresolved", "candidates": [], "margin": None}
+        ),
+    ]:
+        assert "<!doctype" not in html.lower()
+        assert "<html" not in html.lower()
+        assert "<body" not in html.lower()
+        # but page-specific styles still travel with the body
+        assert "<style>" in html
+
+
 def test_unconfigured_shows_setup_notice():
     html = render_review_html([], [], configured=False)
     assert "preprocessor_url" in html

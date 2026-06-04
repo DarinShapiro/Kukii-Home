@@ -172,7 +172,6 @@ def render_review_html(
     *,
     configured: bool,
     flash: str | None = None,
-    version: str = "",
 ) -> str:
     """The full Review page. ``configured=False`` (no preprocessor_url) renders
     a setup notice instead of the queue."""
@@ -207,19 +206,15 @@ def render_review_html(
             )
         )
 
+    # Body-only HTML; the route handler wraps this in render_shell() so the
+    # global nav + sticky header come for free. Page-specific styles travel
+    # with the body in an inline <style> block.
     return (
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        # base href ./ → relative URLs resolve against the dir, identically
-        # under HA Ingress + direct port (same trick as the status page).
-        "<base href='./'>"
-        f"<title>Review · Kukii-Home</title><style>{_STYLE}</style></head><body>"
-        "<header><h1>🔎 Identity Review</h1>"
-        "<a href='.'>← Status</a>"
-        f"<span style='margin-left:auto;color:#5b6675;font-size:12px'>{_e(version)}</span>"
-        "</header>"
-        f"<div class='wrap'>{flash_html}{body}</div>"
-        "</body></html>"
+        f"<style>{_STYLE}</style>"
+        "<div class='wrap'>"
+        "<h1>Identity Review</h1>"
+        f"{flash_html}{body}"
+        "</div>"
     )
 
 
@@ -243,7 +238,7 @@ def _candidate_row(detail: dict, c: dict) -> str:
     )
 
 
-def render_track_detail_html(detail: dict, *, version: str = "", flash: str | None = None) -> str:
+def render_track_detail_html(detail: dict, *, flash: str | None = None) -> str:
     """The track-detail page: the whole track animated (padded crops) + the
     small-gallery candidate ranking with one-tap Confirm — the fix for "one
     crop isn't enough to tell who this is.\""""
@@ -299,15 +294,14 @@ def render_track_detail_html(detail: dict, *, version: str = "", flash: str | No
         f"<p>{glyph} <b>{cam}</b> · {nframes} frames · {mods or '—'}</p>"
         f"{status_html}{cand_html}{label_new}"
     )
+    # Body-only HTML; route handler wraps in render_shell().
     return (
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<base href='./'>"
-        f"<title>Track · Kukii-Home</title><style>{_STYLE}</style></head><body>"
-        "<header><h1>🔎 Track</h1><a href='review'>← Review</a>"
-        f"<span style='margin-left:auto;color:#5b6675;font-size:12px'>{_e(version)}</span>"
-        "</header>"
-        f"<div class='wrap detail'>{flash_html}{body}</div></body></html>"
+        f"<style>{_STYLE}</style>"
+        "<div class='wrap detail'>"
+        "<h1>Track</h1>"
+        "<p class='sub'><a href='review'>← back to Identity Review</a></p>"
+        f"{flash_html}{body}"
+        "</div>"
     )
 
 

@@ -1970,10 +1970,13 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             flash = "Merged — the two labels are now one subject."
         elif "err" in q:
             flash = "That action failed (preprocessor unreachable or rejected it)."
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        body = render_review_html(
+            tracks, subjects, configured=configured, flash=flash,
+        )
         return web.Response(
-            text=render_review_html(
-                tracks, subjects, configured=configured, flash=flash, version=__version__
-            ),
+            text=render_shell("review", body, version=__version__),
             content_type="text/html",
         )
 
@@ -2035,8 +2038,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         detail = await client.get_track_detail(e, t)
         if detail is None:
             raise web.HTTPSeeOther(location="review?err=1")
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        body = render_track_detail_html(detail)
         return web.Response(
-            text=render_track_detail_html(detail, version=__version__),
+            text=render_shell("review", body, version=__version__),
             content_type="text/html",
         )
 
