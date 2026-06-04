@@ -11,7 +11,13 @@ from kukiihome_ha_agent.web_ui.mocks import (
     render_intent_page,
     render_policies_page,
 )
-from kukiihome_ha_agent.web_ui.shell import NAV_ITEMS, relative_time, render_shell
+from kukiihome_ha_agent.web_ui.shell import (
+    NAV_ITEMS,
+    friendly_time,
+    friendly_time_html,
+    relative_time,
+    render_shell,
+)
 
 NOW = 1_700_000_000.0  # fixed reference time for deterministic relative timestamps
 
@@ -39,15 +45,37 @@ def test_shell_flash_is_rendered_and_escaped():
     assert "alert(1)" in html
 
 
-def test_relative_time_graduates():
-    assert relative_time(NOW - 10, now=NOW) == "Just now"
-    assert relative_time(NOW - 300, now=NOW) == "5m ago"
-    assert relative_time(NOW - 4500, now=NOW) == "An hour ago"
-    assert relative_time(NOW - 7200 - 1, now=NOW).endswith("h ago")
-    assert relative_time(NOW - 90000, now=NOW) == "Yesterday"
-    # 7-day boundary returns weekday or "Earlier" — both acceptable strings
-    week = relative_time(NOW - 500000, now=NOW)
-    assert isinstance(week, str) and len(week) > 0
+def test_friendly_time_graduates():
+    assert friendly_time(NOW - 10, now=NOW) == "Just now"
+    # plural minutes
+    assert friendly_time(NOW - 300, now=NOW) == "5 minutes ago"
+    # singular minute boundary
+    assert friendly_time(NOW - 60, now=NOW) == "1 minute ago"
+    assert friendly_time(NOW - 4500, now=NOW) == "An hour ago"
+    assert friendly_time(NOW - 7200 - 1, now=NOW).endswith("h ago")
+    # Yesterday at <clock>: must include "Yesterday" and either AM or PM
+    yesterday = friendly_time(NOW - 90000, now=NOW)
+    assert yesterday.startswith("Yesterday")
+    assert "AM" in yesterday or "PM" in yesterday
+    # 6 days back → Last <Weekday> at <clock>
+    last_week = friendly_time(NOW - 500000, now=NOW)
+    assert last_week.startswith("Last ") and ("AM" in last_week or "PM" in last_week)
+    # 30 days back → "Oct 15 at 4:51 PM" shape
+    older = friendly_time(NOW - 30 * 86400, now=NOW)
+    assert " at " in older and ("AM" in older or "PM" in older)
+
+
+def test_friendly_time_html_wraps_in_title_span():
+    out = friendly_time_html(NOW - 60, now=NOW)
+    assert out.startswith("<span title=")
+    assert ">1 minute ago</span>" in out
+    # title carries an ISO-like timestamp; date parts always present
+    assert "T" in out  # ISO date-time separator
+
+
+def test_relative_time_alias_kept_for_compat():
+    # the alias allows callers to migrate at their own pace
+    assert relative_time(NOW - 10, now=NOW) == friendly_time(NOW - 10, now=NOW)
 
 
 # ─── home page — empty state (win-state) ───────────────────────────

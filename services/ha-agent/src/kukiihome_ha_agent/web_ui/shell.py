@@ -157,13 +157,45 @@ def render_shell(active: str, content_html: str, *, version: str = "",
     )
 
 
-# ─── relative-time formatting (used by Home + Activity) ──────────────
+# ─── friendly-time formatting (used by Home + Activity + trace pages) ────
 
 
-def relative_time(ts: float, *, now: float | None = None) -> str:
-    """Friendly relative timestamp: ``Just now``, ``5m ago``, ``An hour ago``,
-    ``3h ago``, ``Yesterday``, ``Tuesday``, ``Mar 12``. Mirrors the spec in
-    Part III §23 (no day boundaries — graduates by magnitude)."""
+def _clock_time(ts: float) -> str:
+    """Local 12-hour clock time, e.g. ``4:51 PM``. Returns ``''`` on
+    timestamp errors so callers can degrade silently. Uses ``%I`` + lstrip
+    rather than ``%-I`` so this is Windows-portable (POSIX-only directive)."""
+    try:
+        formatted = datetime.fromtimestamp(ts, UTC).astimezone().strftime("%I:%M %p")
+        return formatted.lstrip("0") if formatted.startswith("0") else formatted
+    except (ValueError, OSError):
+        return ""
+
+
+def _iso_local(ts: float) -> str:
+    """Absolute timestamp for the ``title`` tooltip attribute."""
+    try:
+        return datetime.fromtimestamp(ts, UTC).astimezone().isoformat(timespec="seconds")
+    except (ValueError, OSError):
+        return ""
+
+
+def friendly_time(ts: float, *, now: float | None = None) -> str:
+    """Graduated relative + clock-time timestamp (Part III §23, iteration 1
+    Task 2). Buckets:
+
+    - ``Just now`` (< 60 s)
+    - ``5 minutes ago`` (< 1 h)
+    - ``An hour ago`` (< 2 h)
+    - ``3h ago`` (< 24 h)
+    - ``Yesterday at 4:51 PM`` (< 48 h)
+    - ``Last Tuesday at 12:05 PM`` (< 7 d)
+    - ``Mar 12 at 8:14 AM`` (older)
+
+    The clock-time on the older buckets disambiguates a same-day event from a
+    next-day one — *"yesterday at noon"* reads very differently from *"yesterday
+    at 11 PM."* Local timezone, 12-hour format (en-US familiar; falls back to
+    24-h on platforms where strftime can't strip the leading zero).
+    """
     if now is None:
         now = datetime.now(UTC).timestamp()
     delta = max(0.0, now - ts)
@@ -171,20 +203,42 @@ def relative_time(ts: float, *, now: float | None = None) -> str:
         return "Just now"
     if delta < 3600:
         m = int(delta // 60)
-        return f"{m}m ago"
+        return f"{m} minute{'s' if m != 1 else ''} ago"
     if delta < 7200:
         return "An hour ago"
     if delta < 86400:
         h = int(delta // 3600)
         return f"{h}h ago"
+    clock = _clock_time(ts)
+    suffix = f" at {clock}" if clock else ""
     if delta < 172800:
-        return "Yesterday"
+        return f"Yesterday{suffix}"
     if delta < 604800:
         try:
-            return datetime.fromtimestamp(ts, UTC).astimezone().strftime("%A")
+            weekday = datetime.fromtimestamp(ts, UTC).astimezone().strftime("%A")
+            return f"Last {weekday}{suffix}"
         except (ValueError, OSError):
-            return "Earlier"
+            return f"Earlier this week{suffix}"
     try:
-        return datetime.fromtimestamp(ts, UTC).astimezone().strftime("%b %d")
+        month_day = (
+            datetime.fromtimestamp(ts, UTC).astimezone().strftime("%b %d").replace(" 0", " ")
+        )
+        return f"{month_day}{suffix}"
     except (ValueError, OSError):
-        return "Older"
+        return f"Older{suffix}"
+
+
+def friendly_time_html(ts: float, *, now: float | None = None) -> str:
+    """``friendly_time(ts)`` wrapped in a ``<span title="ISO timestamp">``
+    so hovering shows the absolute time. Convenience for renderers that
+    consistently want the tooltip."""
+    label = friendly_time(ts, now=now)
+    iso = _iso_local(ts)
+    if iso:
+        return f"<span title='{_e(iso)}'>{_e(label)}</span>"
+    return _e(label)
+
+
+# Backwards-compat alias for any caller still using the old name; subject to
+# removal once all call sites are migrated.
+relative_time = friendly_time

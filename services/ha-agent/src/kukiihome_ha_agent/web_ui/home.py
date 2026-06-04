@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from kukiihome_ha_agent.web_ui.shell import _e, relative_time
+from kukiihome_ha_agent.web_ui.shell import _e, friendly_time_html
 
 
 def _seconds_today(now_ts: float) -> float:
@@ -90,7 +90,7 @@ def _outcome_chip(alert: dict) -> str:
 
 
 def _render_activity_row(alert: dict, *, now_ts: float) -> str:
-    when = relative_time(_alert_when_ts(alert), now=now_ts)
+    when_html = friendly_time_html(_alert_when_ts(alert), now=now_ts)
     headline = _alert_headline(alert)
     cam = alert.get("camera_id", "")
     is_action = _alert_is_action(alert)
@@ -100,9 +100,10 @@ def _render_activity_row(alert: dict, *, now_ts: float) -> str:
         f"<a class='trace' href='alert/{_e(eid)}'>trace</a>" if eid else ""
     )
     where = f"<span class='where'> · {_e(cam)}</span>" if cam else ""
+    # when_html is already HTML-safe (escaped + wrapped in <span title=...>)
     return (
         f"<div class='{klass}'>"
-        f"<div class='when'>{_e(when)}</div>"
+        f"<div class='when'>{when_html}</div>"
         f"<div class='what'>{_e(headline)}{where}</div>"
         f"{_outcome_chip(alert)}"
         f"{trace_link}"
