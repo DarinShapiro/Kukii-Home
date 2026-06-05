@@ -152,13 +152,17 @@ def _render_activity_row(alert: dict, *, now_ts: float) -> str:
         if cam_slug and not camera_already_in_headline
         else ""
     )
-    # Task 1: ▶ play affordance. The trace page handles inline playback;
-    # the activity row just exposes the same URL so the user has one click
-    # to start watching without the trace round-trip. Hidden when no
+    # Task 1: ▶ play affordance. Routes through the trace/alert page
+    # rather than linking the raw clip.mp4 directly — the trace page
+    # already shows the annotated/static frame as a fallback when the
+    # preprocessor's on-demand mux doesn't have an MP4 for this event
+    # (which is common today since clip.mp4 is the Task-1 stop-gap path).
+    # Direct-link to clip.mp4 dumped users on a bare "no clip for this
+    # event" 404 page; trace page degrades gracefully. Hidden when no
     # event_id (notification-only alerts can't replay).
     play_link = (
-        f"<a class='play' href='alert/{_e(eid)}/clip.mp4' "
-        f"title='Play clip'>▶</a>" if eid else ""
+        f"<a class='play' href='alert/{_e(eid)}' "
+        f"title='Open replay'>▶</a>" if eid else ""
     )
     # when_html is already HTML-safe (escaped + wrapped in <span title=...>)
     return (

@@ -193,6 +193,70 @@ def _open_stores():
     )
 
 
+def test_scope_from_rule_skips_bool_entries_in_areas():
+    """Regression: a pre-validation-tightening rule had scope.areas=[True]
+    persisted, and /memory 500'd on str.join. The renderer must drop
+    non-string scope entries so old corrupted rules still render."""
+    from types import SimpleNamespace
+
+    from kukiihome_ha_agent.web_ui.memory_data import _scope_from_rule
+    fake = SimpleNamespace(scope=SimpleNamespace(
+        areas=[True, "front_yard", False],
+        cameras=[],
+        time_windows=[],
+    ))
+    summary, fields = _scope_from_rule(fake)
+    assert "True" not in summary
+    assert "False" not in summary
+    assert "front_yard" in summary
+    assert fields.get("area") == "front_yard"
+
+
+def test_scope_from_rule_all_bool_areas_yields_empty():
+    """When the only entries are bools, scope_summary should be empty
+    rather than 'True' — keeps the /memory row clean."""
+    from types import SimpleNamespace
+
+    from kukiihome_ha_agent.web_ui.memory_data import _scope_from_rule
+    fake = SimpleNamespace(scope=SimpleNamespace(
+        areas=[True], cameras=[False], time_windows=[],
+    ))
+    summary, fields = _scope_from_rule(fake)
+    assert summary == ""
+    assert fields == {}
+
+
+def test_scope_from_rule_handles_non_list_areas():
+    """RulesStore should never serialize a non-list, but a malformed
+    LLM proposal might still have slipped one through pre-validation.
+    Coerce to []."""
+    from types import SimpleNamespace
+
+    from kukiihome_ha_agent.web_ui.memory_data import _scope_from_rule
+    fake = SimpleNamespace(scope=SimpleNamespace(
+        areas=True,  # not a list at all
+        cameras=None,
+        time_windows=[],
+    ))
+    summary, fields = _scope_from_rule(fake)
+    assert summary == ""
+    assert fields == {}
+
+
+def test_scope_from_rule_keeps_int_and_float_as_strings():
+    """Numbers get stringified — they're legitimate identifier shapes
+    in some adapter configs (camera_id=1, area_id=2)."""
+    from types import SimpleNamespace
+
+    from kukiihome_ha_agent.web_ui.memory_data import _scope_from_rule
+    fake = SimpleNamespace(scope=SimpleNamespace(
+        areas=[1, "garage"], cameras=[], time_windows=[],
+    ))
+    summary, fields = _scope_from_rule(fake)
+    assert "1" in summary
+    assert "garage" in summary
+
+
 def test_build_includes_rules_with_scope_summary():
     rs, prefs, pols, areas = _open_stores()
     try:

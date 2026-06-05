@@ -13,18 +13,49 @@ from kukiihome_ha_agent.web_ui.memory import GuidanceEntry
 
 
 def _scope_from_rule(rule: Any) -> tuple[str, dict[str, Any]]:
-    """RuleScope → (display summary, scope_fields dict for classification)."""
+    """RuleScope → (display summary, scope_fields dict for classification).
+
+    Defensively coerces scope list entries to strings. An earlier
+    dispatcher revision let the LLM emit non-string scope values
+    (e.g. ``scope.areas: [true]``) that persisted into RulesStore.
+    ``validate_proposal`` now rejects those on the write path, but
+    pre-existing corrupted rows must still render — otherwise a single
+    malformed historical rule 500s the whole /memory page. We coerce +
+    drop empties here; the renderer never trusts persisted types.
+    """
     fields: dict[str, Any] = {}
     parts: list[str] = []
-    if rule.scope.areas:
-        fields["area"] = rule.scope.areas[0]
-        parts.append(" / ".join(rule.scope.areas))
-    if rule.scope.cameras:
-        fields["camera"] = rule.scope.cameras[0]
-        parts.append(" / ".join(rule.scope.cameras))
+    areas = _coerce_str_list(getattr(rule.scope, "areas", None))
+    if areas:
+        fields["area"] = areas[0]
+        parts.append(" / ".join(areas))
+    cameras = _coerce_str_list(getattr(rule.scope, "cameras", None))
+    if cameras:
+        fields["camera"] = cameras[0]
+        parts.append(" / ".join(cameras))
     if rule.scope.time_windows:
         parts.append(f"{len(rule.scope.time_windows)} time windows")
     return " · ".join(parts), fields
+
+
+def _coerce_str_list(raw: Any) -> list[str]:
+    """Best-effort coerce ``raw`` to a list[str], dropping empty / non-
+    coercible entries. Returns [] for None, non-list, or all-empty
+    inputs. ``bool`` is explicitly filtered (str(True) == 'True' would
+    pollute the display); strings stay as-is; ints/floats stringify."""
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out: list[str] = []
+    for v in raw:
+        if isinstance(v, bool):  # bool before int (bool is a subclass)
+            continue
+        if isinstance(v, str):
+            if v:
+                out.append(v)
+        elif isinstance(v, (int, float)):
+            out.append(str(v))
+        # everything else (dict / None / nested list) → skipped
+    return out
 
 
 def _scope_from_descriptor(desc: dict[str, Any]) -> tuple[str, dict[str, Any]]:

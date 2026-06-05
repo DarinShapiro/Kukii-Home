@@ -274,10 +274,35 @@ a.camera-tile:hover{border-color:#3a4a64}
 .back-link:hover{color:#cfd6df;text-decoration:underline}
 
 /* ─── Conversational drawer (Iter 3 / Part X §34) ───────────── */
-main.with-drawer{padding-right:380px}
+/* Smoothness note: the drawer ships server-rendered (it's in the DOM
+   on first paint), so transitions can't fire on the bare appearance.
+   Instead we add classes from JS:
+     .entering — only on the very first page where the drawer is open
+                 (slides in from the right);
+     .closing  — when the close link is clicked (slides out to the
+                 right, then JS navigates to the close URL once the
+                 animation finishes).
+   Across nav-while-open we deliberately skip .entering so the drawer
+   appears to "stay put" between pages rather than re-sliding every
+   click. prefers-reduced-motion disables everything. */
+main.with-drawer{padding-right:380px;transition:padding-right 220ms cubic-bezier(.2,.7,.2,1)}
+main.with-drawer.drawer-closing{padding-right:0}
+@keyframes kkh-drawer-in{
+  from{transform:translateX(380px);opacity:0}
+  to{transform:translateX(0);opacity:1}
+}
 aside.drawer{position:fixed;top:54px;right:0;width:360px;height:calc(100vh - 54px);
   background:#0f141b;border-left:1px solid #1f2632;overflow-y:auto;
-  padding:14px 16px 80px;z-index:50}
+  padding:14px 16px 80px;z-index:50;
+  box-shadow:-12px 0 24px rgba(0,0,0,.25);
+  transition:transform 200ms cubic-bezier(.4,0,.6,1),opacity 180ms ease-out;
+  will-change:transform,opacity}
+aside.drawer.entering{animation:kkh-drawer-in 220ms cubic-bezier(.2,.7,.2,1) both}
+aside.drawer.closing{transform:translateX(380px);opacity:0;pointer-events:none}
+@media (prefers-reduced-motion: reduce){
+  main.with-drawer,aside.drawer{transition:none}
+  aside.drawer.entering{animation:none}
+}
 .drawer-head{display:flex;justify-content:space-between;align-items:center;
   margin-bottom:8px}
 .drawer-head h3{margin:0;font-size:14px;color:#e5edf7;font-weight:600}
@@ -509,6 +534,50 @@ def render_shell(active: str, content_html: str, *, version: str = "",
         "</header>"
         f"<main class='{main_class}'>{flash_html}{content_html}</main>"
         f"{drawer_html}"
+        # Drawer pop-out animation hooks. See the CSS comment above
+        # main.with-drawer for the why; this script is the how.
+        #
+        #   1. On load, if the drawer is present in the DOM, check
+        #      sessionStorage: was the drawer open on the previous
+        #      page in this tab? If NO → we just opened it, add
+        #      .entering so the keyframe plays. If YES → the user is
+        #      navigating between pages with the drawer kept open, so
+        #      we skip the animation (otherwise it would re-slide-in
+        #      on every nav click — distracting).
+        #      Either way, mark the drawer as open for next paint.
+        #   2. Intercept clicks on a.drawer-close: add .closing to the
+        #      drawer + .drawer-closing to <main> so both glide out
+        #      together, then navigate after the transition finishes.
+        #      We listen for transitionend on the drawer but also set
+        #      a safety timeout so a bug in CSS / transitions never
+        #      strands the close.
+        "<script>(function(){"
+        "var d=document.querySelector('aside.drawer');"
+        "var m=document.querySelector('main.with-drawer');"
+        "try{"
+        "var wasOpen=sessionStorage.getItem('kkh-drawer-open')==='1';"
+        "if(d){"
+        "if(!wasOpen){d.classList.add('entering');"
+        "d.addEventListener('animationend',function(){"
+        "d.classList.remove('entering');},{once:true});}"
+        "sessionStorage.setItem('kkh-drawer-open','1');"
+        "}else{sessionStorage.setItem('kkh-drawer-open','0');}"
+        "}catch(e){}"
+        "document.querySelectorAll('a.drawer-close').forEach(function(a){"
+        "a.addEventListener('click',function(ev){"
+        "if(!d)return;"
+        "ev.preventDefault();"
+        "var href=a.getAttribute('href');"
+        "d.classList.add('closing');"
+        "if(m)m.classList.add('drawer-closing');"
+        "try{sessionStorage.setItem('kkh-drawer-open','0');}catch(e){}"
+        "var done=false,go=function(){if(done)return;done=true;"
+        "location.href=href;};"
+        "d.addEventListener('transitionend',go,{once:true});"
+        "setTimeout(go,260);"
+        "});"
+        "});"
+        "})();</script>"
         "</body></html>"
     )
 
