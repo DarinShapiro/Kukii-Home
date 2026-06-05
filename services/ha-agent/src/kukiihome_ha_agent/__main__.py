@@ -537,7 +537,6 @@ def _render_alert_404(event_id: str) -> str:
 def _render_alert_page(
     event: dict[str, Any], event_id: str,
     *, audit_chain_html: str = "",
-    drawer_html: str = "",
 ) -> str:
     """Render the per-alert page the notification tap opens to.
 
@@ -697,11 +696,9 @@ def _render_alert_page(
         + "</div>"
         # FP form, in-page (sticky button anchors here).
         + ("" if feedback else _render_fp_form(safe_id))
-        # Iter 3 / Part X §40: drawer aside for push-reply flow. Tapping
-        # the kukiihome_alert push opens /alert/{id}?drawer=1 which
-        # renders this with the alert pre-loaded as conversation context.
-        + drawer_html
-        # NOTE: no </body></html> — the caller wraps with render_shell.
+        # NOTE: no </body></html> — the caller wraps with render_shell,
+        # which also handles the drawer aside (auto-opened by the
+        # ?drawer=1 push-reply flow via _shell_response).
     )
 
 
@@ -1526,7 +1523,6 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # the audit stores have a record for this incident.
         import time as _time
 
-        from kukiihome_ha_agent.web_ui.drawer import is_drawer_requested
         from kukiihome_ha_agent.web_ui.trace import build_audit_chain_html
         audit_html = build_audit_chain_html(
             incident_id=event_id,
@@ -1535,33 +1531,16 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             policy_store=getattr(boot, "policy_store", None),
             now_ts=_time.time(),
         )
-        # Iter 3 / Part X §40: push-reply fragment-load. When the URL
-        # carries ?drawer=1 (HA Companion's notification action URL is
-        # /alert/{id}?drawer=1), render the conversational drawer
-        # pre-loaded with this alert as context so the user's reply
-        # routes through the dispatcher with the alert_id known.
-        drawer_html = ""
-        if is_drawer_requested(dict(request.rel_url.query)):
-            drawer_html = _build_drawer_html(
-                request, alert_context=event_id,
-                page_context=f"alert/{event_id}",
-            )
-        # User-review fixup #3: wrap in render_shell so the main nav is
-        # present on the alert detail page. The shell handles the
-        # depth-aware <base href> for /alert/{id}.
-        from kukiihome_ha_agent import __version__
-        from kukiihome_ha_agent.web_ui.shell import render_shell as _shell
+        # Iter 3 / Part X §40: push-reply fragment-load. _shell_response
+        # auto-builds the drawer when ?drawer=1 is in the query; the
+        # alert_context override pins the conversation to this event_id
+        # (which lives in the path, not the query — so the generic
+        # ?alert=… extraction in _shell_response wouldn't find it).
         body = _render_alert_page(
-            event, event_id,
-            audit_chain_html=audit_html,
-            drawer_html=drawer_html,
+            event, event_id, audit_chain_html=audit_html,
         )
-        return web.Response(
-            text=_shell(
-                "", body, version=__version__,
-                request_path=request.path,
-            ),
-            content_type="text/html",
+        return _shell_response(
+            request, "", body, alert_context=event_id,
         )
 
     async def alert_frame(request: web.Request) -> web.Response:
@@ -2109,7 +2088,6 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     # works under HA Ingress auth. Fail-soft: no preprocessor → setup notice.
 
     async def review_page(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
 
         client = boot.preprocessor_client
         configured = client is not None
@@ -2128,15 +2106,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             flash = "Merged — the two labels are now one subject."
         elif "err" in q:
             flash = "That action failed (preprocessor unreachable or rejected it)."
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         body = render_review_html(
             tracks, subjects, configured=configured, flash=flash,
         )
-        return web.Response(
-            text=render_shell("identities", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "identities", body)
 
     async def review_thumb(request: web.Request) -> web.Response:
         client = boot.preprocessor_client
@@ -2186,7 +2160,6 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     async def review_track(request: web.Request) -> web.Response:
         # Track-detail page (depth-1 path + query so base-href relatives resolve
         # under ingress): animated clip + ranked candidates with one-tap Confirm.
-        from kukiihome_ha_agent import __version__
 
         client = boot.preprocessor_client
         e = request.rel_url.query.get("e", "")
@@ -2196,13 +2169,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         detail = await client.get_track_detail(e, t)
         if detail is None:
             raise web.HTTPSeeOther(location="review?err=1")
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         body = render_track_detail_html(detail)
-        return web.Response(
-            text=render_shell("identities", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "identities", body)
 
     async def review_track_clip(request: web.Request) -> web.Response:
         client = boot.preprocessor_client
@@ -2224,9 +2193,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     # for the link back.
 
     async def v2_home(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.home import render_home_page
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         # Pull real data — degrade gracefully on any failure.
         recent = alert_log.recent(50)
@@ -2264,10 +2231,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             ha_entities=ha_entities,
             now_ts=_time.time(),
         )
-        return web.Response(
-            text=render_shell("home", content, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "home", content)
 
     def _intent_known_subjects(_boot: BootState) -> list[tuple[str, str]]:
         """Subject dropdown source for shortcut rules. Pulls enrolled actors
@@ -2311,12 +2275,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # Task 7 / Part IV: real activity page with filter chips + pagination.
         import time as _time
 
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.activity import (
             parse_filters,
             render_activity_page,
         )
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         # Pull the full alert log (capped at 500 — alert_log itself trims; this
         # is the page-side over-fetch ceiling for the filter+page pipeline).
@@ -2325,42 +2287,27 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         content = render_activity_page(
             alerts_all=all_alerts, now_ts=_time.time(), **filters,
         )
-        return web.Response(
-            text=render_shell("activity", content, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "activity", content)
 
     async def v2_areas(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.areas import render_areas_list
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         if getattr(boot, "area_store", None) is None:
             body = "<h1>Areas</h1><div class='empty'>Area store unavailable.</div>"
         else:
             body = render_areas_list(boot.area_store.all_areas())
-        return web.Response(
-            text=render_shell("areas", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "areas", body)
 
     async def v2_area_new(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.areas import render_area_form
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         body = render_area_form(
             None, available_cameras=_intent_known_cameras(boot),
         )
-        return web.Response(
-            text=render_shell("areas", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "areas", body)
 
     async def v2_area_edit(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.areas import render_area_form
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         if getattr(boot, "area_store", None) is None:
             return web.HTTPServiceUnavailable(text="area store unavailable")
@@ -2371,10 +2318,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         body = render_area_form(
             area, available_cameras=_intent_known_cameras(boot),
         )
-        return web.Response(
-            text=render_shell("areas", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "areas", body)
 
     async def v2_area_save(request: web.Request) -> web.Response:
         from kukiihome_ha_agent.area_store import Area
@@ -2408,15 +2352,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         conversational drawer when ?drawer=1 is present."""
         import time as _time
 
-        from kukiihome_ha_agent import __version__
-        from kukiihome_ha_agent.web_ui.drawer import (
-            is_drawer_requested,
-        )
         from kukiihome_ha_agent.web_ui.memory import render_memory_page
         from kukiihome_ha_agent.web_ui.memory_data import (
             build_guidance_entries,
         )
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         cut = request.rel_url.query.get("cut") or "by_context"
         if cut not in ("by_context", "by_type"):
@@ -2462,19 +2401,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             drift_suggestions=drift,
             llm_health=llm_health,
         )
-
-        drawer_html = ""
-        if is_drawer_requested(dict(request.rel_url.query)):
-            drawer_html = _build_drawer_html(
-                request, alert_context=request.rel_url.query.get("alert", ""),
-                page_context="memory",
-            )
-
-        return web.Response(
-            text=render_shell(
-                "memory", body, version=__version__, drawer_html=drawer_html, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "memory", body)
 
     # ── Drawer helpers (Iter 3 / Part X §34) ──────────────────────
 
@@ -2513,6 +2440,47 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         return render_drawer(
             session=sess, turns=turns,
             alert_context=alert_context, now_ts=_time.time(),
+        )
+
+    def _shell_response(
+        request: web.Request, active: str, body_html: str, *,
+        flash: str | None = None,
+        alert_context: str = "",
+    ) -> web.Response:
+        """Universal v2 page response. Wraps body_html in the shell with
+        - correct depth-aware <base href> from request.path
+        - drawer aside auto-built when ?drawer=1 is in the query
+        - active nav highlight + version string + flash banner
+
+        Page-context awareness (Part X §34): every page can host the
+        drawer, and the drawer's page_context is the request path so
+        the dispatcher knows where the user was when they opened it.
+        ``alert_context`` is an explicit override the alert_page route
+        uses to pin the drawer to the alert id (which lives in the
+        path, not the query — the route knows it, the generic helper
+        can't derive it from the URL alone).
+        """
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.drawer import is_drawer_requested
+        from kukiihome_ha_agent.web_ui.shell import render_shell
+
+        drawer_html = ""
+        if is_drawer_requested(dict(request.rel_url.query)):
+            drawer_html = _build_drawer_html(
+                request,
+                page_context=request.path,
+                alert_context=(
+                    alert_context
+                    or request.rel_url.query.get("alert", "")
+                ),
+            )
+        return web.Response(
+            text=render_shell(
+                active, body_html, version=__version__,
+                drawer_html=drawer_html, flash=flash,
+                request_path=request.path,
+            ),
+            content_type="text/html",
         )
 
     async def api_drawer_turn(request: web.Request) -> web.Response:
@@ -2657,9 +2625,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # boot path / tests).
         import time as _time
 
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.intent import render_intent_page
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         if boot.rules_store is None:
             body = (
@@ -2675,15 +2641,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             body = render_intent_page(
                 rules, now_ts=_time.time(), preferences=prefs,
             )
-        return web.Response(
-            text=render_shell("intent", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "intent", body)
 
     async def v2_intent_rule_new(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.intent import render_rule_form
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         body = render_rule_form(
             None,
@@ -2691,15 +2652,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             available_cameras=_intent_known_cameras(boot),
             available_areas=[],
         )
-        return web.Response(
-            text=render_shell("intent", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "intent", body)
 
     async def v2_intent_rule_edit(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.intent import render_rule_form
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         rule_id = request.match_info["rule_id"]
         if boot.rules_store is None:
@@ -2713,10 +2669,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             available_cameras=_intent_known_cameras(boot),
             available_areas=[],
         )
-        return web.Response(
-            text=render_shell("intent", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "intent", body)
 
     async def v2_intent_rule_save(request: web.Request) -> web.Response:
         from kukiihome_ha_agent.rules_store import Rule, RuleScope
@@ -2778,8 +2731,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     async def v2_intent_rule_matches(request: web.Request) -> web.Response:
         # Lightweight matches list — table of recent evaluations. Full Part
         # VI matches UI lands when the VLM-side recording loop does.
-        from kukiihome_ha_agent import __version__
-        from kukiihome_ha_agent.web_ui.shell import _e, render_shell
+        from kukiihome_ha_agent.web_ui.shell import _e
 
         if boot.rules_store is None:
             return web.HTTPServiceUnavailable(text="rules store unavailable")
@@ -2808,15 +2760,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             f"<tbody>{rows_html}</tbody></table>"
             "<a class='btn' href='../../../intent'>← Back to rules</a>"
         )
-        return web.Response(
-            text=render_shell("intent", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "intent", body)
 
     async def v2_policies(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.policies import render_policies_page
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         if getattr(boot, "policy_store", None) is None:
             body = "<h1>Policies</h1><div class='empty'>Policy store unavailable.</div>"
@@ -2826,10 +2773,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             body = render_policies_page(
                 dismissals=dismissals, transient_intents=transients,
             )
-        return web.Response(
-            text=render_shell("policies", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "policies", body)
 
     async def v2_policy_revoke(request: web.Request) -> web.Response:
         if getattr(boot, "policy_store", None) is None:
@@ -2841,12 +2785,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # Iter 2.B: live list page reading the registry + alert log.
         import time as _time
 
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.camera_data import (
             build_camera_summaries,
         )
         from kukiihome_ha_agent.web_ui.cameras import render_cameras_list
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         statuses = (
             list(boot.camera_registry.all())
@@ -2858,18 +2800,13 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             alerts=alert_log.recent(500), now_ts=_time.time(),
         )
         body = render_cameras_list(summaries)
-        return web.Response(
-            text=render_shell("cameras", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "cameras", body)
 
     async def v2_camera_detail(request: web.Request) -> web.Response:
         import time as _time
 
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.camera_data import build_camera_detail
         from kukiihome_ha_agent.web_ui.cameras import render_camera_detail
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         camera_id = request.match_info["camera_id"]
         statuses = (
@@ -2894,34 +2831,21 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         if vm is None:
             return web.HTTPNotFound(text=f"camera {camera_id!r} not found")
         body = render_camera_detail(vm)
-        return web.Response(
-            text=render_shell("cameras", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "cameras", body)
 
     async def v2_cam_wl_new_perc(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.cameras import render_perception_form
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         camera_id = request.match_info["camera_id"]
         body = render_perception_form(camera_id)
-        return web.Response(
-            text=render_shell("cameras", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "cameras", body)
 
     async def v2_cam_wl_new_prot(request: web.Request) -> web.Response:
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.cameras import render_protective_form
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         camera_id = request.match_info["camera_id"]
         body = render_protective_form(camera_id)
-        return web.Response(
-            text=render_shell("cameras", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "cameras", body)
 
     async def v2_cam_wl_save_perc(request: web.Request) -> web.Response:
         from kukiihome_ha_agent.action_store import PerceptionEntry
@@ -2984,12 +2908,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         """Iter 3 / Part IX §29: Enrolled identities list. Reads
         /identity/subjects from the preprocessor and renders the tile
         grid. Falls back to an empty list if the preprocessor is down."""
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.identities import (
             build_identity_subjects,
             render_identities_list,
         )
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         subjects = []
         unresolved_count = 0
@@ -3016,15 +2938,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         body = render_identities_list(
             subjects, unresolved_count=unresolved_count, tab="enrolled",
         )
-        return web.Response(
-            text=render_shell("identities", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "identities", body)
 
     async def v2_identity_detail(request: web.Request) -> web.Response:
         """Iter 3 / Part IX §29: per-identity detail page. Pulls the
         subject record + matching guidance entries from /memory."""
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.identities import (
             IdentityDetailViewModel,
             build_identity_subjects,
@@ -3034,7 +2952,6 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         from kukiihome_ha_agent.web_ui.memory_data import (
             build_guidance_entries,
         )
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         subject_id = request.match_info["subject_id"]
         subject = None
@@ -3075,21 +2992,16 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
 
         vm = IdentityDetailViewModel(subject=subject, linked_guidance=linked)
         body = render_identity_detail(vm)
-        return web.Response(
-            text=render_shell("identities", body, version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "identities", body)
 
     async def v2_system(request: web.Request) -> web.Response:
         """Iter 3 / Part IX §30: /system page — storage usage + retention
         policy + privacy operations + admin audit log."""
         import time as _time
 
-        from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.camera_data import (
             build_camera_summaries,
         )
-        from kukiihome_ha_agent.web_ui.shell import render_shell
         from kukiihome_ha_agent.web_ui.system import render_system_page
         from kukiihome_ha_agent.web_ui.system_data import build_system_vm
 
@@ -3114,11 +3026,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             policy=policy, audit_log=audit_log,
             cameras=cameras, now_ts=_time.time(),
         )
-        return web.Response(
-            text=render_shell(
-                "system", render_system_page(vm), version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "system", render_system_page(vm))
 
     async def v2_system_retention(request: web.Request) -> web.Response:
         """POST /system/retention — update the retention policy. All fields
@@ -3218,7 +3126,6 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             build_diagnostics_vm,
             render_diagnostics_page,
         )
-        from kukiihome_ha_agent.web_ui.shell import render_shell
 
         prep_ok: bool | None = None
         prep_url = os.environ.get("KUKIIHOME_PREPROCESSOR_URL") or None
@@ -3253,11 +3160,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             alerts=alert_log.recent(500),
             now_ts=_time.time(),
         )
-        return web.Response(
-            text=render_shell("diagnostics", render_diagnostics_page(vm),
-                              version=__version__, request_path=request.path),
-            content_type="text/html",
-        )
+        return _shell_response(request, "diagnostics", render_diagnostics_page(vm))
 
     app = web.Application()
     app.router.add_get("/", status_page)

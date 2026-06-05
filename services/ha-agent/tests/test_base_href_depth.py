@@ -167,28 +167,36 @@ def test_drawer_trigger_present_when_drawer_already_open():
     assert "<aside class='drawer'>" in html
 
 
-def test_drawer_trigger_preserves_existing_query_via_js():
-    """The onclick handler appends &drawer=1 when there's already a
-    query string, ? otherwise. Tested via substring assertion since
-    the JS is inline."""
-    html = render_shell("memory", "x")
-    # JS path: appends with the right separator based on existing query
-    assert "location.search" in html
-    assert "drawer=1" in html
+def test_drawer_trigger_stays_on_current_page():
+    """Page-context preserved (Part X §34): opening the drawer from
+    /cameras/pool should land on /cameras/pool?drawer=1, not jump to
+    /memory. The shell computes the href from request_path."""
+    html = render_shell("cameras", "x", request_path="/cameras/pool")
+    assert "href='cameras/pool?drawer=1'" in html
 
 
-def test_drawer_trigger_fallback_href_works_without_js():
-    """No-JS fallback: the href attribute points at ?drawer=1 so the
-    trigger still works in raw-HTML environments."""
+def test_drawer_trigger_on_top_level_page():
+    html = render_shell("home", "x", request_path="/home")
+    assert "href='home?drawer=1'" in html
+
+
+def test_drawer_trigger_falls_back_to_memory_without_request_path():
+    """Legacy callers that don't pass request_path get the safe
+    'memory?drawer=1' fallback so the trigger is never broken."""
     html = render_shell("home", "x")
-    assert "href='?drawer=1'" in html
+    assert "href='memory?drawer=1'" in html
 
 
-def test_drawer_trigger_links_to_self_not_to_memory():
-    """Earlier the only opener was on /memory and hardcoded to
-    href='memory?drawer=1' — the header trigger must stay on the
-    current page, not jump to /memory."""
-    html = render_shell("system", "x", request_path="/system")
-    # ?drawer=1 is current-page-relative, not 'memory?drawer=1'
-    assert "memory?drawer=1" not in html.split("<main")[0]
-    assert "drawer=1" in html
+def test_drawer_trigger_resolves_to_current_page_with_drawer_query():
+    """Critical: the trigger href + <base href> at every depth must
+    resolve to the SAME page the user was on (with drawer=1 added).
+    RFC 3986 §5.3 compliant."""
+    # Depth-1
+    base1 = base_href_for_path("/home")
+    assert _resolve(base1, "home?drawer=1", "/home") == "/home?drawer=1"
+    # Depth-2
+    base2 = base_href_for_path("/cameras/pool")
+    assert _resolve(base2, "cameras/pool?drawer=1", "/cameras/pool") == "/cameras/pool?drawer=1"
+    # Depth-3
+    base3 = base_href_for_path("/areas/pool/edit")
+    assert _resolve(base3, "areas/pool/edit?drawer=1", "/areas/pool/edit") == "/areas/pool/edit?drawer=1"

@@ -474,17 +474,28 @@ def render_shell(active: str, content_html: str, *, version: str = "",
         "<header>"
         "<span class='brand'>Kukii-Home</span>"
         f"<nav>{nav}</nav>"
-        # Persistent conversational drawer trigger (Part X §34). Lives in
-        # the header so the drawer is available from any page — opens with
-        # current page as page_context so the LLM knows where you were.
-        # The onclick handler ADDS drawer=1 to the existing query string
-        # rather than replacing it (so /memory?cut=by_type keeps its cut).
-        # The href is the fallback for no-JS environments.
-        "<a class='drawer-toggle' href='?drawer=1' title='Tell me what to "
-        "watch for' onclick=\"if(/[?&]drawer=/.test(location.search)){"
-        "return true;}var s=location.search?'&':'?';"
-        "location.assign(location.pathname+location.search+s+'drawer=1');"
-        "return false;\">✨</a>"
+        # Persistent conversational drawer trigger (Part X §34). Stays on
+        # the current page so page_context is preserved — opening from
+        # /cameras/pool lands in a drawer that knows you were on Pool
+        # Camera, opening from /alert/{id} prefills with that alert.
+        #
+        # The href is computed from request_path (with leading slash
+        # stripped) + '?drawer=1'. Under <base href> at any depth this
+        # resolves to <root>/{request_path}?drawer=1 — the same page
+        # with the drawer signal set.
+        #
+        # An earlier attempt used query-only href '?drawer=1' with a JS
+        # handler — that broke because RFC 3986 §5.3 resolves query-only
+        # references against <base>, not the document URL. So ?drawer=1
+        # with base './' on /home went to <root>?drawer=1 (the add-on
+        # landing page) not /home?drawer=1. Using the full relative path
+        # avoids that entire class of issue.
+        + (
+            "<a class='drawer-toggle' href='"
+            f"{_e((request_path or '/memory').lstrip('/')) or 'memory'}"
+            "?drawer=1' title='Tell me what to watch for'>✨</a>"
+        )
+        +
         f"<span class='version'>{_e(version)}</span>"
         "</header>"
         f"<main class='{main_class}'>{flash_html}{content_html}</main>"
