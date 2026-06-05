@@ -1,0 +1,35 @@
+# Line-ending policy: store every text file as LF in the repo AND check it
+# out as LF in the working tree, on every platform.
+#
+# Why: this is a cross-platform repo with LF-enforcing tooling.
+#   - Prettier (`format:check`) defaults to endOfLine: lf and fails on CRLF.
+#   - s6 run scripts + shell scripts MUST be LF — a CRLF in a
+#     `#!/usr/bin/with-contenv bash` shebang breaks the service.
+#   - Python / ruff are LF by convention.
+# Without this, a Windows checkout with core.autocrlf=true silently swaps
+# LF↔CRLF, which (a) made local `format:check` disagree with CI and (b)
+# risks committing CRLF blobs that fail the format gate. `eol=lf` forces
+# LF in the working tree too, so editors + tooling see the same bytes CI does.
+* text=auto eol=lf
+
+# Shell + s6 service scripts: LF is load-bearing (shebang/exec), make it
+# explicit so no future attribute change can relax it.
+*.sh text eol=lf
+*.bash text eol=lf
+**/rootfs/etc/services.d/*/run text eol=lf
+**/rootfs/etc/cont-init.d/* text eol=lf
+
+# Binary assets — never normalize / diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.onnx binary
+*.engine binary
+*.pt binary
+*.pth binary
