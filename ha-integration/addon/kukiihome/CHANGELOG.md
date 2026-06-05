@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.26.10](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.9...v0.26.10) (2026-06-05)
+
+
+### Features
+
+* **memory:** wire memory graph into the add-on — shadow dual-write + Neo4j sidecar (Epic 10.2 Phase 1+2) ([fafac5a](https://github.com/DarinShapiro/Kukii-Home/commit/fafac5a84e29603b742edd3a949ae15c60440da8))
+
+
+### Bug Fixes
+
+* **ci:** exempt non-python s6 services from venv-python gate + ruff RUF059 ([4b6c6fa](https://github.com/DarinShapiro/Kukii-Home/commit/4b6c6faafe42fd4d7d4bbc6fdb5e0658e9f7ebd3))
+
 ## [0.26.9](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.8...v0.26.9) (2026-06-05)
 
 
