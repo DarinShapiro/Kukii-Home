@@ -23,6 +23,13 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=5.0.0",
     "datamodel-code-generator>=0.26.0",
+    # kukiihome-memory's SQL/vector layer (sqlalchemy/asyncpg/qdrant) is an
+    # opt-in extra now (kept out of the lean add-on image). The memory
+    # package's own test suite (test_models / test_store) needs it, and CI
+    # runs `uv sync --all-packages` (dev included) — so pull the extra here
+    # in the root dev group. The add-on build uses `--no-dev --package
+    # kukiihome-ha-agent`, which excludes this, staying lean.
+    "kukiihome-memory[sql]",
 ]
 
 [tool.uv.workspace]

@@ -1302,6 +1302,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "datamodel-code-generator" },
+    { name = "kukiihome-memory", extra = ["sql"] },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1314,6 +1315,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "datamodel-code-generator", specifier = ">=0.26.0" },
+    { name = "kukiihome-memory", extras = ["sql"], editable = "services/memory" },
     { name = "mypy", specifier = ">=1.11.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
@@ -1548,12 +1550,16 @@ name = "kukiihome-memory"
 version = "0.1.0"
 source = { editable = "services/memory" }
 dependencies = [
-    { name = "aiosqlite" },
-    { name = "alembic" },
-    { name = "asyncpg" },
     { name = "kukiihome-shared" },
     { name = "neo4j" },
     { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+sql = [
+    { name = "aiosqlite" },
+    { name = "alembic" },
+    { name = "asyncpg" },
     { name = "qdrant-client" },
     { name = "sqlalchemy", extra = ["asyncio"] },
 ]
@@ -1566,15 +1572,16 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiosqlite", specifier = ">=0.20.0" },
-    { name = "alembic", specifier = ">=1.13.0" },
-    { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "aiosqlite", marker = "extra == 'sql'", specifier = ">=0.20.0" },
+    { name = "alembic", marker = "extra == 'sql'", specifier = ">=1.13.0" },
+    { name = "asyncpg", marker = "extra == 'sql'", specifier = ">=0.30.0" },
     { name = "kukiihome-shared", editable = "shared/lib-python" },
     { name = "neo4j", specifier = ">=6.2.0" },
     { name = "pydantic", specifier = ">=2.9.0" },
-    { name = "qdrant-client", specifier = ">=1.12.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "qdrant-client", marker = "extra == 'sql'", specifier = ">=1.12.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
 ]
+provides-extras = ["sql"]
 
 [package.metadata.requires-dev]
 dev = [

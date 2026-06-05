@@ -4,15 +4,29 @@ version = "0.1.0"
 description = "Memory MCP: SQL + vector DB + object store for sessions, rules, identity, episodic"
 requires-python = ">=3.12"
 license = { text = "MIT" }
+# Base deps = the GRAPH layer only (kukiihome_memory.graph): the neo4j
+# driver + pydantic. This is what graph-only consumers (the ha-agent
+# add-on) pull. The package __init__ guards the SQL-layer imports so the
+# graph layer imports cleanly without the heavy SQL/vector stack below.
 dependencies = [
     "kukiihome-shared",
+    "pydantic>=2.9.0",
+    "neo4j>=6.2.0",
+]
+
+[project.optional-dependencies]
+# The SQL + vector-DB memory store (models.py / store.py — the Postgres +
+# Qdrant "memory MCP service"). NOT needed by graph-only consumers, so
+# it's an opt-in extra: keeps sqlalchemy/asyncpg/qdrant-client (→ grpcio)
+# OUT of the aarch64 add-on image, which only wants the graph layer.
+# Install with `kukiihome-memory[sql]` (the root dev group does this so
+# the memory test suite + CI keep these deps).
+sql = [
     "asyncpg>=0.30.0",
     "aiosqlite>=0.20.0",
     "sqlalchemy[asyncio]>=2.0.0",
     "alembic>=1.13.0",
     "qdrant-client>=1.12.0",
-    "pydantic>=2.9.0",
-    "neo4j>=6.2.0",
 ]
 
 [project.scripts]
