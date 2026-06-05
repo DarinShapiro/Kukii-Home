@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.12](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.11...v0.26.12) (2026-06-05)
+
+
+### Bug Fixes
+
+* **web-ui:** area/rule camera pickers empty under auto-discover + pair Ring doorbell ding ([d03398a](https://github.com/DarinShapiro/Kukii-Home/commit/d03398af2b85e8c65ac9e4b4e2d289584c8d98ca))
+
 ## [0.26.11](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.10...v0.26.11) (2026-06-05)
 
 
