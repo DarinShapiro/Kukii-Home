@@ -21,10 +21,10 @@ commit's prefix is **not** release-worthy (`chore:`, `docs:`, `refactor:`,
 
 | Prefix | Bump | Example |
 |---|---|---|
-| `fix:` | patch (0.7.0 → 0.7.1) | `fix(ha-agent): stale keep-alive POST race` |
+| `fix:` | patch (0.26.0 → 0.26.1) | `fix(ha-agent): stale keep-alive POST race` |
 | `perf:` | patch | `perf(preprocessor): cache encoded crops` |
-| `feat:` | minor (0.7.0 → 0.8.0) | `feat(identity): add gait Stage-2 worker` |
-| `feat!:` or any commit with `BREAKING CHANGE:` footer | major (0.7.0 → 1.0.0) | `feat(api)!: rename /identity to /people` |
+| `feat:` | **patch** (0.26.0 → 0.26.1) | `feat(identity): add gait Stage-2 worker` |
+| `feat!:` or any commit with `BREAKING CHANGE:` footer | **minor** (0.26.0 → 0.27.0) | `feat(api)!: rename /identity to /people` |
 | `docs:` | none | `docs(ui): ratify Part VI` |
 | `chore:` | none | `chore(deps): bump pytest` |
 | `refactor:` | none | `refactor(identity): extract corpus loader` |
@@ -36,9 +36,26 @@ commit's prefix is **not** release-worthy (`chore:`, `docs:`, `refactor:`,
 A scope (`feat(identity): …`, `fix(ha-agent): …`) is optional and informational
 — the bump is decided by the prefix only.
 
+### Why feat → patch (not minor)
+
+Before 1.0, semver's minor/patch distinction is mostly aesthetic — there's
+no "API-stable" contract to honor yet. The default `feat → minor` rule from
+Conventional Commits would chew through minor numbers fast and push us to
+1.0 long before the design is settled. We deliberately:
+
+- Map **`feat:`** to **patch** so day-to-day shipping doesn't burn minor
+  version numbers
+- Map **`BREAKING CHANGE:`** (and `feat!:` / `fix!:` etc.) to **minor**,
+  reserving major for an explicit, deliberate 1.0 cut
+- Use **`Release-As:`** when we *want* a minor or major bump for a
+  milestone release (see below)
+
+This keeps 0.x.y meaningful: patches accumulate normally, minor bumps mark
+genuine inflection points we chose to call out.
+
 ## Multi-line commits — `BREAKING CHANGE:` footer
 
-Add a footer to force a major bump:
+Add a footer to force a **minor** bump (pre-1.0; becomes major post-1.0):
 
 ```
 feat(api): rename /identity/tracks → /people/observations
@@ -46,6 +63,20 @@ feat(api): rename /identity/tracks → /people/observations
 BREAKING CHANGE: clients that called /identity/tracks now hit 404.
 Update to /people/observations or pin to the previous version.
 ```
+
+## Explicit milestone bumps — `Release-As:` footer
+
+When you want a deliberate minor or major release, add a `Release-As:`
+footer with the target version:
+
+```
+feat(memory): drawer ships; iteration 3 closes
+
+Release-As: 0.27.0
+```
+
+This is the only way to bump minor (or major) under the default rules.
+Use it sparingly — minor bumps should mark moments worth marking.
 
 ## Forcing a release on a non-release-worthy commit
 
