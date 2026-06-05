@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.26.1](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.0...v0.26.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **memory:** default model to gpt-oss-120b + tighten scope schema discipline ([115ac8f](https://github.com/DarinShapiro/Kukii-Home/commit/115ac8f4267a39537a8896ef69da324fffdbf4bb))
+
+
+### Miscellaneous Chores
+
+* **release:** slow version bumps — feat → patch, breaking → minor ([c066a83](https://github.com/DarinShapiro/Kukii-Home/commit/c066a83b1ef5af5e014d268c6d57d48f07ac1ad2))
+
 ## [0.26.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.25.0...v0.26.0) (2026-06-05)
 
 
