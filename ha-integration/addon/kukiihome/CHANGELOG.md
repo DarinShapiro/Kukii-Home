@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.9](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.8...v0.26.9) (2026-06-05)
+
+
+### Bug Fixes
+
+* **memory:** defensive scope coercion + play button fallback + drawer pop-out ([419b47e](https://github.com/DarinShapiro/Kukii-Home/commit/419b47e511e7d170345bd3efd5fe0cbb918872d9))
+
 ## [0.26.8](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.7...v0.26.8) (2026-06-05)
 
 
