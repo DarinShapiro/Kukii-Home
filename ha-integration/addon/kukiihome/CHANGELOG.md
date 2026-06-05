@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.5](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.4...v0.26.5) (2026-06-05)
+
+
+### Bug Fixes
+
+* **memory:** silence LLM-down banner until an actual failure is recorded ([f9b45bf](https://github.com/DarinShapiro/Kukii-Home/commit/f9b45bf62095c238dec85e8d476f22c6b4f67dc9))
+
 ## [0.26.4](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.3...v0.26.4) (2026-06-05)
 
 
