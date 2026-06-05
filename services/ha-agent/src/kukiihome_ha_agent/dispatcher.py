@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import structlog
@@ -39,12 +39,40 @@ logger = structlog.get_logger(__name__)
 
 
 @dataclass
+class RecentTurn:
+    """One transcript turn surfaced to the LLM for multi-turn context.
+    Only the minimum needed for the LLM to recognize refinement-of-prior-
+    placement — the full proposal_json from the original system turn lives
+    in ProvenanceStore but we don't replay it; we summarize."""
+
+    role: str                          # 'user' | 'system'
+    text: str                          # utterance text (system role = reasoning)
+    committed_guidance_id: str = ""    # set on system turns that resulted in a commit
+    storage_class: str = ""            # set when committed_guidance_id is set
+
+
+@dataclass
+class CommittedEntrySummary:
+    """Compact summary of the most-recent guidance entry committed in the
+    same session, so the LLM can reason about refining it on the next
+    turn instead of authoring a fresh one."""
+
+    guidance_id: str
+    storage_class: str
+    name: str
+    intent_text: str
+    scope: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class DispatcherContext:
     """The slice of system state the dispatcher can read to inform its
     placement. The route handler assembles this once per call from boot.
 
     Heuristic provider uses it for entity resolution (actor + area name
-    matching). LLM provider will use it as tool-call context."""
+    matching). LLM provider uses it as both prompt context and the
+    backing state for tool calls (Part X §35; memory-layer tools span
+    Layers 4 + 5 per Part IX §26)."""
 
     known_actor_names: list[str]
     known_area_names: list[str]
@@ -52,6 +80,11 @@ class DispatcherContext:
     # Page context (drawer was opened from /alert/X → carry the alert)
     page_context: str = ""
     alert_context: str = ""
+    # Multi-turn (Part X §38) — recent conversation history + the last
+    # entry committed in this session. When non-empty, the LLM is told
+    # to consider refining the prior entry instead of authoring fresh.
+    recent_turns: list[RecentTurn] = field(default_factory=list)
+    last_committed: CommittedEntrySummary | None = None
 
 
 class DispatcherProvider(Protocol):
@@ -223,9 +256,18 @@ def _short_name(utterance: str, *, prefix: str = "") -> str:
     return short
 
 
-def context_from_boot(boot: Any) -> DispatcherContext:
+def context_from_boot(
+    boot: Any, *, session_id: str = "",
+    history_window: int = 8,
+) -> DispatcherContext:
     """Pluck names from boot state for the dispatcher. None-safe — empty
-    lists when stores aren't wired."""
+    lists when stores aren't wired.
+
+    ``session_id`` (Part X §38): when provided, the most recent
+    ``history_window`` turns from that session + the most recent
+    committed guidance entry are folded into the context for multi-turn
+    placement reasoning. Pass empty string for fire-and-forget calls
+    that should be treated as fresh."""
     actor_names: list[str] = []
     area_names: list[str] = []
     camera_names: list[str] = []
@@ -253,11 +295,129 @@ def context_from_boot(boot: Any) -> DispatcherContext:
         except Exception:
             actor_names = []
 
+    # Multi-turn history (Part X §38). Pull both turns + the last
+    # committed entry summary so the LLM can recognize refinement.
+    recent_turns: list[RecentTurn] = []
+    last_committed: CommittedEntrySummary | None = None
+    prov = getattr(boot, "provenance_store", None)
+    if session_id and prov is not None:
+        try:
+            all_turns = prov.turns_for_session(session_id)
+            for t in all_turns[-history_window:]:
+                if t.role == "user":
+                    recent_turns.append(RecentTurn(
+                        role="user", text=t.utterance,
+                    ))
+                elif t.committed_to:
+                    # committed_to is the guidance_id; resolve the
+                    # storage class so the history line is readable.
+                    sc = ""
+                    for prefix in ("rule", "preferences", "policy", "area"):
+                        if t.committed_to.startswith(prefix):
+                            sc = prefix
+                            break
+                    recent_turns.append(RecentTurn(
+                        role="system", text=t.utterance,
+                        committed_guidance_id=t.committed_to,
+                        storage_class=sc,
+                    ))
+                else:
+                    # System turn carrying a proposal but never confirmed.
+                    recent_turns.append(RecentTurn(
+                        role="system", text=t.utterance,
+                    ))
+
+            # Find the most recent committed system turn → resolve
+            # the full entry summary.
+            for t in reversed(all_turns):
+                if t.role != "system" or not t.committed_to:
+                    continue
+                last_committed = _resolve_committed_summary(
+                    boot, t.committed_to,
+                )
+                break
+        except Exception as e:
+            logger.debug("dispatcher.context.history_failed", error=str(e))
+
     return DispatcherContext(
         known_actor_names=actor_names,
         known_area_names=area_names,
         known_camera_names=camera_names,
+        recent_turns=recent_turns,
+        last_committed=last_committed,
     )
+
+
+def _resolve_committed_summary(
+    boot: Any, guidance_id: str,
+) -> CommittedEntrySummary | None:
+    """Best-effort resolve guidance_id → CommittedEntrySummary by
+    poking the per-class stores. Returns None on any failure so the
+    dispatcher's last_committed remains None and the refinement
+    block is skipped."""
+    try:
+        if guidance_id.startswith("preferences:"):
+            ps = getattr(boot, "preferences_store", None)
+            if ps is None:
+                return None
+            prefs = ps.get()
+            return CommittedEntrySummary(
+                guidance_id=guidance_id,
+                storage_class="preference",
+                name="What I care about" if "what_i_care" in guidance_id else "Preferences",
+                intent_text=prefs.what_i_care_about,
+                scope={},
+            )
+        if guidance_id.startswith("area:"):
+            ars = getattr(boot, "area_store", None)
+            if ars is None:
+                return None
+            area = ars.get(guidance_id.split(":", 1)[1])
+            if area is None:
+                return None
+            return CommittedEntrySummary(
+                guidance_id=guidance_id,
+                storage_class="area_posture",
+                name=f"{area.name} posture",
+                intent_text=f"attention_mode={area.attention_mode}",
+                scope={"area": area.id},
+            )
+        # Rule or policy — try rules first, then policies.
+        rs = getattr(boot, "rules_store", None)
+        if rs is not None:
+            rule = rs.get(guidance_id)
+            if rule is not None:
+                return CommittedEntrySummary(
+                    guidance_id=guidance_id,
+                    storage_class="rule",
+                    name=rule.name,
+                    intent_text=rule.intent_text,
+                    scope={
+                        "areas": ",".join(rule.scope.areas),
+                        "cameras": ",".join(rule.scope.cameras),
+                    },
+                )
+        pols = getattr(boot, "policy_store", None)
+        if pols is not None:
+            pol = pols.get(guidance_id)
+            if pol is not None:
+                desc = pol.descriptor or {}
+                is_sc = bool(desc.get("is_situational_context"))
+                return CommittedEntrySummary(
+                    guidance_id=guidance_id,
+                    storage_class=(
+                        "situational_context" if is_sc
+                        else ("transient_intent" if pol.kind == "transient_intent"
+                              else "dismissal_policy")
+                    ),
+                    name=pol.name,
+                    intent_text=desc.get("intent_text") or "",
+                    scope={k: v for k, v in desc.items()
+                           if isinstance(v, str) and k != "intent_text"},
+                )
+    except Exception:
+        return None
+    return None
 
 
 # ─── LLM-backed implementation ─────────────────────────────────────
@@ -311,6 +471,34 @@ Rules of thumb:
     confidence < 0.7 and one or two clarifying_questions targeting
     those axes.
 
+**Tools — call them BEFORE proposing to avoid duplicates + respect
+existing context:**
+  - search_existing_guidance(actor?, area?, camera?, kind?, text?)
+    Use this whenever the utterance scopes to a specific actor /
+    area / camera / kind to check if a matching rule or policy already
+    exists. If it does, prefer refining it (see refinement block
+    below) over creating a duplicate.
+  - get_known_actor(name)
+    Use this when the utterance names an actor (person / pet /
+    vehicle). Tells you whether the system already recognizes them
+    + reads the access_profile + behavioral_profile if set. Don't
+    propose access-profile changes without checking.
+
+**Refinement semantics — when the user is iterating on a prior
+placement:**
+  If the Recent conversation block shows a "Most recently committed
+  guidance entry" AND the user's current utterance reads as a
+  modification of THAT entry (narrows scope, adjusts severity, adds
+  a condition, changes the lifecycle, etc.) — set
+  scope.refines_guidance_id to that entry's id and emit the REFINED
+  values for the other fields. The dispatcher will route this as an
+  update instead of a fresh create.
+
+  Don't refine across storage classes — if the user's iteration
+  actually converts the entry to a different class (e.g., from rule
+  to preference), propose a fresh entry of the new class and leave
+  refines_guidance_id unset.
+
 Use ONLY entities present in the provided known_actor_names /
 known_area_names / known_camera_names lists. If the utterance mentions
 something not in those lists, place it in intent_text but DO NOT
@@ -357,9 +545,14 @@ def _build_user_prompt(
     utterance: str, *, ctx: DispatcherContext,
     retry_note: str = "",
 ) -> str:
-    """Compose the user-side prompt. The system context (known names) +
-    page/alert context goes here so each call can stand alone — no
-    multi-turn dependence inside the dispatcher."""
+    """Compose the user-side prompt. Includes:
+      - system state (known actor/area/camera names + page/alert context)
+      - recent conversation history (last N turns from this session) +
+        the most recent committed guidance entry, so the LLM can
+        recognize refinement-of-prior-placement utterances (Part X §38)
+      - the user's current utterance
+      - optional retry note when the schema retry path is active
+    """
     facts = {
         "known_actor_names": ctx.known_actor_names,
         "known_area_names": ctx.known_area_names,
@@ -370,6 +563,46 @@ def _build_user_prompt(
     parts = [
         "## System state",
         json.dumps(facts, indent=2),
+    ]
+
+    # Multi-turn block (Part X §38). Only render when there's actually
+    # prior history — keeps single-shot calls clean + cheap.
+    if ctx.recent_turns or ctx.last_committed:
+        parts += ["", "## Recent conversation in this session"]
+        if ctx.last_committed:
+            parts.append(
+                "Most recently committed guidance entry:\n"
+                + json.dumps({
+                    "guidance_id": ctx.last_committed.guidance_id,
+                    "storage_class": ctx.last_committed.storage_class,
+                    "name": ctx.last_committed.name,
+                    "intent_text": ctx.last_committed.intent_text,
+                    "scope": ctx.last_committed.scope,
+                }, indent=2)
+            )
+        if ctx.recent_turns:
+            history = []
+            for t in ctx.recent_turns:
+                if t.role == "user":
+                    history.append(f"  user: {t.text}")
+                elif t.committed_guidance_id:
+                    history.append(
+                        f"  system: committed {t.storage_class} "
+                        f"<{t.committed_guidance_id}>: {t.text}"
+                    )
+                else:
+                    history.append(f"  system: proposed {t.text}")
+            parts += ["", "Turn history (oldest → newest):", *history]
+        parts.append(
+            "\nIf the user's current utterance refines the most recent "
+            "committed entry (e.g., narrows its scope, changes its "
+            "severity, adds a condition), set "
+            "scope.refines_guidance_id to that entry's id and emit the "
+            "refined values for the OTHER fields. Otherwise place as a "
+            "new entry."
+        )
+
+    parts += [
         "",
         "## User utterance",
         utterance.strip(),
@@ -394,70 +627,168 @@ def _strip_code_fence(text: str) -> str:
 
 
 class LLMDispatcherProvider:
-    """LLM-backed placement. Calls the client once; on schema failure
-    retries once with the error included; on second failure raises so
-    the composite can fall back."""
+    """LLM-backed placement with multi-turn tool-call support.
 
-    def __init__(self, client: LLMClient) -> None:
+    Flow per propose_async call:
+
+      1. Seed messages with [system, user(prompt + recent_turns +
+         last_committed)]
+      2. Loop up to ``max_tool_rounds`` times:
+         - Call client.complete_chat(messages, tools)
+         - If response carries tool_calls: execute each tool, append
+           the tool-result messages, continue
+         - Else: try to parse + validate response.content as JSON
+           proposal; retry once on schema failure with error appended
+         - On second schema failure: raise so Composite falls back
+      3. If we exhaust tool rounds without ever getting a final
+         content response, raise
+
+    Tool failures inside the loop don't abort — the tool returns an
+    ``{"error": ...}`` dict and the LLM can decide what to do with it.
+    """
+
+    def __init__(
+        self, client: LLMClient,
+        tools: list[Any] | None = None,
+        max_tool_rounds: int = 5,
+    ) -> None:
         self.client = client
+        self.tools = tools or []
+        self.max_tool_rounds = max_tool_rounds
 
     async def propose_async(
         self, utterance: str, *, ctx: DispatcherContext,
     ) -> PlacementProposal:
-        first_attempt_error: str = ""
-        for attempt in (1, 2):
-            user_prompt = _build_user_prompt(
-                utterance, ctx=ctx, retry_note=first_attempt_error,
-            )
+        from kukiihome_ha_agent.dispatcher_tools import (
+            resolve_tool_call,
+            safe_parse_tool_args,
+            tool_specs_for_llm,
+        )
+
+        user_prompt = _build_user_prompt(utterance, ctx=ctx)
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": DISPATCHER_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+        tool_specs = tool_specs_for_llm(self.tools) if self.tools else None
+
+        # Cap total LLM calls per propose: tool rounds + 2 schema retries
+        # for the final content response. Keeps a bad model from hanging
+        # the drawer indefinitely.
+        rounds_remaining = self.max_tool_rounds + 2
+        schema_retry_used = False
+        while rounds_remaining > 0:
+            rounds_remaining -= 1
             try:
-                raw = await self.client.complete(
-                    system=DISPATCHER_SYSTEM_PROMPT,
-                    user=user_prompt,
-                )
+                message = await self._call_chat(messages, tool_specs)
             except Exception as e:
                 logger.warning(
                     "dispatcher.llm_call_failed",
-                    attempt=attempt, error=str(e),
+                    rounds_remaining=rounds_remaining, error=str(e),
                 )
-                if attempt == 2:
-                    raise
-                first_attempt_error = f"LLM call raised: {e}"
+                raise
+
+            tool_calls = message.get("tool_calls") or []
+            if tool_calls:
+                # Append the assistant message verbatim (including
+                # tool_calls) so the model sees its own request when
+                # we feed the result back.
+                messages.append({
+                    "role": "assistant",
+                    "content": message.get("content") or "",
+                    "tool_calls": tool_calls,
+                })
+                for call in tool_calls:
+                    fn = call.get("function") or {}
+                    name = fn.get("name", "")
+                    args = safe_parse_tool_args(fn.get("arguments"))
+                    tool = resolve_tool_call(self.tools, name)
+                    if tool is None:
+                        result = {"error": f"unknown tool: {name}"}
+                    else:
+                        try:
+                            result = await tool.execute(args)
+                        except Exception as e:
+                            logger.warning(
+                                "dispatcher.tool.raised",
+                                tool=name, error=str(e),
+                            )
+                            result = {"error": f"tool raised: {e}"}
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call.get("id", ""),
+                        "content": json.dumps(result),
+                    })
                 continue
 
+            # No tool_calls → the model produced a final content blob.
+            content = message.get("content") or ""
             try:
-                data = json.loads(_strip_code_fence(raw))
+                data = json.loads(_strip_code_fence(content))
             except json.JSONDecodeError as e:
-                logger.warning(
-                    "dispatcher.json_parse_failed",
-                    attempt=attempt, error=str(e),
-                    raw_snippet=raw[:200],
-                )
-                if attempt == 2:
-                    raise ValueError(f"LLM returned non-JSON: {e}") from e
-                first_attempt_error = (
-                    f"Previous response was not valid JSON: {e}. "
-                    "Return ONLY a JSON object, no prose, no code fences."
-                )
+                if schema_retry_used:
+                    raise ValueError(
+                        f"LLM returned non-JSON after retry: {e}",
+                    ) from e
+                schema_retry_used = True
+                messages.append({"role": "assistant", "content": content})
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"That response wasn't valid JSON ({e}). "
+                        "Return ONLY a JSON object matching the schema."
+                    ),
+                })
                 continue
 
             try:
-                proposal = validate_proposal(data)
+                return validate_proposal(data)
             except ValueError as e:
-                logger.warning(
-                    "dispatcher.schema_failed",
-                    attempt=attempt, error=str(e),
-                )
-                if attempt == 2:
+                if schema_retry_used:
                     raise
-                first_attempt_error = (
-                    f"Schema validation failed: {e}. "
-                    "Re-emit the JSON with the field corrected."
-                )
+                schema_retry_used = True
+                messages.append({"role": "assistant", "content": content})
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"That response failed schema validation: {e}. "
+                        "Re-emit the JSON with the field corrected."
+                    ),
+                })
                 continue
 
-            return proposal
-        # Unreachable; the loop either returns or raises.
-        raise RuntimeError("dispatcher: unreachable")
+        raise RuntimeError(
+            "dispatcher: exhausted tool rounds without a final proposal",
+        )
+
+    async def _call_chat(
+        self, messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        """Call the client's chat method. Supports both the new
+        ``complete_chat(messages, tools)`` interface (OpenAIChatClient)
+        and the legacy ``complete(system, user)`` interface (test fakes
+        without tool support) — when the legacy path is used, tools are
+        silently ignored."""
+        if hasattr(self.client, "complete_chat"):
+            return await self.client.complete_chat(
+                messages=messages, tools=tools,
+            )
+        # Legacy path — concat assistant/tool messages into a single
+        # user-style prompt and use the simpler complete() method.
+        system = ""
+        user_parts: list[str] = []
+        for m in messages:
+            if m.get("role") == "system":
+                system = m.get("content", "") or system
+            else:
+                user_parts.append(
+                    f"[{m.get('role')}] {m.get('content', '')}"
+                )
+        raw = await self.client.complete(
+            system=system, user="\n".join(user_parts),
+        )
+        return {"content": raw, "tool_calls": []}
 
     def propose(
         self, utterance: str, *, ctx: DispatcherContext,

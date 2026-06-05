@@ -70,11 +70,34 @@ def commit_guidance(
     user_utterance: str = "",
     now_ts: float | None = None,
 ) -> str:
-    """Single write surface. Returns the new guidance entry's id."""
+    """Single write surface. Returns the new guidance entry's id.
+
+    Refinement path: when the proposal's scope carries
+    ``refines_guidance_id``, the entry pointed to is updated in place
+    via ``refine_guidance`` and the provenance row's
+    ``refinement_transcript_ids`` is appended. This is how multi-turn
+    drawer conversations build on a prior placement instead of
+    duplicating it (Part X §38)."""
     if stores.provenance is None:
         raise RuntimeError(
             "commit_guidance requires a ProvenanceStore — none wired",
         )
+
+    # Refinement short-circuit: when scope.refines_guidance_id is set,
+    # the dispatcher decided this utterance updates a prior entry. The
+    # field is stripped before per-class commit so it doesn't leak into
+    # the stored scope.
+    refines_id = (proposal.scope or {}).pop("refines_guidance_id", "")
+    if refines_id and transcript_id:
+        existing = stores.provenance.get_provenance(refines_id)
+        if existing is not None:
+            refine_guidance(
+                refines_id, proposal, stores=stores,
+                transcript_id=transcript_id,
+                user_utterance=user_utterance,
+                now_ts=now_ts,
+            )
+            return refines_id
 
     now = now_ts or time.time()
     sc = proposal.storage_class

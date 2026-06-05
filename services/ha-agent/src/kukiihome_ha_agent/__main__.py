@@ -2551,7 +2551,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # not. Composite reports health via boot.llm_health for the
         # /memory degraded-mode banner.
         dispatcher = getattr(boot, "dispatcher", None) or HeuristicDispatcherProvider()
-        ctx = context_from_boot(boot)
+        ctx = context_from_boot(
+            boot, session_id=sess.id,
+        )
         ctx.page_context = "memory"
         ctx.alert_context = alert_context
         if hasattr(dispatcher, "propose_async"):
@@ -3733,14 +3735,20 @@ async def _run() -> None:
         client = OpenAIChatClient(
             base_url=llm_url, api_key=llm_key, model=llm_model,
         )
+        # Iter 3 follow-up (Task 53): tool-calling enabled. The LLM can
+        # search existing guidance + look up KnownActor profiles before
+        # placing, so multi-turn refinement avoids duplicate rules.
+        from kukiihome_ha_agent.dispatcher_tools import tools_from_boot
+        tools = tools_from_boot(boot)
         boot.dispatcher = CompositeDispatcherProvider(
-            llm=LLMDispatcherProvider(client),
+            llm=LLMDispatcherProvider(client, tools=tools),
             heuristic=HeuristicDispatcherProvider(),
             health=boot.llm_health,
         )
         logger.info(
             "dispatcher.llm.configured",
             base_url=llm_url, model=llm_model,
+            tool_count=len(tools),
         )
     else:
         boot.dispatcher = HeuristicDispatcherProvider()

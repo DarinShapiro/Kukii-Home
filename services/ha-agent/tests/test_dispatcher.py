@@ -233,8 +233,9 @@ async def test_llm_provider_retries_on_invalid_json_then_succeeds():
     provider = LLMDispatcherProvider(client)
     p = await provider.propose_async("Tell me when Winston is alone", ctx=_ctx())
     assert p.storage_class == "rule"
-    # The retry happened — second call carries the error in its user prompt
-    assert "not valid JSON" in client.calls[1][1]
+    # The retry happened — second call carries the JSON error in its
+    # message history (legacy complete() path stringifies via [role]).
+    assert "valid JSON" in client.calls[1][1]
 
 
 @pytest.mark.asyncio
@@ -248,7 +249,7 @@ async def test_llm_provider_retries_on_schema_failure_then_succeeds():
     )
     assert p.storage_class == "rule"
     # Retry prompt mentions schema failure
-    assert "Schema validation failed" in client.calls[1][1]
+    assert "schema validation" in client.calls[1][1].lower()
 
 
 @pytest.mark.asyncio
