@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.6](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.5...v0.26.6) (2026-06-05)
+
+
+### Bug Fixes
+
+* **memory:** drawer is page-specific — every page hosts it with current path as context ([eecbb5d](https://github.com/DarinShapiro/Kukii-Home/commit/eecbb5df75f6b27e7931b2ae5fd43d3b93620749))
+
 ## [0.26.5](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.4...v0.26.5) (2026-06-05)
 
 
