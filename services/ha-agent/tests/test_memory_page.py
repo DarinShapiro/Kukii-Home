@@ -252,7 +252,7 @@ def test_scope_from_rule_keeps_int_and_float_as_strings():
     fake = SimpleNamespace(scope=SimpleNamespace(
         areas=[1, "garage"], cameras=[], time_windows=[],
     ))
-    summary, fields = _scope_from_rule(fake)
+    summary, _fields = _scope_from_rule(fake)
     assert "1" in summary
     assert "garage" in summary
 

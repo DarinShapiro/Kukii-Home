@@ -104,7 +104,16 @@ jobs:
         run: |
           # Bare `python` in an s6 run script → crash-loop on import.
           # Catch the regression here.
+          #
+          # Non-Python services (e.g. the Neo4j sidecar, which execs
+          # `neo4j console`) opt out with a `# s6-non-python-service`
+          # marker comment. The opt-out is deliberate + grep-visible, so a
+          # Python service can't silently dodge the venv-python rule.
           for f in ha-integration/addon/kukiihome/rootfs/etc/services.d/*/run; do
+            if grep -q 's6-non-python-service' "$f"; then
+              echo "SKIP: $f (declared non-python service)"
+              continue
+            fi
             if grep -q 'exec python' "$f"; then
               echo "FAIL: $f uses bare 'python'; should use /app/.venv/bin/python"
               exit 1

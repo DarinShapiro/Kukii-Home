@@ -1,4 +1,8 @@
 #!/usr/bin/with-contenv bash
+# s6-non-python-service — this service execs `neo4j console`, not the
+# venv python; the addon-build "s6 run scripts point at the venv" gate
+# skips scripts carrying this marker (see .github/workflows/addon-build.yml).
+#
 # Neo4j sidecar (Epic 10.2 — memory graph, Phase 2).
 #
 # This service runs the bundled Neo4j Community DB IN-CONTAINER, next to
