@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.4](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.3...v0.26.4) (2026-06-05)
+
+
+### Features
+
+* **memory:** persistent header drawer trigger — open from any page ([87a3fcc](https://github.com/DarinShapiro/Kukii-Home/commit/87a3fccda24a6558c89f8a4dd9758ee3b148b44e))
+
 ## [0.26.3](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.2...v0.26.3) (2026-06-05)
 
 
