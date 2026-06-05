@@ -139,3 +139,56 @@ def test_resolved_top_level_links_from_root():
     base = base_href_for_path("/home")
     resolved = _resolve(base, "system", "/home")
     assert resolved == "/system"
+
+
+# ─── Persistent header drawer trigger (always-available ✨) ──────
+
+
+def test_shell_renders_drawer_trigger_in_header():
+    """Per the design's "available from any page" promise, the ✨
+    trigger sits in the header on every render."""
+    html = render_shell("home", "x")
+    assert "drawer-toggle" in html
+    assert "✨" in html
+
+
+def test_drawer_trigger_present_on_pages_without_drawer_html():
+    """The trigger is independent of whether the drawer is currently
+    open — it should always be there as a way to OPEN it."""
+    html = render_shell("areas", "x", drawer_html="")
+    assert "drawer-toggle" in html
+
+
+def test_drawer_trigger_present_when_drawer_already_open():
+    """Doesn't disappear when drawer_html is non-empty either —
+    keeps the click target visible for users who close + reopen."""
+    html = render_shell("memory", "x", drawer_html="<aside class='drawer'>x</aside>")
+    assert "drawer-toggle" in html
+    assert "<aside class='drawer'>" in html
+
+
+def test_drawer_trigger_preserves_existing_query_via_js():
+    """The onclick handler appends &drawer=1 when there's already a
+    query string, ? otherwise. Tested via substring assertion since
+    the JS is inline."""
+    html = render_shell("memory", "x")
+    # JS path: appends with the right separator based on existing query
+    assert "location.search" in html
+    assert "drawer=1" in html
+
+
+def test_drawer_trigger_fallback_href_works_without_js():
+    """No-JS fallback: the href attribute points at ?drawer=1 so the
+    trigger still works in raw-HTML environments."""
+    html = render_shell("home", "x")
+    assert "href='?drawer=1'" in html
+
+
+def test_drawer_trigger_links_to_self_not_to_memory():
+    """Earlier the only opener was on /memory and hardcoded to
+    href='memory?drawer=1' — the header trigger must stay on the
+    current page, not jump to /memory."""
+    html = render_shell("system", "x", request_path="/system")
+    # ?drawer=1 is current-page-relative, not 'memory?drawer=1'
+    assert "memory?drawer=1" not in html.split("<main")[0]
+    assert "drawer=1" in html

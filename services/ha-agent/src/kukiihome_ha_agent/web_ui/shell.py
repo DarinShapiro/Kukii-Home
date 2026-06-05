@@ -61,6 +61,11 @@ header nav a{color:#9aa7b8;font-size:13px;padding:6px 10px;border-radius:6px;
 header nav a:hover{background:#1c2129;color:#e6e6e6}
 header nav a.active{background:#2a3140;color:#e6e6e6}
 header .version{color:#5b6675;font-size:12px}
+header .drawer-toggle{display:inline-flex;align-items:center;justify-content:center;
+  width:30px;height:30px;border-radius:6px;background:#1f2632;
+  color:#cfd6df;text-decoration:none;font-size:14px;
+  transition:background 100ms ease}
+header .drawer-toggle:hover{background:#2a3344;color:#e5edf7}
 
 /* ─── content frame ────────────────────────────────────────────── */
 main{padding:18px;max-width:1100px;margin:0 auto}
@@ -469,6 +474,17 @@ def render_shell(active: str, content_html: str, *, version: str = "",
         "<header>"
         "<span class='brand'>Kukii-Home</span>"
         f"<nav>{nav}</nav>"
+        # Persistent conversational drawer trigger (Part X §34). Lives in
+        # the header so the drawer is available from any page — opens with
+        # current page as page_context so the LLM knows where you were.
+        # The onclick handler ADDS drawer=1 to the existing query string
+        # rather than replacing it (so /memory?cut=by_type keeps its cut).
+        # The href is the fallback for no-JS environments.
+        "<a class='drawer-toggle' href='?drawer=1' title='Tell me what to "
+        "watch for' onclick=\"if(/[?&]drawer=/.test(location.search)){"
+        "return true;}var s=location.search?'&':'?';"
+        "location.assign(location.pathname+location.search+s+'drawer=1');"
+        "return false;\">✨</a>"
         f"<span class='version'>{_e(version)}</span>"
         "</header>"
         f"<main class='{main_class}'>{flash_html}{content_html}</main>"
