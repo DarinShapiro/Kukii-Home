@@ -289,21 +289,22 @@ def build_diagnostics_vm(
             # Each store read is best-effort — a broken store shouldn't
             # blank the whole diagnostics page.
             _LOG.debug("diagnostics.store_read_failed", error=str(e))
+    # Hoist build_camera_summaries — earlier code called it 3x
+    # (once each for perception/protective sums + once for cam health
+    # rows below). Compute the list once + reuse.
+    cam_summaries_for_counts = build_camera_summaries(
+        registry_statuses=registry_statuses, ha_loops=ha_loops,
+        alerts=[], now_ts=now_ts,
+    )
     if action_store is not None:
         try:
             stores.perception_entries = sum(
                 len(action_store.perception_for(c.camera_id))
-                for c in build_camera_summaries(
-                    registry_statuses=registry_statuses, ha_loops=ha_loops,
-                    alerts=[], now_ts=now_ts,
-                )
+                for c in cam_summaries_for_counts
             )
             stores.protective_entries = sum(
                 len(action_store.protective_for(c.camera_id))
-                for c in build_camera_summaries(
-                    registry_statuses=registry_statuses, ha_loops=ha_loops,
-                    alerts=[], now_ts=now_ts,
-                )
+                for c in cam_summaries_for_counts
             )
         except Exception as e:
             # Each store read is best-effort — a broken store shouldn't

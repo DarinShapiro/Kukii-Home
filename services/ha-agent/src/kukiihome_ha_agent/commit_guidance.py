@@ -91,13 +91,39 @@ def commit_guidance(
     if refines_id and transcript_id:
         existing = stores.provenance.get_provenance(refines_id)
         if existing is not None:
-            refine_guidance(
-                refines_id, proposal, stores=stores,
-                transcript_id=transcript_id,
-                user_utterance=user_utterance,
-                now_ts=now_ts,
+            # Storage-class consistency guard. The system prompt tells
+            # the LLM not to refine across classes, but if it does anyway
+            # (e.g. proposes a Preference that "refines" an existing Rule)
+            # the refine path would silently mis-write since each
+            # _update_* helper only knows its own class. Fall through to
+            # a fresh create when classes don't match.
+            from kukiihome_ha_agent.dispatcher import _classify_guidance_id
+            existing_class = _classify_guidance_id(refines_id)
+            proposal_class_family = (
+                "policy" if proposal.storage_class in (
+                    "transient_intent", "dismissal_policy",
+                    "situational_context",
+                )
+                else (
+                    "area_posture"
+                    if proposal.storage_class == "area_posture"
+                    else proposal.storage_class
+                )
             )
-            return refines_id
+            if existing_class == proposal_class_family:
+                refine_guidance(
+                    refines_id, proposal, stores=stores,
+                    transcript_id=transcript_id,
+                    user_utterance=user_utterance,
+                    now_ts=now_ts,
+                )
+                return refines_id
+            logger.warning(
+                "guidance.refine.class_mismatch.fallback_to_create",
+                refines_id=refines_id,
+                existing_class=existing_class,
+                proposal_class=proposal.storage_class,
+            )
 
     now = now_ts or time.time()
     sc = proposal.storage_class

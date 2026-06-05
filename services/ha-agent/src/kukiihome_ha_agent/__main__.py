@@ -2439,7 +2439,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         turns = prov.turns_for_session(sess.id)
         return render_drawer(
             session=sess, turns=turns,
-            alert_context=alert_context, now_ts=_time.time(),
+            alert_context=alert_context,
+            request_path=request.path,
+            now_ts=_time.time(),
         )
 
     def _shell_response(

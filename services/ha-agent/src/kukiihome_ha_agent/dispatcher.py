@@ -309,17 +309,16 @@ def context_from_boot(
                         role="user", text=t.utterance,
                     ))
                 elif t.committed_to:
-                    # committed_to is the guidance_id; resolve the
-                    # storage class so the history line is readable.
-                    sc = ""
-                    for prefix in ("rule", "preferences", "policy", "area"):
-                        if t.committed_to.startswith(prefix):
-                            sc = prefix
-                            break
+                    # committed_to is the guidance_id; classify by id
+                    # shape so the history line is informative for the
+                    # LLM. Original code used startswith("rule"/"policy")
+                    # which never matched because rule ids are bare
+                    # slugs (winston_alone_front, not rule_xxx) and
+                    # policy ids are pol_xxxxxxxx (not policy_xxx).
                     recent_turns.append(RecentTurn(
                         role="system", text=t.utterance,
                         committed_guidance_id=t.committed_to,
-                        storage_class=sc,
+                        storage_class=_classify_guidance_id(t.committed_to),
                     ))
                 else:
                     # System turn carrying a proposal but never confirmed.
@@ -346,6 +345,29 @@ def context_from_boot(
         recent_turns=recent_turns,
         last_committed=last_committed,
     )
+
+
+def _classify_guidance_id(guidance_id: str) -> str:
+    """Cheap shape-based classifier for a guidance_id. Used to label
+    history turns + the refinement guard in commit_guidance. NOT for
+    routing the write — the routers use proposal.storage_class.
+
+    Conventions baked into the stores:
+      - preferences:singleton / preferences:vigilance / ...
+      - area:<area_id>
+      - pol_<uuid8>   (PolicyStore — covers dismissal + transient_intent
+                       + situational_context)
+      - everything else → rule (RulesStore uses bare slugs from name)
+    """
+    if not guidance_id:
+        return ""
+    if guidance_id.startswith("preferences:"):
+        return "preference"
+    if guidance_id.startswith("area:"):
+        return "area_posture"
+    if guidance_id.startswith("pol_"):
+        return "policy"
+    return "rule"
 
 
 def _resolve_committed_summary(

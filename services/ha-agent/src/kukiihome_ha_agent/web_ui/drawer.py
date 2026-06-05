@@ -153,15 +153,28 @@ def render_drawer(
     session: Session | None,
     turns: list[TranscriptTurn],
     alert_context: str = "",
+    request_path: str = "",
     now_ts: float | None = None,
 ) -> str:
     """Render the drawer panel. The host page (any page) embeds this on
     every request when the drawer is open; closed pages skip rendering
-    entirely."""
+    entirely.
+
+    ``request_path`` is the current page's URL path; the drawer's
+    close link returns to that path WITHOUT the ?drawer=1 query so
+    the page stays put with the drawer hidden. Earlier iteration used
+    a query-only href ``?`` which RFC 3986 §5.3 resolves against
+    ``<base href>`` — on depth-2 pages it sent you to the add-on
+    landing page instead of closing the drawer.
+    """
+    # Compute close target: current page with leading slash stripped
+    # so it's relative to <base href>'s app-root resolution. Falls back
+    # to 'memory' when no request_path provided (legacy / tests).
+    close_href = (request_path or "/memory").lstrip("/") or "memory"
     header = (
         "<div class='drawer-head'>"
         "<h3>✨ Conversation</h3>"
-        "<a class='drawer-close' href='?'>close</a>"
+        f"<a class='drawer-close' href='{_e(close_href)}'>close</a>"
         "</div>"
     )
 
