@@ -638,25 +638,28 @@ def _render_alert_page(
             "</section>"
         )
 
+    # User-review fixup #3: alert page returns body-only HTML so the
+    # caller wraps it in render_shell() for the main nav. The alert-
+    # specific CSS rides inline as a <style> block in the body — the
+    # shell's stylesheet remains the base and these rules layer on top.
     return (
-        "<!doctype html><html><head>"
-        f"<title>{headline}</title>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        + _ALERT_PAGE_CSS
-        + "</head><body>"
+        _ALERT_PAGE_CSS
         # Hero
-        f"<div class='hero'>"
-        # Task 1: prefer the playable clip when the preprocessor has
-        # muxed one (or can mux on demand). The browser only fetches
-        # clip.mp4 if it decides to play (preload metadata = a small
-        # HEAD-ish probe, not the whole file).
-        f"<video class='event-clip' controls preload='metadata' "
-        f"poster='{safe_id}/annotated.jpg' "
-        f"onerror=\"this.outerHTML='<img src=\\\"{safe_id}/annotated.jpg\\\" alt=\\\"alert frame\\\"/>'\">"
-        f"<source src='{safe_id}/clip.mp4' type='video/mp4'>"
-        # Fallback for browsers that won't render <video>: a plain image.
-        f"<img src='{safe_id}/annotated.jpg' alt='alert frame'/>"
-        "</video>"
+        + "<div class='hero'>"
+        # User-review fixup #1+#2: render the static frame as the
+        # primary hero element. The clip-mux pipeline (Task 1) doesn't
+        # reliably produce MP4s on every event yet — the previous
+        # <video> tag would attempt to load clip.mp4, get 404, and
+        # show a permanent loading spinner without falling through to
+        # the static frame (browser fallback for missing <source>
+        # doesn't reliably swap content). Static frame is always
+        # available via /alert/{id}/annotated.jpg → frame.jpg fallback.
+        # The video player will return when the preprocessor exposes a
+        # reliable per-event clip endpoint + we proxy with Range
+        # support; until then, frame-only is the working UX.
+        f"<img class='event-frame' src='{safe_id}/annotated.jpg' "
+        f"alt='alert frame' "
+        f"onerror=\"this.src='{safe_id}/frame.jpg'\"/>"
         f"<div class='hero-caption'>"
         f"<h1>{headline}</h1>"
         f"<div class='meta'>{camera_label} · {when} · "
@@ -698,7 +701,7 @@ def _render_alert_page(
         # the kukiihome_alert push opens /alert/{id}?drawer=1 which
         # renders this with the alert pre-loaded as conversation context.
         + drawer_html
-        + "</body></html>"
+        # NOTE: no </body></html> — the caller wraps with render_shell.
     )
 
 
@@ -1543,11 +1546,20 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
                 request, alert_context=event_id,
                 page_context=f"alert/{event_id}",
             )
+        # User-review fixup #3: wrap in render_shell so the main nav is
+        # present on the alert detail page. The shell handles the
+        # depth-aware <base href> for /alert/{id}.
+        from kukiihome_ha_agent import __version__
+        from kukiihome_ha_agent.web_ui.shell import render_shell as _shell
+        body = _render_alert_page(
+            event, event_id,
+            audit_chain_html=audit_html,
+            drawer_html=drawer_html,
+        )
         return web.Response(
-            text=_render_alert_page(
-                event, event_id,
-                audit_chain_html=audit_html,
-                drawer_html=drawer_html,
+            text=_shell(
+                "", body, version=__version__,
+                request_path=request.path,
             ),
             content_type="text/html",
         )
@@ -2122,7 +2134,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             tracks, subjects, configured=configured, flash=flash,
         )
         return web.Response(
-            text=render_shell("identities", body, version=__version__),
+            text=render_shell("identities", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2188,7 +2200,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
 
         body = render_track_detail_html(detail)
         return web.Response(
-            text=render_shell("identities", body, version=__version__),
+            text=render_shell("identities", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2211,7 +2223,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
     # status page stays untouched during the transition — see /diagnostics
     # for the link back.
 
-    async def v2_home(_request: web.Request) -> web.Response:
+    async def v2_home(request: web.Request) -> web.Response:
         from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.home import render_home_page
         from kukiihome_ha_agent.web_ui.shell import render_shell
@@ -2253,7 +2265,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             now_ts=_time.time(),
         )
         return web.Response(
-            text=render_shell("home", content, version=__version__),
+            text=render_shell("home", content, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2291,14 +2303,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             logger.debug("intent.known_cameras_failed", error=str(e))
         return out
 
-    def _v2_mock_response(*, active: str, body_html: str) -> web.Response:
-        from kukiihome_ha_agent import __version__
-        from kukiihome_ha_agent.web_ui.shell import render_shell
-
-        return web.Response(
-            text=render_shell(active, body_html, version=__version__),
-            content_type="text/html",
-        )
+    # _v2_mock_response was a helper for the placeholder pages in Iter 2;
+    # every v2_* nav target now has a real renderer so the helper has no
+    # remaining callers. Removed in the user-review fixup pass.
 
     async def v2_activity(request: web.Request) -> web.Response:
         # Task 7 / Part IV: real activity page with filter chips + pagination.
@@ -2319,11 +2326,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             alerts_all=all_alerts, now_ts=_time.time(), **filters,
         )
         return web.Response(
-            text=render_shell("activity", content, version=__version__),
+            text=render_shell("activity", content, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
-    async def v2_areas(_request: web.Request) -> web.Response:
+    async def v2_areas(request: web.Request) -> web.Response:
         from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.areas import render_areas_list
         from kukiihome_ha_agent.web_ui.shell import render_shell
@@ -2333,11 +2340,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         else:
             body = render_areas_list(boot.area_store.all_areas())
         return web.Response(
-            text=render_shell("areas", body, version=__version__),
+            text=render_shell("areas", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
-    async def v2_area_new(_request: web.Request) -> web.Response:
+    async def v2_area_new(request: web.Request) -> web.Response:
         from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.areas import render_area_form
         from kukiihome_ha_agent.web_ui.shell import render_shell
@@ -2346,7 +2353,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             None, available_cameras=_intent_known_cameras(boot),
         )
         return web.Response(
-            text=render_shell("areas", body, version=__version__),
+            text=render_shell("areas", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2365,7 +2372,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             area, available_cameras=_intent_known_cameras(boot),
         )
         return web.Response(
-            text=render_shell("areas", body, version=__version__),
+            text=render_shell("areas", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2465,8 +2472,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
 
         return web.Response(
             text=render_shell(
-                "memory", body, version=__version__, drawer_html=drawer_html,
-            ),
+                "memory", body, version=__version__, drawer_html=drawer_html, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2643,7 +2649,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             target = f"{target}&{qs}"
         raise web.HTTPMovedPermanently(location=target)
 
-    async def v2_intent(_request: web.Request) -> web.Response:
+    async def v2_intent(request: web.Request) -> web.Response:
         # Task 9: real page from RulesStore. Falls back to a brief "rules
         # storage unavailable" notice when the store isn't wired (older
         # boot path / tests).
@@ -2668,11 +2674,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
                 rules, now_ts=_time.time(), preferences=prefs,
             )
         return web.Response(
-            text=render_shell("intent", body, version=__version__),
+            text=render_shell("intent", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
-    async def v2_intent_rule_new(_request: web.Request) -> web.Response:
+    async def v2_intent_rule_new(request: web.Request) -> web.Response:
         from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.intent import render_rule_form
         from kukiihome_ha_agent.web_ui.shell import render_shell
@@ -2684,7 +2690,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             available_areas=[],
         )
         return web.Response(
-            text=render_shell("intent", body, version=__version__),
+            text=render_shell("intent", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2706,7 +2712,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             available_areas=[],
         )
         return web.Response(
-            text=render_shell("intent", body, version=__version__),
+            text=render_shell("intent", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2801,11 +2807,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             "<a class='btn' href='../../../intent'>← Back to rules</a>"
         )
         return web.Response(
-            text=render_shell("intent", body, version=__version__),
+            text=render_shell("intent", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
-    async def v2_policies(_request: web.Request) -> web.Response:
+    async def v2_policies(request: web.Request) -> web.Response:
         from kukiihome_ha_agent import __version__
         from kukiihome_ha_agent.web_ui.policies import render_policies_page
         from kukiihome_ha_agent.web_ui.shell import render_shell
@@ -2819,7 +2825,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
                 dismissals=dismissals, transient_intents=transients,
             )
         return web.Response(
-            text=render_shell("policies", body, version=__version__),
+            text=render_shell("policies", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2829,7 +2835,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         boot.policy_store.revoke(request.match_info["policy_id"])
         raise web.HTTPSeeOther(location="policies")
 
-    async def v2_cameras(_request: web.Request) -> web.Response:
+    async def v2_cameras(request: web.Request) -> web.Response:
         # Iter 2.B: live list page reading the registry + alert log.
         import time as _time
 
@@ -2851,7 +2857,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
         body = render_cameras_list(summaries)
         return web.Response(
-            text=render_shell("cameras", body, version=__version__),
+            text=render_shell("cameras", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2887,7 +2893,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             return web.HTTPNotFound(text=f"camera {camera_id!r} not found")
         body = render_camera_detail(vm)
         return web.Response(
-            text=render_shell("cameras", body, version=__version__),
+            text=render_shell("cameras", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2899,7 +2905,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         camera_id = request.match_info["camera_id"]
         body = render_perception_form(camera_id)
         return web.Response(
-            text=render_shell("cameras", body, version=__version__),
+            text=render_shell("cameras", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2911,7 +2917,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         camera_id = request.match_info["camera_id"]
         body = render_protective_form(camera_id)
         return web.Response(
-            text=render_shell("cameras", body, version=__version__),
+            text=render_shell("cameras", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -2972,7 +2978,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
         raise web.HTTPSeeOther(location=f"cameras/{camera_id}")
 
-    async def v2_identities(_request: web.Request) -> web.Response:
+    async def v2_identities(request: web.Request) -> web.Response:
         """Iter 3 / Part IX §29: Enrolled identities list. Reads
         /identity/subjects from the preprocessor and renders the tile
         grid. Falls back to an empty list if the preprocessor is down."""
@@ -2998,11 +3004,18 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
                 unresolved_count = len(tracks or [])
             except Exception as e:
                 logger.debug("v2.identities.tracks_fetch_failed", error=str(e))
+        # User-review fixup #4: when nothing is enrolled yet but tracks
+        # are awaiting review, route the user to where the content is.
+        # The new Enrolled tab is the right primary surface eventually,
+        # but at first run "Identities" should show pending-review work,
+        # not an empty pane.
+        if not subjects and unresolved_count > 0:
+            raise web.HTTPSeeOther(location="review")
         body = render_identities_list(
             subjects, unresolved_count=unresolved_count, tab="enrolled",
         )
         return web.Response(
-            text=render_shell("identities", body, version=__version__),
+            text=render_shell("identities", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -3061,11 +3074,11 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         vm = IdentityDetailViewModel(subject=subject, linked_guidance=linked)
         body = render_identity_detail(vm)
         return web.Response(
-            text=render_shell("identities", body, version=__version__),
+            text=render_shell("identities", body, version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
-    async def v2_system(_request: web.Request) -> web.Response:
+    async def v2_system(request: web.Request) -> web.Response:
         """Iter 3 / Part IX §30: /system page — storage usage + retention
         policy + privacy operations + admin audit log."""
         import time as _time
@@ -3101,8 +3114,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
         return web.Response(
             text=render_shell(
-                "system", render_system_page(vm), version=__version__,
-            ),
+                "system", render_system_page(vm), version=__version__, request_path=request.path),
             content_type="text/html",
         )
 
@@ -3195,7 +3207,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         ))
         raise web.HTTPSeeOther(location="system")
 
-    async def v2_diagnostics(_request: web.Request) -> web.Response:
+    async def v2_diagnostics(request: web.Request) -> web.Response:
         import os
         import time as _time
 
@@ -3241,7 +3253,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
         return web.Response(
             text=render_shell("diagnostics", render_diagnostics_page(vm),
-                              version=__version__),
+                              version=__version__, request_path=request.path),
             content_type="text/html",
         )
 

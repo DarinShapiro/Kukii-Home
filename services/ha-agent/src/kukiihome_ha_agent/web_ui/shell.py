@@ -20,7 +20,10 @@ from typing import Any
 # Nav order matches the ratified TOC. Each entry: (path, label).
 NAV_ITEMS: list[tuple[str, str]] = [
     ("home",        "Home"),
-    ("activity",    "Activity"),
+    # User-review fixup: Activity dropped from the primary nav since it's
+    # reachable via the "See all activity" link on the Home page and the
+    # standalone tab was redundant. The /activity route + page itself
+    # still exist; only the nav slot was removed.
     # Iter 3 (Parts IX+X): Intent + Policies collapse into Memory. The
     # /intent and /policies URLs 301-redirect for backward-compat with
     # bookmarks + HA Lovelace card links.
@@ -391,8 +394,33 @@ def camera_display_name(raw_name: str | None) -> str:
     return name or str(raw_name).strip()
 
 
+def base_href_for_path(request_path: str) -> str:
+    """Compute the right ``<base href>`` so relative URLs in the shell
+    resolve to the application root regardless of the current page's
+    depth.
+
+    Algorithm: count path components. For depth=1 (``/home``, ``/areas``,
+    ``/system``, ...) ``./`` works because the browser drops the trailing
+    component to find the current directory. For depth ≥ 2
+    (``/areas/new``, ``/cameras/{id}``, ``/identities/{id}``, ...) we
+    need ``../`` for each extra level so the base resolves back to the
+    application root.
+
+    Without this, a nav link like ``href='system'`` on the camera
+    detail page would resolve to ``/cameras/system`` instead of
+    ``/system`` — which is the camera-tab-nav-broken bug the user
+    reported.
+    """
+    parts = [p for p in (request_path or "/").split("/") if p]
+    depth = len(parts)
+    if depth <= 1:
+        return "./"
+    return "../" * (depth - 1)
+
+
 def render_shell(active: str, content_html: str, *, version: str = "",
-                 flash: str | None = None, drawer_html: str = "") -> str:
+                 flash: str | None = None, drawer_html: str = "",
+                 request_path: str = "") -> str:
     """Wrap ``content_html`` in the shared shell. ``active`` is the path of
     the current page (one of :data:`NAV_ITEMS` paths) so its nav link is
     highlighted. ``flash`` is an optional one-line notice rendered above the
@@ -401,19 +429,30 @@ def render_shell(active: str, content_html: str, *, version: str = "",
     ``drawer_html`` is the optional conversational drawer (Part X §34) —
     when non-empty, it renders as a fixed right-side panel and the main
     content shifts to make room. Pass empty string to render without
-    the drawer."""
+    the drawer.
+
+    ``request_path`` is the URL path of the current request. The shell
+    uses it to pick the right ``<base href>`` so relative links resolve
+    to the application root from any depth (see
+    :func:`base_href_for_path`). Pass an empty string for legacy
+    callers + flat pages — the default ``./`` works for depth-1 routes
+    like ``/home`` / ``/areas`` / ``/memory``.
+    """
     nav = "".join(
         f"<a class='{'active' if path == active else ''}' href='{path}'>{_e(label)}</a>"
         for path, label in NAV_ITEMS
     )
     flash_html = f"<div class='flash'>{_e(flash)}</div>" if flash else ""
     main_class = "with-drawer" if drawer_html else ""
+    base_href = base_href_for_path(request_path) if request_path else "./"
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        # base ./ → relative URLs resolve against the current dir (top-level),
-        # identically under HA Ingress + direct port. Same trick as /review.
-        "<base href='./'>"
+        # base href is computed from the current request path so links
+        # in the nav + content resolve to the application root from any
+        # depth (depth-1 = './', depth-2 = '../', etc.). Identical
+        # behavior under HA Ingress + direct port.
+        f"<base href='{base_href}'>"
         f"<title>Kukii-Home</title><style>{_STYLE}</style>"
         # Iter 3 / Part X §40: push-reply fragment-load. HA Companion
         # opens push notifications at /alert/{id}#drawer; the URL

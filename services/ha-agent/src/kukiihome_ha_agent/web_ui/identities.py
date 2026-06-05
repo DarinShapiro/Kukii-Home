@@ -92,11 +92,18 @@ def render_identities_list(
     )
 
     if not subjects:
+        review_cta = (
+            f"<div style='margin-top:14px'>"
+            f"<a class='btn primary' href='{_e(review_url)}'>"
+            f"Review {unresolved_count} unresolved track"
+            f"{'s' if unresolved_count != 1 else ''} →</a></div>"
+        ) if unresolved_count > 0 else ""
         body = (
             "<div class='empty'>No identities enrolled yet. Label an "
             "unresolved track on the Review tab — once you give a track "
             "a name, the subject lands here with its templates and "
             "lifecycle controls.</div>"
+            + review_cta
         )
     else:
         # Sort: people first, then pets, then vehicles; within each by name.
