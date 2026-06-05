@@ -443,8 +443,17 @@ def render_shell(active: str, content_html: str, *, version: str = "",
     callers + flat pages — the default ``./`` works for depth-1 routes
     like ``/home`` / ``/areas`` / ``/memory``.
     """
+    # Drawer persistence across nav (Part X §34 "persistent across page
+    # navigation"). When the drawer is currently open on this page,
+    # carry ?drawer=1 forward on every nav link so clicking Home / Areas
+    # / Cameras / etc. keeps the conversation panel open. drawer_open
+    # is detected from drawer_html being non-empty — the route handler
+    # has already decided whether to render the aside.
+    drawer_open = bool(drawer_html)
+    drawer_q = "?drawer=1" if drawer_open else ""
     nav = "".join(
-        f"<a class='{'active' if path == active else ''}' href='{path}'>{_e(label)}</a>"
+        f"<a class='{'active' if path == active else ''}' "
+        f"href='{path}{drawer_q}'>{_e(label)}</a>"
         for path, label in NAV_ITEMS
     )
     flash_html = f"<div class='flash'>{_e(flash)}</div>" if flash else ""

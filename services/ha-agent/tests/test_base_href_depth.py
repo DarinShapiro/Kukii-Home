@@ -141,6 +141,49 @@ def test_resolved_top_level_links_from_root():
     assert resolved == "/system"
 
 
+# ─── Drawer persistence across nav (Part X §34 follow-up) ───────
+
+
+def test_nav_links_carry_drawer_when_drawer_is_open():
+    """When the drawer is currently open (drawer_html non-empty), every
+    primary nav link should append ?drawer=1 so clicking Home / Areas /
+    Cameras / etc. keeps the conversation panel open across navigation."""
+    html_out = render_shell(
+        "home", "x", drawer_html="<aside class='drawer'>x</aside>",
+    )
+    # Every nav target should carry ?drawer=1
+    for path, _label in NAV_ITEMS:
+        assert f"href='{path}?drawer=1'" in html_out
+
+
+def test_nav_links_no_drawer_query_when_drawer_closed():
+    """When the drawer is closed (drawer_html empty), the nav links
+    themselves are plain — no ?drawer=1 cluttering the URL. The ✨
+    trigger separately always emits drawer=1 (its job is to open
+    the drawer); we just isolate to the <nav>…</nav> region."""
+    html_out = render_shell("home", "x", drawer_html="")
+    nav_block = html_out.split("<nav>")[1].split("</nav>")[0]
+    for path, _label in NAV_ITEMS:
+        assert f"href='{path}'" in nav_block
+        assert "?drawer=1" not in nav_block
+
+
+def test_drawer_persistence_round_trip_via_browser_resolution():
+    """Walk the click: on /memory?drawer=1, clicking the 'Cameras' nav
+    link should land at /cameras?drawer=1 (preserving the drawer
+    state). RFC 3986 §5.3 resolution via _resolve helper."""
+    base = base_href_for_path("/memory")
+    resolved = _resolve(base, "cameras?drawer=1", "/memory")
+    assert resolved == "/cameras?drawer=1"
+
+
+def test_drawer_persistence_works_from_depth_2_too():
+    """Walk: on /cameras/pool?drawer=1, clicking Home → /home?drawer=1."""
+    base = base_href_for_path("/cameras/pool")
+    resolved = _resolve(base, "home?drawer=1", "/cameras/pool")
+    assert resolved == "/home?drawer=1"
+
+
 # ─── Persistent header drawer trigger (always-available ✨) ──────
 
 

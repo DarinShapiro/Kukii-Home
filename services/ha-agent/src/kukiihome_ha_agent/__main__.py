@@ -1247,10 +1247,18 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
             # prefix) and 404. Relative URLs work both via ingress AND via
             # direct port 8765 access.
             if a.get("evidence_ref"):
-                snap_url = f"alerts/{alert_id}/snapshot"
+                # Defensive escape of alert_id in BOTH attribute context
+                # (href/src) and JS-string context (onclick). alert_id
+                # is server-controlled today but a future logging path
+                # could let an attacker influence it — escape defensively.
+                safe_alert_id = html.escape(str(alert_id), quote=True)
+                snap_url = f"alerts/{safe_alert_id}/snapshot"
+                # For the onclick JS-string, swap apostrophes that would
+                # break out of the single-quoted JS literal.
+                snap_url_js = snap_url.replace("\\", "\\\\").replace("'", "\\'")
                 thumb = (
                     f"<a href='{snap_url}' target='_blank' "
-                    f"onclick=\"return openLightbox('{snap_url}')\">"
+                    f"onclick=\"return openLightbox('{snap_url_js}')\">"
                     f"<img class='thumb' src='{snap_url}' "
                     "style='max-width: 96px; max-height: 54px; "
                     "border-radius: 4px; vertical-align: middle;' "
@@ -1356,12 +1364,21 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
             # without manual reload. Click → lightbox (see status page
             # template); fallback link opens raw image in new tab.
             if cs.motion_events > 0:
-                cam_snap_url = f"cameras/{cs.camera_id}/snapshot?v={cs.motion_events}"
+                # Defensive escape (see comment in alerts-table thumb
+                # block). camera_id is server-controlled today but
+                # could leak through a future adapter ingestion path.
+                safe_cam_id = html.escape(str(cs.camera_id), quote=True)
+                cam_snap_url = (
+                    f"cameras/{safe_cam_id}/snapshot?v={cs.motion_events}"
+                )
+                cam_snap_url_js = (
+                    cam_snap_url.replace("\\", "\\\\").replace("'", "\\'")
+                )
                 thumb_html = (
                     # Relative URL — see comment on alerts-table thumbnails about
                     # why absolute paths break under HA ingress.
                     f"<a href='{cam_snap_url}' target='_blank' "
-                    f"onclick=\"return openLightbox('{cam_snap_url}')\">"
+                    f"onclick=\"return openLightbox('{cam_snap_url_js}')\">"
                     f"<img class='thumb' src='{cam_snap_url}' "
                     "style='max-width: 160px; max-height: 90px; border-radius: 4px;'"
                     " onerror=\"this.style.display='none'\"/></a>"
