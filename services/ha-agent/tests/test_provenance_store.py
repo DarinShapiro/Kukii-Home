@@ -262,6 +262,36 @@ def test_validate_proposal_bad_severity():
         validate_proposal(d)
 
 
+def test_validate_proposal_rejects_non_string_scope_value():
+    """The LLM sometimes emits scope.actor: true (boolean axis flag)
+    instead of the canonical id. We reject it explicitly so the retry
+    prompt can correct the field, rather than letting a boolean become
+    a malformed rule scope downstream."""
+    d = _good_proposal_dict()
+    d["scope"] = {"actor": True, "actor_name": "Winston"}
+    with pytest.raises(ValueError, match=r"scope\.actor must be a string"):
+        validate_proposal(d)
+
+
+def test_validate_proposal_strips_empty_scope_values():
+    """Empty strings and None on a scope axis = axis omitted. The model
+    occasionally emits these as placeholders; we treat them as no-op
+    instead of failing the schema."""
+    d = _good_proposal_dict()
+    d["scope"] = {
+        "area": "front_yard", "actor": "", "camera": None, "kind": "person",
+    }
+    p = validate_proposal(d)
+    assert p.scope == {"area": "front_yard", "kind": "person"}
+
+
+def test_validate_proposal_keeps_pattern_string_field():
+    d = _good_proposal_dict()
+    d["scope"] = {"area": "front_yard", "pattern": "alone"}
+    p = validate_proposal(d)
+    assert p.scope["pattern"] == "alone"
+
+
 def test_proposal_to_from_json_roundtrip():
     p = validate_proposal(_good_proposal_dict())
     blob = p.to_json()

@@ -65,8 +65,12 @@ class OpenAIChatClient:
         self.timeout_seconds = timeout_seconds
 
     async def complete(
-        self, *, system: str, user: str, max_tokens: int = 800,
+        self, *, system: str, user: str, max_tokens: int = 1500,
     ) -> str:
+        # 1500 leaves headroom for reasoning-class models (gpt-oss /
+        # zai-glm / o1-style) where internal chain-of-thought tokens
+        # count against max_tokens. The placement proposal itself only
+        # needs ~300-500 tokens; the rest is reasoning budget.
         """Send one chat completion. Returns the assistant content
         text verbatim — the dispatcher handles parsing / schema retry."""
         url = f"{self.base_url}/chat/completions"

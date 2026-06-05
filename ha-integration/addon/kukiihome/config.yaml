@@ -113,7 +113,14 @@ options:
   # either way.
   llm_url: ''
   llm_api_key: ''
-  llm_model: 'llama-3.3-70b'
+  # Model availability is per-account on Cerebras — check
+  # `GET https://api.cerebras.ai/v1/models` with your key to see what
+  # your account can use. The default below is verified working on a
+  # standard developer account. Common alternatives if your account
+  # has access: llama-3.3-70b, llama-4-scout-17b-16e-instruct,
+  # qwen-3-32b. For non-Cerebras providers, use whatever model id
+  # they document (Ollama: 'llama3.3:70b', OpenAI: 'gpt-4o', etc.).
+  llm_model: 'gpt-oss-120b'
 schema:
   profile: list(yellow_single_box|yellow_plus_inference|distributed)
   household_id: str

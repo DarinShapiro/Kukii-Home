@@ -445,10 +445,24 @@ def validate_proposal(data: Any) -> PlacementProposal:
         raise ValueError(f"bad severity: {sev}")
     if not isinstance(data["scope"], dict):
         raise ValueError("scope must be an object")
+    # Tighter scope discipline (added after observing gpt-oss-120b emit
+    # booleans for axis flags): every value must be a string. The model
+    # gets one explicit error message naming the bad field — usually
+    # enough for the schema-retry to correct it.
+    cleaned_scope: dict[str, str] = {}
+    for k, v in data["scope"].items():
+        if v is None or v == "":
+            continue  # treat empty values as "axis omitted"
+        if not isinstance(v, str):
+            raise ValueError(
+                f"scope.{k} must be a string (got {type(v).__name__}: {v!r}); "
+                "use the snake_case id, not a boolean or display name"
+            )
+        cleaned_scope[k] = v
     return PlacementProposal(
         storage_class=data["storage_class"],
         name=str(data["name"]).strip(),
-        scope=data["scope"],
+        scope=cleaned_scope,
         lifecycle=data["lifecycle"],
         lifecycle_ttl_iso=data.get("lifecycle_ttl_iso"),
         fire_affordance=data["fire_affordance"],

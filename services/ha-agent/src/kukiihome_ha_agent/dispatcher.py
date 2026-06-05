@@ -315,6 +315,24 @@ Use ONLY entities present in the provided known_actor_names /
 known_area_names / known_camera_names lists. If the utterance mentions
 something not in those lists, place it in intent_text but DO NOT
 invent IDs.
+
+**scope field format — strict:**
+  - scope.actor / scope.area / scope.camera / scope.kind: ALWAYS a
+    snake_case string id derived from the matching known name —
+    `"winston"`, `"front_yard"`, `"pool_camera"`. Never a boolean,
+    never the display-cased name, never an empty string, never null.
+    Omit the key entirely if the axis doesn't apply.
+  - scope.actor_name / scope.area_name / scope.camera_name: the
+    canonical DISPLAY name verbatim from the known list — `"Winston"`,
+    `"Front yard"`, `"Pool Camera"`. Always paired with the id field.
+  - scope.pattern: free-form descriptor like `"alone"` or `"after_dusk"`.
+
+Example for "Tell me when Winston is alone in the front yard":
+  "scope": {
+    "actor": "winston", "actor_name": "Winston",
+    "area":  "front_yard", "area_name":  "Front yard",
+    "pattern": "alone"
+  }
 """
 
 
