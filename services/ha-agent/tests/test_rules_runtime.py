@@ -23,7 +23,7 @@ from kukiihome_ha_agent.rules_store import Rule, RuleScope, RulesStore
 
 def test_in_time_window_inclusive_start_exclusive_end():
     w = {"days": ["mon"], "start": "09:00", "end": "17:00"}
-    monday_9am = datetime(2026, 6, 1, 9, 0, 0)   # Mon
+    monday_9am = datetime(2026, 6, 1, 9, 0, 0)  # Mon
     monday_8_59 = datetime(2026, 6, 1, 8, 59, 0)
     monday_5pm = datetime(2026, 6, 1, 17, 0, 0)  # exclusive end
     monday_4_59 = datetime(2026, 6, 1, 16, 59, 0)
@@ -81,9 +81,13 @@ def test_rule_in_scope_area_gate():
 def test_rule_in_scope_time_gate_uses_local_ts():
     # 2026-06-01 (Monday) 10:00 local → in window
     ts_mon_10 = datetime(2026, 6, 1, 10, 0, 0).timestamp()
-    r = _r(scope=RuleScope(time_windows=[
-        {"days": ["mon"], "start": "09:00", "end": "17:00"},
-    ]))
+    r = _r(
+        scope=RuleScope(
+            time_windows=[
+                {"days": ["mon"], "start": "09:00", "end": "17:00"},
+            ]
+        )
+    )
     assert rule_in_scope(r, camera_id=None, area_id=None, ts=ts_mon_10) is True
     ts_mon_19 = datetime(2026, 6, 1, 19, 0, 0).timestamp()
     assert rule_in_scope(r, camera_id=None, area_id=None, ts=ts_mon_19) is False
@@ -100,10 +104,12 @@ def test_rule_in_scope_all_axes_AND_combined():
 
 
 def test_subjects_in_alert_reads_identified_actors_first():
-    alert = {"identified_actors": [
-        {"kind": "person", "actor_id": "bob"},
-        {"kind": "dog", "actor_id": "winston"},
-    ]}
+    alert = {
+        "identified_actors": [
+            {"kind": "person", "actor_id": "bob"},
+            {"kind": "dog", "actor_id": "winston"},
+        ]
+    }
     assert subjects_in_alert(alert) == [("person", "bob"), ("dog", "winston")]
 
 
@@ -121,8 +127,11 @@ def test_subjects_in_alert_empty_when_nothing_known():
 
 def _shortcut_rule(subject, *, severity="critical", cameras=None):
     return Rule(
-        id=f"sc_{subject}", name=f"sc {subject}", mode="shortcut",
-        intent_text="", shortcut_subject=subject,
+        id=f"sc_{subject}",
+        name=f"sc {subject}",
+        mode="shortcut",
+        intent_text="",
+        shortcut_subject=subject,
         severity_static=severity,
         scope=RuleScope(cameras=cameras or []),
     )
@@ -131,8 +140,7 @@ def _shortcut_rule(subject, *, severity="critical", cameras=None):
 def test_evaluate_shortcuts_matches_actor_id():
     rules = [_shortcut_rule("bob")]
     alert = {"identified_actors": [{"kind": "person", "actor_id": "bob"}]}
-    out = evaluate_shortcuts(rules, alert=alert, camera_id=None,
-                             area_id=None, ts=None)
+    out = evaluate_shortcuts(rules, alert=alert, camera_id=None, area_id=None, ts=None)
     assert len(out) == 1
     assert out[0].rule.id == "sc_bob"
     assert out[0].matched_subject_id == "bob"
@@ -143,8 +151,7 @@ def test_evaluate_shortcuts_matches_kind_when_no_actor():
     # Pattern: alert me on ANY unknown person
     rules = [_shortcut_rule("person", severity="normal")]
     alert = {"sensor_classification": "person"}
-    out = evaluate_shortcuts(rules, alert=alert, camera_id=None,
-                             area_id=None, ts=None)
+    out = evaluate_shortcuts(rules, alert=alert, camera_id=None, area_id=None, ts=None)
     assert len(out) == 1
     assert out[0].severity == "normal"
 
@@ -152,46 +159,45 @@ def test_evaluate_shortcuts_matches_kind_when_no_actor():
 def test_evaluate_shortcuts_respects_camera_scope():
     rules = [_shortcut_rule("bob", cameras=["pool"])]
     alert = {"identified_actors": [{"kind": "person", "actor_id": "bob"}]}
-    on_pool = evaluate_shortcuts(rules, alert=alert, camera_id="pool",
-                                  area_id=None, ts=None)
-    elsewhere = evaluate_shortcuts(rules, alert=alert, camera_id="driveway",
-                                    area_id=None, ts=None)
+    on_pool = evaluate_shortcuts(rules, alert=alert, camera_id="pool", area_id=None, ts=None)
+    elsewhere = evaluate_shortcuts(rules, alert=alert, camera_id="driveway", area_id=None, ts=None)
     assert len(on_pool) == 1
     assert len(elsewhere) == 0
 
 
 def test_evaluate_shortcuts_skips_nl_rules():
-    nl = Rule(id="nl1", name="nl", mode="nl", intent_text="something",
-              shortcut_subject="bob")
-    out = evaluate_shortcuts([nl], alert={"sensor_classification": "person"},
-                              camera_id=None, area_id=None, ts=None)
+    nl = Rule(id="nl1", name="nl", mode="nl", intent_text="something", shortcut_subject="bob")
+    out = evaluate_shortcuts(
+        [nl], alert={"sensor_classification": "person"}, camera_id=None, area_id=None, ts=None
+    )
     assert out == []
 
 
 def test_evaluate_shortcuts_fires_once_per_rule_even_if_multi_subject():
     rules = [_shortcut_rule("person", severity="low")]
-    alert = {"identified_actors": [
-        {"kind": "person", "actor_id": "a"},
-        {"kind": "person", "actor_id": "b"},
-    ]}
-    out = evaluate_shortcuts(rules, alert=alert, camera_id=None,
-                             area_id=None, ts=None)
-    assert len(out) == 1   # one rule, one fire
+    alert = {
+        "identified_actors": [
+            {"kind": "person", "actor_id": "a"},
+            {"kind": "person", "actor_id": "b"},
+        ]
+    }
+    out = evaluate_shortcuts(rules, alert=alert, camera_id=None, area_id=None, ts=None)
+    assert len(out) == 1  # one rule, one fire
 
 
 # ─── NL prompt section ─────────────────────────────────────────────
 
 
 def test_nl_rules_in_scope_filters_by_scope_and_mode():
-    nl_in = Rule(id="n1", name="n1", mode="nl", intent_text="t",
-                 scope=RuleScope(cameras=["pool"]))
-    nl_out = Rule(id="n2", name="n2", mode="nl", intent_text="t",
-                  scope=RuleScope(cameras=["front"]))
-    shortcut = Rule(id="s1", name="s1", mode="shortcut", intent_text="",
-                    shortcut_subject="bob")  # excluded by mode
+    nl_in = Rule(id="n1", name="n1", mode="nl", intent_text="t", scope=RuleScope(cameras=["pool"]))
+    nl_out = Rule(
+        id="n2", name="n2", mode="nl", intent_text="t", scope=RuleScope(cameras=["front"])
+    )
+    shortcut = Rule(
+        id="s1", name="s1", mode="shortcut", intent_text="", shortcut_subject="bob"
+    )  # excluded by mode
     rules = [nl_in, nl_out, shortcut]
-    assert nl_rules_in_scope(rules, camera_id="pool", area_id=None, ts=None) \
-        == [nl_in]
+    assert nl_rules_in_scope(rules, camera_id="pool", area_id=None, ts=None) == [nl_in]
 
 
 def test_build_nl_prompt_section_empty_input_returns_empty_string():
@@ -200,10 +206,13 @@ def test_build_nl_prompt_section_empty_input_returns_empty_string():
 
 def test_build_nl_prompt_section_lists_each_rule_with_id_and_intent():
     rules = [
-        Rule(id="r1", name="Winston unsupervised", mode="nl",
-             intent_text="winston is outside without a person"),
-        Rule(id="r2", name="Delivery", mode="nl",
-             intent_text="someone left a package"),
+        Rule(
+            id="r1",
+            name="Winston unsupervised",
+            mode="nl",
+            intent_text="winston is outside without a person",
+        ),
+        Rule(id="r2", name="Delivery", mode="nl", intent_text="someone left a package"),
     ]
     prompt = build_nl_prompt_section(rules)
     assert "Named user intents" in prompt
@@ -217,8 +226,13 @@ def test_build_nl_prompt_section_lists_each_rule_with_id_and_intent():
 def test_parse_matched_rules_filters_below_threshold():
     rules = [Rule(id="r1", name="r1", mode="nl", intent_text="")]
     payload = [
-        {"rule_id": "r1", "matched": True, "confidence": 0.5,
-         "severity": "critical", "reasoning": "."},
+        {
+            "rule_id": "r1",
+            "matched": True,
+            "confidence": 0.5,
+            "severity": "critical",
+            "reasoning": ".",
+        },
     ]
     out = parse_matched_rules(rules, payload, threshold=0.6)
     assert len(out) == 1
@@ -229,8 +243,13 @@ def test_parse_matched_rules_filters_below_threshold():
 def test_parse_matched_rules_records_real_match():
     rules = [Rule(id="r1", name="r1", mode="nl", intent_text="")]
     payload = [
-        {"rule_id": "r1", "matched": True, "confidence": 0.9,
-         "severity": "critical", "reasoning": "bad scene"},
+        {
+            "rule_id": "r1",
+            "matched": True,
+            "confidence": 0.9,
+            "severity": "critical",
+            "reasoning": "bad scene",
+        },
     ]
     out = parse_matched_rules(rules, payload)
     assert len(out) == 1
@@ -262,10 +281,8 @@ def store():
 
 
 def test_runtime_returns_active_rules_only(store):
-    active = store.create(Rule(id="", name="active", mode="nl",
-                                intent_text="x"))
-    disabled = store.create(Rule(id="", name="disabled", mode="nl",
-                                  intent_text="y", enabled=False))
+    active = store.create(Rule(id="", name="active", mode="nl", intent_text="x"))
+    disabled = store.create(Rule(id="", name="disabled", mode="nl", intent_text="y", enabled=False))
     rt = RulesRuntime(store)
     ids = {r.id for r in rt.active_rules()}
     assert active.id in ids
@@ -281,12 +298,22 @@ def test_runtime_cache_reloads_after_dirty(store):
 
 
 def test_runtime_shortcuts_for_threads_through(store):
-    store.create(Rule(id="", name="bob", mode="shortcut", intent_text="",
-                      shortcut_subject="bob", severity_static="critical"))
+    store.create(
+        Rule(
+            id="",
+            name="bob",
+            mode="shortcut",
+            intent_text="",
+            shortcut_subject="bob",
+            severity_static="critical",
+        )
+    )
     rt = RulesRuntime(store)
     out = rt.shortcuts_for(
         alert={"identified_actors": [{"kind": "person", "actor_id": "bob"}]},
-        camera_id=None, area_id=None, ts=None,
+        camera_id=None,
+        area_id=None,
+        ts=None,
     )
     assert len(out) == 1
     assert out[0].severity == "critical"

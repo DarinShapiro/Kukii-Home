@@ -125,7 +125,9 @@ def _track_card(t: dict) -> str:
             "<button type='submit'>Label</button></form>"
         )
     # Thumbnail links to the track-detail page (animated clip + candidates).
-    detail_url = f"review-track?e={quote(str(t.get('event_id', '')))}&t={quote(str(t.get('track_id', '')))}"
+    detail_url = (
+        f"review-track?e={quote(str(t.get('event_id', '')))}&t={quote(str(t.get('track_id', '')))}"
+    )
     return (
         "<div class='card'>"
         f"<a href='{detail_url}' title='Open track — animated, with candidates'>"
@@ -188,21 +190,28 @@ def render_review_html(
         unresolved = [t for t in tracks if t.get("status") != "resolved"]
         resolved = [t for t in tracks if t.get("status") == "resolved"]
         subj_html = (
-            "<div class='chips'>" + "".join(_subject_chip(s) for s in subjects) + "</div>"
+            "<div class='chips'>"
+            + "".join(_subject_chip(s) for s in subjects)
+            + "</div>"
             + _merge_form(subjects)
-            if subjects else "<div class='empty'>No one enrolled yet.</div>"
+            if subjects
+            else "<div class='empty'>No one enrolled yet.</div>"
         )
         body = (
             "<h2>To review · unnamed tracks</h2>"
             + (
                 "<div class='grid'>" + "".join(_track_card(t) for t in unresolved) + "</div>"
-                if unresolved else "<div class='empty'>Nothing to review — all caught up.</div>"
+                if unresolved
+                else "<div class='empty'>Nothing to review — all caught up.</div>"
             )
-            + "<h2>People &amp; Pets</h2>" + subj_html
+            + "<h2>People &amp; Pets</h2>"
+            + subj_html
             + (
                 "<h2>Resolved</h2><div class='grid'>"
-                + "".join(_track_card(t) for t in resolved) + "</div>"
-                if resolved else ""
+                + "".join(_track_card(t) for t in resolved)
+                + "</div>"
+                if resolved
+                else ""
             )
         )
 
@@ -210,11 +219,7 @@ def render_review_html(
     # global nav + sticky header come for free. Page-specific styles travel
     # with the body in an inline <style> block.
     return (
-        f"<style>{_STYLE}</style>"
-        "<div class='wrap'>"
-        "<h1>Identity Review</h1>"
-        f"{flash_html}{body}"
-        "</div>"
+        f"<style>{_STYLE}</style><div class='wrap'><h1>Identity Review</h1>{flash_html}{body}</div>"
     )
 
 
@@ -243,8 +248,10 @@ def render_track_detail_html(detail: dict, *, flash: str | None = None) -> str:
     small-gallery candidate ranking with one-tap Confirm — the fix for "one
     crop isn't enough to tell who this is.\""""
     e, t = _e(detail.get("event_id", "")), _e(detail.get("track_id", ""))
-    clip = f"review-track-clip?e={quote(str(detail.get('event_id', '')))}" \
-           f"&t={quote(str(detail.get('track_id', '')))}"
+    clip = (
+        f"review-track-clip?e={quote(str(detail.get('event_id', '')))}"
+        f"&t={quote(str(detail.get('track_id', '')))}"
+    )
     glyph = _KIND_GLYPH.get(detail.get("kind", ""), "•")
     cam = _e(detail.get("camera_id", "?"))
     nframes = _e(detail.get("n_frames", 0))
@@ -270,7 +277,8 @@ def render_track_detail_html(detail: dict, *, flash: str | None = None) -> str:
         margin = detail.get("margin")
         margin_html = (
             f"<div class='score'>top-2 margin {margin:.2f}</div>"
-            if isinstance(margin, (int, float)) else ""
+            if isinstance(margin, (int, float))
+            else ""
         )
         cand_html = (
             "<h2>We think this is…</h2>"

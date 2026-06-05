@@ -38,7 +38,7 @@ class IdentitySubject:
     handler builds this from the /identity/subjects payload."""
 
     subject_id: str
-    kind: str                       # 'person' | 'pet' | 'vehicle' (when added)
+    kind: str  # 'person' | 'pet' | 'vehicle' (when added)
     display_name: str
     species: str | None = None
     owner_id: str | None = None
@@ -63,17 +63,18 @@ def _kind_icon(kind: str) -> str:
 
 
 def _modality_chips(modalities: list[str]) -> str:
-    return "".join(
-        f"<span class='chip cap-src ok'>{_e(m)}</span> "
-        for m in modalities
-    ) or "<span class='muted'>no enrolled templates</span>"
+    return (
+        "".join(f"<span class='chip cap-src ok'>{_e(m)}</span> " for m in modalities)
+        or "<span class='muted'>no enrolled templates</span>"
+    )
 
 
 # ─── List page ─────────────────────────────────────────────────────
 
 
 def render_identities_list(
-    subjects: list[IdentitySubject], *,
+    subjects: list[IdentitySubject],
+    *,
     unresolved_count: int = 0,
     review_url: str = "review",
     tab: str = "enrolled",
@@ -93,17 +94,20 @@ def render_identities_list(
 
     if not subjects:
         review_cta = (
-            f"<div style='margin-top:14px'>"
-            f"<a class='btn primary' href='{_e(review_url)}'>"
-            f"Review {unresolved_count} unresolved track"
-            f"{'s' if unresolved_count != 1 else ''} →</a></div>"
-        ) if unresolved_count > 0 else ""
+            (
+                f"<div style='margin-top:14px'>"
+                f"<a class='btn primary' href='{_e(review_url)}'>"
+                f"Review {unresolved_count} unresolved track"
+                f"{'s' if unresolved_count != 1 else ''} →</a></div>"
+            )
+            if unresolved_count > 0
+            else ""
+        )
         body = (
             "<div class='empty'>No identities enrolled yet. Label an "
             "unresolved track on the Review tab — once you give a track "
             "a name, the subject lands here with its templates and "
-            "lifecycle controls.</div>"
-            + review_cta
+            "lifecycle controls.</div>" + review_cta
         )
     else:
         # Sort: people first, then pets, then vehicles; within each by name.
@@ -112,17 +116,14 @@ def render_identities_list(
             subjects,
             key=lambda s: (order.get(s.kind, 99), s.display_name.lower()),
         )
-        body = "<div class='cameras-grid'>" + "".join(
-            _subject_tile(s) for s in ordered
-        ) + "</div>"
+        body = "<div class='cameras-grid'>" + "".join(_subject_tile(s) for s in ordered) + "</div>"
 
     return (
         "<h1>Identities</h1>"
         "<div class='sub'>People, pets, and vehicles — Review brings "
         "unlabeled tracks into focus; Enrolled is your lifecycle "
         "surface for everyone the system already recognizes.</div>"
-        f"<div class='memory-cut'>{review_tab}{enrolled_tab}</div>"
-        + body
+        f"<div class='memory-cut'>{review_tab}{enrolled_tab}</div>" + body
     )
 
 
@@ -130,7 +131,8 @@ def _subject_tile(s: IdentitySubject) -> str:
     sub_label = s.species or s.kind
     appearances = (
         f"{s.appearances} appearance{'s' if s.appearances != 1 else ''}"
-        if s.appearances else "<span class='muted'>not seen yet</span>"
+        if s.appearances
+        else "<span class='muted'>not seen yet</span>"
     )
     return (
         f"<a class='camera-tile' href='identities/{_e(s.subject_id)}'>"
@@ -138,9 +140,7 @@ def _subject_tile(s: IdentitySubject) -> str:
         f"<b>{_kind_icon(s.kind)} {_e(s.display_name)}</b>"
         f"<span class='chip cap-src muted'>{_e(sub_label)}</span>"
         "</div>"
-        "<div class='cam-meta muted'>"
-        + " ".join(_e(m) for m in s.modalities) +
-        "</div>"
+        "<div class='cam-meta muted'>" + " ".join(_e(m) for m in s.modalities) + "</div>"
         f"<div class='cam-meta'>{appearances}</div>"
         "</a>"
     )
@@ -205,12 +205,7 @@ def render_identity_detail(vm: IdentityDetailViewModel) -> str:
             "<div class='empty'>No rules or policies reference this "
             "identity yet. Open the drawer from /memory to author one.</div>"
         )
-    linked = (
-        "<section class='card'>"
-        "<h2>Linked guidance</h2>"
-        f"{linked_html}"
-        "</section>"
-    )
+    linked = f"<section class='card'><h2>Linked guidance</h2>{linked_html}</section>"
 
     # Operations
     ops = (
@@ -244,7 +239,9 @@ def render_identity_detail(vm: IdentityDetailViewModel) -> str:
 
 
 def filter_guidance_for_subject(
-    entries: list[GuidanceEntry], *, subject: IdentitySubject,
+    entries: list[GuidanceEntry],
+    *,
+    subject: IdentitySubject,
 ) -> list[GuidanceEntry]:
     """Return guidance entries that reference this subject by id or name.
     Case-insensitive — guidance entries may carry either form."""
@@ -280,15 +277,17 @@ def build_identity_subjects(api_payload: dict | list | None) -> list[IdentitySub
     for r in records:
         if not isinstance(r, dict):
             continue
-        out.append(IdentitySubject(
-            subject_id=str(r.get("subject_id") or ""),
-            kind=str(r.get("kind") or "person"),
-            display_name=str(r.get("display_name") or r.get("subject_id") or ""),
-            species=r.get("species"),
-            owner_id=r.get("owner_id"),
-            modalities=list(r.get("modalities") or []),
-            appearances=int(r.get("appearances") or 0),
-        ))
+        out.append(
+            IdentitySubject(
+                subject_id=str(r.get("subject_id") or ""),
+                kind=str(r.get("kind") or "person"),
+                display_name=str(r.get("display_name") or r.get("subject_id") or ""),
+                species=r.get("species"),
+                owner_id=r.get("owner_id"),
+                modalities=list(r.get("modalities") or []),
+                appearances=int(r.get("appearances") or 0),
+            )
+        )
     return out
 
 

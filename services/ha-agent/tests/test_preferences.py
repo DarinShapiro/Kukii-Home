@@ -85,10 +85,9 @@ def test_persist_to_disk_survives_reopen(tmp_path):
 def test_singleton_constraint_blocks_second_row(store):
     # The CHECK (id = 1) constraint means only id=1 ever exists.
     import sqlite3
+
     with pytest.raises(sqlite3.IntegrityError):
-        store._conn.execute(
-            "INSERT INTO preferences (id, updated_at) VALUES (2, 0)"
-        )
+        store._conn.execute("INSERT INTO preferences (id, updated_at) VALUES (2, 0)")
 
 
 # ─── intent page section rendering ─────────────────────────────
@@ -147,7 +146,8 @@ def test_preferences_section_escapes_what_i_care_about():
 
 def test_render_intent_page_includes_preferences_section_above_rules():
     html = render_intent_page(
-        rules=[], now_ts=1_700_000_000.0,
+        rules=[],
+        now_ts=1_700_000_000.0,
         preferences=Preferences(vigilance="high"),
     )
     # Preferences card heading before Rules card heading
@@ -160,6 +160,8 @@ def test_render_intent_page_includes_preferences_section_above_rules():
 
 def test_render_intent_page_with_no_preferences_shows_placeholder_message():
     html = render_intent_page(
-        rules=[], now_ts=1_700_000_000.0, preferences=None,
+        rules=[],
+        now_ts=1_700_000_000.0,
+        preferences=None,
     )
     assert "Preferences store not wired" in html

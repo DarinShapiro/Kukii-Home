@@ -31,10 +31,14 @@ def test_slug_for_basic_normalization():
 
 
 def test_create_assigns_slug_and_persists_cameras(store):
-    a = store.create(Area(
-        id="", name="Pool", attention_mode="attention",
-        cameras=["pool_main", "pool_pump"],
-    ))
+    a = store.create(
+        Area(
+            id="",
+            name="Pool",
+            attention_mode="attention",
+            cameras=["pool_main", "pool_pump"],
+        )
+    )
     assert a.id == "pool"
     fetched = store.get(a.id)
     assert fetched is not None
@@ -50,17 +54,14 @@ def test_create_collision_suffixes_id(store):
 
 
 def test_update_replaces_camera_set(store):
-    a = store.create(Area(id="", name="Pool",
-                           cameras=["pool_main", "pool_pump"]))
+    a = store.create(Area(id="", name="Pool", cameras=["pool_main", "pool_pump"]))
     store.update(a.id, cameras=["new_only"])
     out = store.get(a.id)
     assert out.cameras == ["new_only"]
 
 
 def test_update_preserves_unrelated_fields(store):
-    a = store.create(Area(id="", name="Pool",
-                           attention_mode="attention",
-                           description="east end"))
+    a = store.create(Area(id="", name="Pool", attention_mode="attention", description="east end"))
     store.update(a.id, name="Pool deck")
     out = store.get(a.id)
     assert out.name == "Pool deck"
@@ -92,8 +93,7 @@ def test_area_for_camera_filters_retired(store):
 def test_persist_to_disk_survives_reopen(tmp_path):
     db = tmp_path / "areas.db"
     s1 = AreaStore(path=str(db))
-    s1.create(Area(id="", name="Pool", attention_mode="attention",
-                    cameras=["pool_main"]))
+    s1.create(Area(id="", name="Pool", attention_mode="attention", cameras=["pool_main"]))
     s1.close()
     s2 = AreaStore(path=str(db))
     out = s2.all_areas()
@@ -114,10 +114,10 @@ def test_areas_list_empty_state():
 
 def test_areas_list_renders_each_area_with_mode_chip_and_counts():
     areas = [
-        Area(id="pool", name="Pool", attention_mode="attention",
-             cameras=["pool_main"], role="shared"),
-        Area(id="back", name="Backyard", attention_mode="normal",
-             cameras=["yard", "shed"]),
+        Area(
+            id="pool", name="Pool", attention_mode="attention", cameras=["pool_main"], role="shared"
+        ),
+        Area(id="back", name="Backyard", attention_mode="normal", cameras=["yard", "shed"]),
     ]
     html = render_areas_list(areas)
     assert "Pool" in html and "Backyard" in html
@@ -160,13 +160,19 @@ def test_new_form_includes_all_modes_and_roles():
 
 def test_edit_form_preserves_attention_mode_and_cameras():
     area = Area(
-        id="pool", name="Pool", attention_mode="attention",
-        role="shared", cameras=["pool_main"],
+        id="pool",
+        name="Pool",
+        attention_mode="attention",
+        role="shared",
+        cameras=["pool_main"],
     )
-    html = render_area_form(area, available_cameras=[
-        ("pool_main", "Pool Camera"),
-        ("front", "Front Camera"),
-    ])
+    html = render_area_form(
+        area,
+        available_cameras=[
+            ("pool_main", "Pool Camera"),
+            ("front", "Front Camera"),
+        ],
+    )
     assert "Edit area" in html
     # Selected mode is checked
     assert "value='attention' checked" in html
@@ -204,12 +210,16 @@ def test_parse_area_form_with_attention_and_cameras():
                 return default
             return v if isinstance(v, list) else [v]
 
-    out = parse_area_form(M({
-        "name": "Pool",
-        "attention_mode": "attention",
-        "role": "shared",
-        "cameras": ["pool_main", "pool_pump"],
-    }))
+    out = parse_area_form(
+        M(
+            {
+                "name": "Pool",
+                "attention_mode": "attention",
+                "role": "shared",
+                "cameras": ["pool_main", "pool_pump"],
+            }
+        )
+    )
     assert out["attention_mode"] == "attention"
     assert out["role"] == "shared"
     assert out["cameras"] == ["pool_main", "pool_pump"]

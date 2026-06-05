@@ -45,10 +45,10 @@ class RecentTurn:
     placement — the full proposal_json from the original system turn lives
     in ProvenanceStore but we don't replay it; we summarize."""
 
-    role: str                          # 'user' | 'system'
-    text: str                          # utterance text (system role = reasoning)
-    committed_guidance_id: str = ""    # set on system turns that resulted in a commit
-    storage_class: str = ""            # set when committed_guidance_id is set
+    role: str  # 'user' | 'system'
+    text: str  # utterance text (system role = reasoning)
+    committed_guidance_id: str = ""  # set on system turns that resulted in a commit
+    storage_class: str = ""  # set when committed_guidance_id is set
 
 
 @dataclass
@@ -91,7 +91,10 @@ class DispatcherProvider(Protocol):
     """Plug point. Swap the implementation without changing route code."""
 
     def propose(
-        self, utterance: str, *, ctx: DispatcherContext,
+        self,
+        utterance: str,
+        *,
+        ctx: DispatcherContext,
     ) -> PlacementProposal: ...
 
 
@@ -104,21 +107,18 @@ _RULE_PATTERNS = (
 )
 
 _DISMISSAL_PATTERNS = (
-    re.compile(r"\b(don'?t|ignore|suppress|stop|hide)\b.+(alert|notif|fire)",
-                re.IGNORECASE),
+    re.compile(r"\b(don'?t|ignore|suppress|stop|hide)\b.+(alert|notif|fire)", re.IGNORECASE),
     re.compile(r"\b(boring|noise|false positive)\b", re.IGNORECASE),
 )
 
 _PREFERENCE_PATTERNS = (
     re.compile(r"\bi care about\b", re.IGNORECASE),
-    re.compile(r"\b(is our|are our) (dog|cat|pet|family|kid|child)\b",
-                re.IGNORECASE),
+    re.compile(r"\b(is our|are our) (dog|cat|pet|family|kid|child)\b", re.IGNORECASE),
     re.compile(r"\b(vigilance|sensitivity)\b", re.IGNORECASE),
 )
 
 _TEMPORAL_PATTERNS = (
-    re.compile(r"\b(tonight|today|tomorrow|this (afternoon|evening|week))\b",
-                re.IGNORECASE),
+    re.compile(r"\b(tonight|today|tomorrow|this (afternoon|evening|week))\b", re.IGNORECASE),
     re.compile(r"\bfor the next\b", re.IGNORECASE),
 )
 
@@ -140,7 +140,10 @@ class HeuristicDispatcherProvider:
     low confidence + clarifying_questions when the placement is uncertain."""
 
     def propose(
-        self, utterance: str, *, ctx: DispatcherContext,
+        self,
+        utterance: str,
+        *,
+        ctx: DispatcherContext,
     ) -> PlacementProposal:
         # Extract entities first — used in every storage class.
         actor = _first_match(utterance, ctx.known_actor_names)
@@ -218,8 +221,7 @@ class HeuristicDispatcherProvider:
                 severity="normal",
                 intent_text=utterance.strip(),
                 reasoning=(
-                    "Explicit 'notify / alert / tell me' + persistent → "
-                    "Rule. Scope from entities."
+                    "Explicit 'notify / alert / tell me' + persistent → Rule. Scope from entities."
                 ),
                 confidence=0.7,
             )
@@ -257,7 +259,9 @@ def _short_name(utterance: str, *, prefix: str = "") -> str:
 
 
 def context_from_boot(
-    boot: Any, *, session_id: str = "",
+    boot: Any,
+    *,
+    session_id: str = "",
     history_window: int = 8,
 ) -> DispatcherContext:
     """Pluck names from boot state for the dispatcher. None-safe — empty
@@ -273,10 +277,7 @@ def context_from_boot(
     camera_names: list[str] = []
 
     # Areas — friendly names.
-    areas = (
-        boot.area_store.all_areas() if getattr(boot, "area_store", None)
-        else []
-    )
+    areas = boot.area_store.all_areas() if getattr(boot, "area_store", None) else []
     area_names = [a.name for a in areas if a.name]
 
     # Cameras — friendly names from HA loops + registry.
@@ -305,9 +306,12 @@ def context_from_boot(
             all_turns = prov.turns_for_session(session_id)
             for t in all_turns[-history_window:]:
                 if t.role == "user":
-                    recent_turns.append(RecentTurn(
-                        role="user", text=t.utterance,
-                    ))
+                    recent_turns.append(
+                        RecentTurn(
+                            role="user",
+                            text=t.utterance,
+                        )
+                    )
                 elif t.committed_to:
                     # committed_to is the guidance_id; classify by id
                     # shape so the history line is informative for the
@@ -315,16 +319,22 @@ def context_from_boot(
                     # which never matched because rule ids are bare
                     # slugs (winston_alone_front, not rule_xxx) and
                     # policy ids are pol_xxxxxxxx (not policy_xxx).
-                    recent_turns.append(RecentTurn(
-                        role="system", text=t.utterance,
-                        committed_guidance_id=t.committed_to,
-                        storage_class=_classify_guidance_id(t.committed_to),
-                    ))
+                    recent_turns.append(
+                        RecentTurn(
+                            role="system",
+                            text=t.utterance,
+                            committed_guidance_id=t.committed_to,
+                            storage_class=_classify_guidance_id(t.committed_to),
+                        )
+                    )
                 else:
                     # System turn carrying a proposal but never confirmed.
-                    recent_turns.append(RecentTurn(
-                        role="system", text=t.utterance,
-                    ))
+                    recent_turns.append(
+                        RecentTurn(
+                            role="system",
+                            text=t.utterance,
+                        )
+                    )
 
             # Find the most recent committed system turn → resolve
             # the full entry summary.
@@ -332,7 +342,8 @@ def context_from_boot(
                 if t.role != "system" or not t.committed_to:
                     continue
                 last_committed = _resolve_committed_summary(
-                    boot, t.committed_to,
+                    boot,
+                    t.committed_to,
                 )
                 break
         except Exception as e:
@@ -371,7 +382,8 @@ def _classify_guidance_id(guidance_id: str) -> str:
 
 
 def _resolve_committed_summary(
-    boot: Any, guidance_id: str,
+    boot: Any,
+    guidance_id: str,
 ) -> CommittedEntrySummary | None:
     """Best-effort resolve guidance_id → CommittedEntrySummary by
     poking the per-class stores. Returns None on any failure so the
@@ -428,14 +440,19 @@ def _resolve_committed_summary(
                 return CommittedEntrySummary(
                     guidance_id=guidance_id,
                     storage_class=(
-                        "situational_context" if is_sc
-                        else ("transient_intent" if pol.kind == "transient_intent"
-                              else "dismissal_policy")
+                        "situational_context"
+                        if is_sc
+                        else (
+                            "transient_intent"
+                            if pol.kind == "transient_intent"
+                            else "dismissal_policy"
+                        )
                     ),
                     name=pol.name,
                     intent_text=desc.get("intent_text") or "",
-                    scope={k: v for k, v in desc.items()
-                           if isinstance(v, str) and k != "intent_text"},
+                    scope={
+                        k: v for k, v in desc.items() if isinstance(v, str) and k != "intent_text"
+                    },
                 )
     except Exception:
         return None
@@ -553,7 +570,11 @@ class LLMClient(Protocol):
     Ollama / etc.); tests inject a deterministic fake."""
 
     async def complete(
-        self, *, system: str, user: str, max_tokens: int = 800,
+        self,
+        *,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
     ) -> str: ...
 
 
@@ -564,16 +585,18 @@ class _PromptBundle:
 
 
 def _build_user_prompt(
-    utterance: str, *, ctx: DispatcherContext,
+    utterance: str,
+    *,
+    ctx: DispatcherContext,
     retry_note: str = "",
 ) -> str:
     """Compose the user-side prompt. Includes:
-      - system state (known actor/area/camera names + page/alert context)
-      - recent conversation history (last N turns from this session) +
-        the most recent committed guidance entry, so the LLM can
-        recognize refinement-of-prior-placement utterances (Part X §38)
-      - the user's current utterance
-      - optional retry note when the schema retry path is active
+    - system state (known actor/area/camera names + page/alert context)
+    - recent conversation history (last N turns from this session) +
+      the most recent committed guidance entry, so the LLM can
+      recognize refinement-of-prior-placement utterances (Part X §38)
+    - the user's current utterance
+    - optional retry note when the schema retry path is active
     """
     facts = {
         "known_actor_names": ctx.known_actor_names,
@@ -594,13 +617,16 @@ def _build_user_prompt(
         if ctx.last_committed:
             parts.append(
                 "Most recently committed guidance entry:\n"
-                + json.dumps({
-                    "guidance_id": ctx.last_committed.guidance_id,
-                    "storage_class": ctx.last_committed.storage_class,
-                    "name": ctx.last_committed.name,
-                    "intent_text": ctx.last_committed.intent_text,
-                    "scope": ctx.last_committed.scope,
-                }, indent=2)
+                + json.dumps(
+                    {
+                        "guidance_id": ctx.last_committed.guidance_id,
+                        "storage_class": ctx.last_committed.storage_class,
+                        "name": ctx.last_committed.name,
+                        "intent_text": ctx.last_committed.intent_text,
+                        "scope": ctx.last_committed.scope,
+                    },
+                    indent=2,
+                )
             )
         if ctx.recent_turns:
             history = []
@@ -670,7 +696,8 @@ class LLMDispatcherProvider:
     """
 
     def __init__(
-        self, client: LLMClient,
+        self,
+        client: LLMClient,
         tools: list[Any] | None = None,
         max_tool_rounds: int = 5,
     ) -> None:
@@ -679,7 +706,10 @@ class LLMDispatcherProvider:
         self.max_tool_rounds = max_tool_rounds
 
     async def propose_async(
-        self, utterance: str, *, ctx: DispatcherContext,
+        self,
+        utterance: str,
+        *,
+        ctx: DispatcherContext,
     ) -> PlacementProposal:
         from kukiihome_ha_agent.dispatcher_tools import (
             resolve_tool_call,
@@ -706,7 +736,8 @@ class LLMDispatcherProvider:
             except Exception as e:
                 logger.warning(
                     "dispatcher.llm_call_failed",
-                    rounds_remaining=rounds_remaining, error=str(e),
+                    rounds_remaining=rounds_remaining,
+                    error=str(e),
                 )
                 raise
 
@@ -715,11 +746,13 @@ class LLMDispatcherProvider:
                 # Append the assistant message verbatim (including
                 # tool_calls) so the model sees its own request when
                 # we feed the result back.
-                messages.append({
-                    "role": "assistant",
-                    "content": message.get("content") or "",
-                    "tool_calls": tool_calls,
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": message.get("content") or "",
+                        "tool_calls": tool_calls,
+                    }
+                )
                 for call in tool_calls:
                     fn = call.get("function") or {}
                     name = fn.get("name", "")
@@ -733,14 +766,17 @@ class LLMDispatcherProvider:
                         except Exception as e:
                             logger.warning(
                                 "dispatcher.tool.raised",
-                                tool=name, error=str(e),
+                                tool=name,
+                                error=str(e),
                             )
                             result = {"error": f"tool raised: {e}"}
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": call.get("id", ""),
-                        "content": json.dumps(result),
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.get("id", ""),
+                            "content": json.dumps(result),
+                        }
+                    )
                 continue
 
             # No tool_calls → the model produced a final content blob.
@@ -754,13 +790,15 @@ class LLMDispatcherProvider:
                     ) from e
                 schema_retry_used = True
                 messages.append({"role": "assistant", "content": content})
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        f"That response wasn't valid JSON ({e}). "
-                        "Return ONLY a JSON object matching the schema."
-                    ),
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            f"That response wasn't valid JSON ({e}). "
+                            "Return ONLY a JSON object matching the schema."
+                        ),
+                    }
+                )
                 continue
 
             try:
@@ -770,13 +808,15 @@ class LLMDispatcherProvider:
                     raise
                 schema_retry_used = True
                 messages.append({"role": "assistant", "content": content})
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        f"That response failed schema validation: {e}. "
-                        "Re-emit the JSON with the field corrected."
-                    ),
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            f"That response failed schema validation: {e}. "
+                            "Re-emit the JSON with the field corrected."
+                        ),
+                    }
+                )
                 continue
 
         raise RuntimeError(
@@ -784,7 +824,8 @@ class LLMDispatcherProvider:
         )
 
     async def _call_chat(
-        self, messages: list[dict[str, Any]],
+        self,
+        messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None,
     ) -> dict[str, Any]:
         """Call the client's chat method. Supports both the new
@@ -794,7 +835,8 @@ class LLMDispatcherProvider:
         silently ignored."""
         if hasattr(self.client, "complete_chat"):
             return await self.client.complete_chat(
-                messages=messages, tools=tools,
+                messages=messages,
+                tools=tools,
             )
         # Legacy path — concat assistant/tool messages into a single
         # user-style prompt and use the simpler complete() method.
@@ -804,21 +846,24 @@ class LLMDispatcherProvider:
             if m.get("role") == "system":
                 system = m.get("content", "") or system
             else:
-                user_parts.append(
-                    f"[{m.get('role')}] {m.get('content', '')}"
-                )
+                user_parts.append(f"[{m.get('role')}] {m.get('content', '')}")
         raw = await self.client.complete(
-            system=system, user="\n".join(user_parts),
+            system=system,
+            user="\n".join(user_parts),
         )
         return {"content": raw, "tool_calls": []}
 
     def propose(
-        self, utterance: str, *, ctx: DispatcherContext,
+        self,
+        utterance: str,
+        *,
+        ctx: DispatcherContext,
     ) -> PlacementProposal:
         """Sync wrapper for callers that aren't async. Runs the LLM call
         in a fresh event loop — only safe outside an active loop. The
         drawer's POST handler awaits ``propose_async`` directly."""
         import asyncio
+
         return asyncio.run(self.propose_async(utterance, ctx=ctx))
 
 
@@ -833,7 +878,9 @@ class CompositeDispatcherProvider:
     confidence + the reasoning hint."""
 
     def __init__(
-        self, *, llm: LLMDispatcherProvider | None,
+        self,
+        *,
+        llm: LLMDispatcherProvider | None,
         heuristic: HeuristicDispatcherProvider | None = None,
         health: Any | None = None,
     ) -> None:
@@ -845,7 +892,10 @@ class CompositeDispatcherProvider:
         self.health = health
 
     async def propose_async(
-        self, utterance: str, *, ctx: DispatcherContext,
+        self,
+        utterance: str,
+        *,
+        ctx: DispatcherContext,
     ) -> PlacementProposal:
         if self.llm is not None:
             try:
@@ -863,13 +913,15 @@ class CompositeDispatcherProvider:
         proposal = self.heuristic.propose(utterance, ctx=ctx)
         # Tag the fallback in reasoning so the audit row makes it visible.
         if self.llm is not None:
-            proposal.reasoning = (
-                f"(LLM unavailable; heuristic placement.) {proposal.reasoning}"
-            )
+            proposal.reasoning = f"(LLM unavailable; heuristic placement.) {proposal.reasoning}"
         return proposal
 
     def propose(
-        self, utterance: str, *, ctx: DispatcherContext,
+        self,
+        utterance: str,
+        *,
+        ctx: DispatcherContext,
     ) -> PlacementProposal:
         import asyncio
+
         return asyncio.run(self.propose_async(utterance, ctx=ctx))

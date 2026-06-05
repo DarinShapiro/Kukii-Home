@@ -59,8 +59,8 @@ class TranscriptTurn:
     turn_index: int
     role: TurnRole
     utterance: str
-    proposal_json: str = ""               # JSON-serialized PlacementProposal when role='system'
-    committed_to: str = ""                # guidance_id when this turn produced a commit
+    proposal_json: str = ""  # JSON-serialized PlacementProposal when role='system'
+    committed_to: str = ""  # guidance_id when this turn produced a commit
     ts: float = 0.0
 
 
@@ -68,9 +68,9 @@ class TranscriptTurn:
 class Provenance:
     guidance_id: str
     origin: Origin
-    transcript_id: str = ""               # originating turn (system role with proposal_json)
-    user_utterance: str = ""              # denormalized for fast audit reads
-    placement_reasoning: str = ""         # the LLM's one-sentence justification
+    transcript_id: str = ""  # originating turn (system role with proposal_json)
+    user_utterance: str = ""  # denormalized for fast audit reads
+    placement_reasoning: str = ""  # the LLM's one-sentence justification
     user_confirmed_at: float = 0.0
     refinement_transcript_ids: list[str] = field(default_factory=list)
 
@@ -138,7 +138,10 @@ class ProvenanceStore:
     # ── Session management ──────────────────────────────────────────
 
     def active_session_for(
-        self, user_id: str, *, now_ts: float | None = None,
+        self,
+        user_id: str,
+        *,
+        now_ts: float | None = None,
     ) -> Session | None:
         """Return the user's most recent unclosed session if it's still
         within the idle window; otherwise None (caller should ``open_session``)."""
@@ -164,14 +167,20 @@ class ProvenanceStore:
             self._conn.commit()
             return None
         return Session(
-            id=row["id"], user_id=row["user_id"], opened_at=row["opened_at"],
-            closed_at=row["closed_at"], page_context=row["page_context"],
+            id=row["id"],
+            user_id=row["user_id"],
+            opened_at=row["opened_at"],
+            closed_at=row["closed_at"],
+            page_context=row["page_context"],
             alert_context=row["alert_context"],
         )
 
     def open_session(
-        self, user_id: str, *,
-        page_context: str = "", alert_context: str = "",
+        self,
+        user_id: str,
+        *,
+        page_context: str = "",
+        alert_context: str = "",
         now_ts: float | None = None,
     ) -> Session:
         sid = f"sess_{uuid.uuid4().hex[:12]}"
@@ -184,8 +193,11 @@ class ProvenanceStore:
         self._conn.commit()
         logger.info("provenance.session.opened", session_id=sid, user_id=user_id)
         return Session(
-            id=sid, user_id=user_id, opened_at=opened,
-            page_context=page_context, alert_context=alert_context,
+            id=sid,
+            user_id=user_id,
+            opened_at=opened,
+            page_context=page_context,
+            alert_context=alert_context,
         )
 
     def close_session(self, session_id: str, *, now_ts: float | None = None) -> None:
@@ -196,8 +208,11 @@ class ProvenanceStore:
         self._conn.commit()
 
     def get_or_open_session(
-        self, user_id: str, *,
-        page_context: str = "", alert_context: str = "",
+        self,
+        user_id: str,
+        *,
+        page_context: str = "",
+        alert_context: str = "",
         now_ts: float | None = None,
     ) -> Session:
         """The convenience the drawer route handler wants — one call returns
@@ -208,16 +223,22 @@ class ProvenanceStore:
         if existing:
             return existing
         return self.open_session(
-            user_id, page_context=page_context, alert_context=alert_context,
+            user_id,
+            page_context=page_context,
+            alert_context=alert_context,
             now_ts=now_ts,
         )
 
     # ── Transcript turns ──────────────────────────────────────────
 
     def append_turn(
-        self, session_id: str, *,
-        role: TurnRole, utterance: str,
-        proposal_json: str = "", committed_to: str = "",
+        self,
+        session_id: str,
+        *,
+        role: TurnRole,
+        utterance: str,
+        proposal_json: str = "",
+        committed_to: str = "",
         now_ts: float | None = None,
     ) -> TranscriptTurn:
         ts = now_ts or time.time()
@@ -233,43 +254,55 @@ class ProvenanceStore:
             "INSERT INTO transcripts (id, session_id, turn_index, role, "
             "utterance, proposal_json, committed_to, ts) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (tid, session_id, next_idx, role, utterance,
-             proposal_json, committed_to, ts),
+            (tid, session_id, next_idx, role, utterance, proposal_json, committed_to, ts),
         )
         self._conn.commit()
         return TranscriptTurn(
-            id=tid, session_id=session_id, turn_index=next_idx,
-            role=role, utterance=utterance, proposal_json=proposal_json,
-            committed_to=committed_to, ts=ts,
+            id=tid,
+            session_id=session_id,
+            turn_index=next_idx,
+            role=role,
+            utterance=utterance,
+            proposal_json=proposal_json,
+            committed_to=committed_to,
+            ts=ts,
         )
 
     def turns_for_session(self, session_id: str) -> list[TranscriptTurn]:
         rows = self._conn.execute(
-            "SELECT * FROM transcripts WHERE session_id = ? "
-            "ORDER BY turn_index ASC",
+            "SELECT * FROM transcripts WHERE session_id = ? ORDER BY turn_index ASC",
             (session_id,),
         ).fetchall()
         return [
             TranscriptTurn(
-                id=r["id"], session_id=r["session_id"],
-                turn_index=r["turn_index"], role=r["role"],
-                utterance=r["utterance"], proposal_json=r["proposal_json"],
-                committed_to=r["committed_to"], ts=r["ts"],
+                id=r["id"],
+                session_id=r["session_id"],
+                turn_index=r["turn_index"],
+                role=r["role"],
+                utterance=r["utterance"],
+                proposal_json=r["proposal_json"],
+                committed_to=r["committed_to"],
+                ts=r["ts"],
             )
             for r in rows
         ]
 
     def get_turn(self, turn_id: str) -> TranscriptTurn | None:
         r = self._conn.execute(
-            "SELECT * FROM transcripts WHERE id = ?", (turn_id,),
+            "SELECT * FROM transcripts WHERE id = ?",
+            (turn_id,),
         ).fetchone()
         if not r:
             return None
         return TranscriptTurn(
-            id=r["id"], session_id=r["session_id"],
-            turn_index=r["turn_index"], role=r["role"],
-            utterance=r["utterance"], proposal_json=r["proposal_json"],
-            committed_to=r["committed_to"], ts=r["ts"],
+            id=r["id"],
+            session_id=r["session_id"],
+            turn_index=r["turn_index"],
+            role=r["role"],
+            utterance=r["utterance"],
+            proposal_json=r["proposal_json"],
+            committed_to=r["committed_to"],
+            ts=r["ts"],
         )
 
     # ── Provenance per guidance entry ─────────────────────────────
@@ -281,9 +314,12 @@ class ProvenanceStore:
             " placement_reasoning, user_confirmed_at, refinement_transcript_ids) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
-                provenance.guidance_id, provenance.origin,
-                provenance.transcript_id, provenance.user_utterance,
-                provenance.placement_reasoning, provenance.user_confirmed_at,
+                provenance.guidance_id,
+                provenance.origin,
+                provenance.transcript_id,
+                provenance.user_utterance,
+                provenance.placement_reasoning,
+                provenance.user_confirmed_at,
                 json.dumps(provenance.refinement_transcript_ids),
             ),
         )
@@ -301,7 +337,8 @@ class ProvenanceStore:
         except json.JSONDecodeError:
             refs = []
         return Provenance(
-            guidance_id=r["guidance_id"], origin=r["origin"],
+            guidance_id=r["guidance_id"],
+            origin=r["origin"],
             transcript_id=r["transcript_id"],
             user_utterance=r["user_utterance"],
             placement_reasoning=r["placement_reasoning"],
@@ -310,7 +347,9 @@ class ProvenanceStore:
         )
 
     def append_refinement(
-        self, guidance_id: str, transcript_id: str,
+        self,
+        guidance_id: str,
+        transcript_id: str,
     ) -> Provenance | None:
         """Add a new refinement turn id to an existing provenance row."""
         p = self.get_provenance(guidance_id)
@@ -329,9 +368,12 @@ class ProvenanceStore:
         for gid in guidance_ids:
             if self.get_provenance(gid):
                 continue
-            self.record_provenance(Provenance(
-                guidance_id=gid, origin="pre_provenance",
-            ))
+            self.record_provenance(
+                Provenance(
+                    guidance_id=gid,
+                    origin="pre_provenance",
+                )
+            )
             n += 1
         return n
 
@@ -345,8 +387,13 @@ class ProvenanceStore:
 
 
 StorageClass = Literal[
-    "rule", "preference", "transient_intent", "dismissal_policy",
-    "situational_context", "access_profile", "area_posture",
+    "rule",
+    "preference",
+    "transient_intent",
+    "dismissal_policy",
+    "situational_context",
+    "access_profile",
+    "area_posture",
 ]
 Lifecycle = Literal["persistent", "temporal", "fire_once"]
 FireAffordance = Literal["alert", "shift_prior", "dismiss", "metadata"]
@@ -366,30 +413,32 @@ class PlacementProposal:
 
     storage_class: StorageClass
     name: str
-    scope: dict[str, str]                # actor/area/camera/kind/pattern
+    scope: dict[str, str]  # actor/area/camera/kind/pattern
     lifecycle: Lifecycle
     fire_affordance: FireAffordance
     intent_text: str
-    reasoning: str                       # one-sentence audit primitive
-    confidence: float                    # 0..1
+    reasoning: str  # one-sentence audit primitive
+    confidence: float  # 0..1
     lifecycle_ttl_iso: str | None = None
     severity: Severity | None = None
     clarifying_questions: list[str] = field(default_factory=list)
 
     def to_json(self) -> str:
-        return json.dumps({
-            "storage_class": self.storage_class,
-            "name": self.name,
-            "scope": self.scope,
-            "lifecycle": self.lifecycle,
-            "lifecycle_ttl_iso": self.lifecycle_ttl_iso,
-            "fire_affordance": self.fire_affordance,
-            "severity": self.severity,
-            "intent_text": self.intent_text,
-            "reasoning": self.reasoning,
-            "confidence": self.confidence,
-            "clarifying_questions": self.clarifying_questions,
-        })
+        return json.dumps(
+            {
+                "storage_class": self.storage_class,
+                "name": self.name,
+                "scope": self.scope,
+                "lifecycle": self.lifecycle,
+                "lifecycle_ttl_iso": self.lifecycle_ttl_iso,
+                "fire_affordance": self.fire_affordance,
+                "severity": self.severity,
+                "intent_text": self.intent_text,
+                "reasoning": self.reasoning,
+                "confidence": self.confidence,
+                "clarifying_questions": self.clarifying_questions,
+            }
+        )
 
     @classmethod
     def from_json(cls, blob: str) -> PlacementProposal:
@@ -419,21 +468,34 @@ def validate_proposal(data: Any) -> PlacementProposal:
     if not isinstance(data, dict):
         raise ValueError("proposal must be a JSON object")
     required = (
-        "storage_class", "name", "scope", "lifecycle",
-        "fire_affordance", "intent_text", "reasoning",
+        "storage_class",
+        "name",
+        "scope",
+        "lifecycle",
+        "fire_affordance",
+        "intent_text",
+        "reasoning",
     )
     for k in required:
         if k not in data:
             raise ValueError(f"missing required field: {k}")
     if data["storage_class"] not in (
-        "rule", "preference", "transient_intent", "dismissal_policy",
-        "situational_context", "access_profile", "area_posture",
+        "rule",
+        "preference",
+        "transient_intent",
+        "dismissal_policy",
+        "situational_context",
+        "access_profile",
+        "area_posture",
     ):
         raise ValueError(f"bad storage_class: {data['storage_class']}")
     if data["lifecycle"] not in ("persistent", "temporal", "fire_once"):
         raise ValueError(f"bad lifecycle: {data['lifecycle']}")
     if data["fire_affordance"] not in (
-        "alert", "shift_prior", "dismiss", "metadata",
+        "alert",
+        "shift_prior",
+        "dismiss",
+        "metadata",
     ):
         raise ValueError(f"bad fire_affordance: {data['fire_affordance']}")
     if data["lifecycle"] in ("temporal", "fire_once") and not data.get("lifecycle_ttl_iso"):

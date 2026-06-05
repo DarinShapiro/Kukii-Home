@@ -39,10 +39,14 @@ class FakeCaller:
     async def __call__(self, domain, service, *, entity_id=None, data=None):
         if self.fail_on and (domain, service) == self.fail_on:
             raise RuntimeError("simulated HA failure")
-        self.calls.append({
-            "domain": domain, "service": service,
-            "entity_id": entity_id, "data": data or {},
-        })
+        self.calls.append(
+            {
+                "domain": domain,
+                "service": service,
+                "entity_id": entity_id,
+                "data": data or {},
+            }
+        )
         return {}
 
 
@@ -65,7 +69,9 @@ def test_inverse_unknown_returns_none():
 async def test_perception_rejects_without_camera_id(store):
     rt = PerceptionRuntime(store, FakeCaller())
     req = PerceptionRequest(
-        kind="ha_service", service="light.turn_on", target="light.porch",
+        kind="ha_service",
+        service="light.turn_on",
+        target="light.porch",
         revert_after_s=0.01,
     )
     assert await rt.execute(req, incident_id="i") == "no_camera_scope"
@@ -75,8 +81,11 @@ async def test_perception_rejects_without_camera_id(store):
 async def test_perception_rejects_when_not_whitelisted(store):
     rt = PerceptionRuntime(store, FakeCaller())
     req = PerceptionRequest(
-        kind="ha_service", camera_id="front",
-        service="light.turn_on", target="light.porch", revert_after_s=0.01,
+        kind="ha_service",
+        camera_id="front",
+        service="light.turn_on",
+        target="light.porch",
+        revert_after_s=0.01,
     )
     assert await rt.execute(req, incident_id="i") == "no_authorization"
 
@@ -84,14 +93,20 @@ async def test_perception_rejects_when_not_whitelisted(store):
 @pytest.mark.asyncio
 async def test_perception_executes_and_schedules_revert(store):
     caller = FakeCaller()
-    store.upsert_perception(PerceptionEntry(
-        camera_id="front", target_kind="ha_service",
-        target="light.turn_on:light.porch",
-    ))
+    store.upsert_perception(
+        PerceptionEntry(
+            camera_id="front",
+            target_kind="ha_service",
+            target="light.turn_on:light.porch",
+        )
+    )
     rt = PerceptionRuntime(store, caller)
     req = PerceptionRequest(
-        kind="ha_service", camera_id="front",
-        service="light.turn_on", target="light.porch", revert_after_s=0.05,
+        kind="ha_service",
+        camera_id="front",
+        service="light.turn_on",
+        target="light.porch",
+        revert_after_s=0.05,
     )
     assert await rt.execute(req, incident_id="i1") == "ok"
     assert caller.calls[0]["service"] == "turn_on"
@@ -105,18 +120,27 @@ async def test_perception_coalesces_overlapping_requests(store):
     """A second request for the same target while the revert is pending
     should cancel the existing revert and extend the window."""
     caller = FakeCaller()
-    store.upsert_perception(PerceptionEntry(
-        camera_id="front", target_kind="ha_service",
-        target="light.turn_on:light.porch",
-    ))
+    store.upsert_perception(
+        PerceptionEntry(
+            camera_id="front",
+            target_kind="ha_service",
+            target="light.turn_on:light.porch",
+        )
+    )
     rt = PerceptionRuntime(store, caller)
     req1 = PerceptionRequest(
-        kind="ha_service", camera_id="front",
-        service="light.turn_on", target="light.porch", revert_after_s=0.1,
+        kind="ha_service",
+        camera_id="front",
+        service="light.turn_on",
+        target="light.porch",
+        revert_after_s=0.1,
     )
     req2 = PerceptionRequest(
-        kind="ha_service", camera_id="front",
-        service="light.turn_on", target="light.porch", revert_after_s=0.1,
+        kind="ha_service",
+        camera_id="front",
+        service="light.turn_on",
+        target="light.porch",
+        revert_after_s=0.1,
     )
     await rt.execute(req1, incident_id="i1")
     # Small sleep < revert_after_s so the first is still pending
@@ -132,15 +156,20 @@ async def test_perception_skips_revert_when_inverse_unknown(store):
     """media_player has no listed inverse — revert should be skipped, not
     crash. The whitelist still authorizes the apply call."""
     caller = FakeCaller()
-    store.upsert_perception(PerceptionEntry(
-        camera_id="front", target_kind="ha_service",
-        target="media_player.play_media:media_player.living_room",
-    ))
+    store.upsert_perception(
+        PerceptionEntry(
+            camera_id="front",
+            target_kind="ha_service",
+            target="media_player.play_media:media_player.living_room",
+        )
+    )
     rt = PerceptionRuntime(store, caller)
     req = PerceptionRequest(
-        kind="ha_service", camera_id="front",
+        kind="ha_service",
+        camera_id="front",
         service="media_player.play_media",
-        target="media_player.living_room", revert_after_s=0.02,
+        target="media_player.living_room",
+        revert_after_s=0.02,
     )
     assert await rt.execute(req, incident_id="i") == "ok"
     await asyncio.sleep(0.1)
@@ -151,14 +180,20 @@ async def test_perception_skips_revert_when_inverse_unknown(store):
 @pytest.mark.asyncio
 async def test_perception_apply_failure_returns_failed(store):
     caller = FakeCaller(fail_on=("light", "turn_on"))
-    store.upsert_perception(PerceptionEntry(
-        camera_id="front", target_kind="ha_service",
-        target="light.turn_on:light.porch",
-    ))
+    store.upsert_perception(
+        PerceptionEntry(
+            camera_id="front",
+            target_kind="ha_service",
+            target="light.turn_on:light.porch",
+        )
+    )
     rt = PerceptionRuntime(store, caller)
     req = PerceptionRequest(
-        kind="ha_service", camera_id="front",
-        service="light.turn_on", target="light.porch", revert_after_s=0.01,
+        kind="ha_service",
+        camera_id="front",
+        service="light.turn_on",
+        target="light.porch",
+        revert_after_s=0.01,
     )
     assert await rt.execute(req, incident_id="i") == "failed"
     # No revert scheduled
@@ -170,8 +205,12 @@ async def test_perception_apply_failure_returns_failed(store):
 
 def _whitelist_lock(store, **kw):
     base: dict = dict(  # noqa: C408
-        camera_id="backyard", action_class="lock", service="lock.lock",
-        target="lock.back_door", min_severity="critical", min_confidence=0.7,
+        camera_id="backyard",
+        action_class="lock",
+        service="lock.lock",
+        target="lock.back_door",
+        min_severity="critical",
+        min_confidence=0.7,
     )
     base.update(kw)
     store.upsert_protective(ProtectiveEntry(**base))
@@ -179,8 +218,11 @@ def _whitelist_lock(store, **kw):
 
 def _lock_rec(**kw):
     base: dict = dict(  # noqa: C408
-        action_class="lock", service="lock.lock",
-        target="lock.back_door", confidence=0.9, urgency="critical",
+        action_class="lock",
+        service="lock.lock",
+        target="lock.back_door",
+        confidence=0.9,
+        urgency="critical",
         camera_id="backyard",
     )
     base.update(kw)
@@ -279,36 +321,52 @@ def test_parse_perception_requests_handles_empty_and_malformed():
     assert parse_perception_requests(None) == []
     assert parse_perception_requests([]) == []
     # Malformed entry skipped; well-formed kept
-    out = parse_perception_requests([
-        "not a dict",
-        {"kind": "ha_service", "service": "light.turn_on",
-         "target": "light.porch", "revert_after_s": 30},
-    ])
+    out = parse_perception_requests(
+        [
+            "not a dict",
+            {
+                "kind": "ha_service",
+                "service": "light.turn_on",
+                "target": "light.porch",
+                "revert_after_s": 30,
+            },
+        ]
+    )
     assert len(out) == 1
     assert out[0].service == "light.turn_on"
 
 
 def test_parse_perception_requests_defaults_revert_to_45():
-    out = parse_perception_requests([
-        {"kind": "ha_service", "service": "light.turn_on",
-         "target": "light.x"},
-    ])
+    out = parse_perception_requests(
+        [
+            {"kind": "ha_service", "service": "light.turn_on", "target": "light.x"},
+        ]
+    )
     assert out[0].revert_after_s == 45.0
 
 
 def test_parse_recommendations_skips_unclassified():
-    out = parse_recommendations([
-        {"service": "lock.lock", "target": "lock.x"},  # missing action_class
-        {"action_class": "lock", "service": "lock.lock", "target": "lock.y",
-         "confidence": 0.9, "urgency": "critical"},
-    ])
+    out = parse_recommendations(
+        [
+            {"service": "lock.lock", "target": "lock.x"},  # missing action_class
+            {
+                "action_class": "lock",
+                "service": "lock.lock",
+                "target": "lock.y",
+                "confidence": 0.9,
+                "urgency": "critical",
+            },
+        ]
+    )
     assert len(out) == 1
     assert out[0].action_class == "lock"
     assert out[0].confidence == pytest.approx(0.9)
 
 
 def test_parse_recommendations_none_confidence_when_absent():
-    out = parse_recommendations([
-        {"action_class": "lock", "service": "lock.lock", "target": "lock.x"},
-    ])
+    out = parse_recommendations(
+        [
+            {"action_class": "lock", "service": "lock.lock", "target": "lock.x"},
+        ]
+    )
     assert out[0].confidence is None

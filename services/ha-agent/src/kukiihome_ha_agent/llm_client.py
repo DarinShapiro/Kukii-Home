@@ -47,7 +47,8 @@ class OpenAIChatClient:
     """
 
     def __init__(
-        self, *,
+        self,
+        *,
         base_url: str,
         api_key: str,
         model: str,
@@ -65,7 +66,9 @@ class OpenAIChatClient:
         self.timeout_seconds = timeout_seconds
 
     async def complete_chat(
-        self, *, messages: list[dict],
+        self,
+        *,
+        messages: list[dict],
         tools: list[dict] | None = None,
         max_tokens: int = 1500,
     ) -> dict:
@@ -110,7 +113,11 @@ class OpenAIChatClient:
             ) from e
 
     async def complete(
-        self, *, system: str, user: str, max_tokens: int = 1500,
+        self,
+        *,
+        system: str,
+        user: str,
+        max_tokens: int = 1500,
     ) -> str:
         # 1500 leaves headroom for reasoning-class models (gpt-oss /
         # zai-glm / o1-style) where internal chain-of-thought tokens
@@ -158,7 +165,7 @@ class OpenAIChatClient:
 class LLMHealth:
     """Snapshot of LLM availability for the /memory banner."""
 
-    ok: bool                              # last call succeeded
+    ok: bool  # last call succeeded
     last_success_at: float | None = None
     last_failure_at: float | None = None
     last_failure_reason: str = ""
@@ -184,7 +191,10 @@ class LLMHealthTracker:
         self._total_calls += 1
 
     def record_failure(
-        self, reason: str, *, now_ts: float | None = None,
+        self,
+        reason: str,
+        *,
+        now_ts: float | None = None,
     ) -> None:
         self._last_failure_at = now_ts or time.time()
         self._last_failure_reason = reason or "unknown"
@@ -197,12 +207,8 @@ class LLMHealthTracker:
         # ok = the most recent call succeeded. We deliberately don't use
         # a time-based window — if the last call failed it's still
         # failing as far as the user knows, regardless of how long ago.
-        ok = (
-            self._last_success_at is not None
-            and (
-                self._last_failure_at is None
-                or self._last_success_at >= self._last_failure_at
-            )
+        ok = self._last_success_at is not None and (
+            self._last_failure_at is None or self._last_success_at >= self._last_failure_at
         )
         return LLMHealth(
             ok=ok,

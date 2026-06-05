@@ -53,13 +53,16 @@ def _fresh_client():
 
 def test_mirror_event_writes_node_from_alert():
     c = _fresh_client()
-    mirror_event_from_alert(c, {
-        "alert_id": "evt_1",
-        "camera_id": "pool",
-        "ts": 1000.0,
-        "subject": "person",
-        "severity": "major",
-    })
+    mirror_event_from_alert(
+        c,
+        {
+            "alert_id": "evt_1",
+            "camera_id": "pool",
+            "ts": 1000.0,
+            "subject": "person",
+            "severity": "major",
+        },
+    )
     assert c.count_events() == 1
     ev = c.read_event("evt_1")
     assert ev.camera_id == "pool"
@@ -110,11 +113,16 @@ class _FakePolicy:
 
 def test_mirror_policy_writes_node():
     c = _fresh_client()
-    mirror_policy(c, _FakePolicy(
-        id="pol_42", kind="dismissal",
-        descriptor={"camera": "pool", "subject": "dog", "intent_text": "ignore pool dog"},
-        created_at=1000.0, expires_at=1000.0 + 3600.0,
-    ))
+    mirror_policy(
+        c,
+        _FakePolicy(
+            id="pol_42",
+            kind="dismissal",
+            descriptor={"camera": "pool", "subject": "dog", "intent_text": "ignore pool dog"},
+            created_at=1000.0,
+            expires_at=1000.0 + 3600.0,
+        ),
+    )
     assert c.count_policies() == 1
     p = c.read_policy("pol_42")
     assert p.kind == "dismissal"
@@ -145,17 +153,29 @@ def test_find_similar_actors_ranks_by_cosine():
     from kukiihome_memory.graph.types import KnownActor
 
     c = _fresh_client()
-    c.write_known_actor(KnownActor(
-        id="alice", name="Alice", role="resident",
-        face_embedding=(1.0, 0.0, 0.0),
-    ))
-    c.write_known_actor(KnownActor(
-        id="bob", name="Bob", role="resident",
-        face_embedding=(0.0, 1.0, 0.0),
-    ))
-    c.write_known_actor(KnownActor(
-        id="noemb", name="NoEmbed", role="visitor",
-    ))  # no embedding → skipped
+    c.write_known_actor(
+        KnownActor(
+            id="alice",
+            name="Alice",
+            role="resident",
+            face_embedding=(1.0, 0.0, 0.0),
+        )
+    )
+    c.write_known_actor(
+        KnownActor(
+            id="bob",
+            name="Bob",
+            role="resident",
+            face_embedding=(0.0, 1.0, 0.0),
+        )
+    )
+    c.write_known_actor(
+        KnownActor(
+            id="noemb",
+            name="NoEmbed",
+            role="visitor",
+        )
+    )  # no embedding → skipped
     res = c.find_similar_actors((0.95, 0.05, 0.0), k=3)
     assert [a.id for a, _ in res] == ["alice", "bob"]
     assert res[0][1] > res[1][1]
@@ -165,14 +185,22 @@ def test_find_similar_actors_respects_min_similarity():
     from kukiihome_memory.graph.types import KnownActor
 
     c = _fresh_client()
-    c.write_known_actor(KnownActor(
-        id="alice", name="Alice", role="resident",
-        face_embedding=(1.0, 0.0, 0.0),
-    ))
-    c.write_known_actor(KnownActor(
-        id="orthogonal", name="Ortho", role="visitor",
-        face_embedding=(0.0, 1.0, 0.0),
-    ))
+    c.write_known_actor(
+        KnownActor(
+            id="alice",
+            name="Alice",
+            role="resident",
+            face_embedding=(1.0, 0.0, 0.0),
+        )
+    )
+    c.write_known_actor(
+        KnownActor(
+            id="orthogonal",
+            name="Ortho",
+            role="visitor",
+            face_embedding=(0.0, 1.0, 0.0),
+        )
+    )
     res = c.find_similar_actors((1.0, 0.0, 0.0), k=5, min_similarity=0.5)
     assert [a.id for a, _ in res] == ["alice"]  # orthogonal (sim 0) filtered
 
@@ -195,12 +223,21 @@ def test_diagnostics_renders_graph_backend_and_counts():
     mirror_event_from_alert(c, {"alert_id": "e1", "camera_id": "pool"})
     mirror_event_from_alert(c, {"alert_id": "e2", "camera_id": "pool"})
     vm = build_diagnostics_vm(
-        version="9.9.9", preprocessor_ok=None, preprocessor_url=None,
-        ha_connected=True, ha_entities=0,
-        rules_store=None, action_store=None, area_store=None,
-        policy_store=None, registry_statuses=[], ha_loops=[],
-        alerts=[], now_ts=1000.0,
-        graph_client=c, graph_backend="in_memory",
+        version="9.9.9",
+        preprocessor_ok=None,
+        preprocessor_url=None,
+        ha_connected=True,
+        ha_entities=0,
+        rules_store=None,
+        action_store=None,
+        area_store=None,
+        policy_store=None,
+        registry_statuses=[],
+        ha_loops=[],
+        alerts=[],
+        now_ts=1000.0,
+        graph_client=c,
+        graph_backend="in_memory",
     )
     assert vm.graph.events == 2
     html = render_diagnostics_page(vm)
@@ -215,9 +252,14 @@ def test_diagnostics_graph_section_shows_neo4j_when_durable():
         _graph_section,
     )
 
-    html = _graph_section(GraphSubstrateSnapshot(
-        backend="neo4j", events=10, policies=3, actors=2,
-    ))
+    html = _graph_section(
+        GraphSubstrateSnapshot(
+            backend="neo4j",
+            events=10,
+            policies=3,
+            actors=2,
+        )
+    )
     assert "Neo4j" in html
     assert "durable" in html
 

@@ -24,8 +24,12 @@ NOW = 1_700_000_000.0
 
 def _entry(**kw):
     base: dict = dict(  # noqa: C408
-        guidance_id="x", name="X", storage_class="rule",
-        scope_summary="", scope_fields={}, lifecycle="persistent",
+        guidance_id="x",
+        name="X",
+        storage_class="rule",
+        scope_summary="",
+        scope_fields={},
+        lifecycle="persistent",
     )
     base.update(kw)
     return GuidanceEntry(**base)
@@ -52,20 +56,28 @@ def test_camera_scope_only_classifies_to_camera_when_no_area():
     out = classify_to_contexts(e)
     assert "About Pool Cam" in out
     # When area is also present, camera doesn't double-bucket.
-    e2 = _entry(scope_fields={
-        "camera": "pool", "camera_name": "Pool Cam",
-        "area": "pool_area", "area_name": "Pool",
-    })
+    e2 = _entry(
+        scope_fields={
+            "camera": "pool",
+            "camera_name": "Pool Cam",
+            "area": "pool_area",
+            "area_name": "Pool",
+        }
+    )
     out2 = classify_to_contexts(e2)
     assert "About Pool Cam" not in out2
     assert "About the Pool" in out2
 
 
 def test_actor_and_area_both_buckets():
-    e = _entry(scope_fields={
-        "actor": "winston", "actor_name": "Winston",
-        "area": "front_yard", "area_name": "Front Yard",
-    })
+    e = _entry(
+        scope_fields={
+            "actor": "winston",
+            "actor_name": "Winston",
+            "area": "front_yard",
+            "area_name": "Front Yard",
+        }
+    )
     out = classify_to_contexts(e)
     assert "About Winston" in out
     assert "About the Front Yard" in out
@@ -91,8 +103,10 @@ def test_group_by_context_buckets_multi_membership_entries():
     e2 = _entry(
         name="B",
         scope_fields={
-            "actor": "winston", "actor_name": "Winston",
-            "area": "pool", "area_name": "Pool",
+            "actor": "winston",
+            "actor_name": "Winston",
+            "area": "pool",
+            "area_name": "Pool",
         },
     )
     groups = group_by_context([e1, e2])
@@ -200,11 +214,14 @@ def test_scope_from_rule_skips_bool_entries_in_areas():
     from types import SimpleNamespace
 
     from kukiihome_ha_agent.web_ui.memory_data import _scope_from_rule
-    fake = SimpleNamespace(scope=SimpleNamespace(
-        areas=[True, "front_yard", False],
-        cameras=[],
-        time_windows=[],
-    ))
+
+    fake = SimpleNamespace(
+        scope=SimpleNamespace(
+            areas=[True, "front_yard", False],
+            cameras=[],
+            time_windows=[],
+        )
+    )
     summary, fields = _scope_from_rule(fake)
     assert "True" not in summary
     assert "False" not in summary
@@ -218,9 +235,14 @@ def test_scope_from_rule_all_bool_areas_yields_empty():
     from types import SimpleNamespace
 
     from kukiihome_ha_agent.web_ui.memory_data import _scope_from_rule
-    fake = SimpleNamespace(scope=SimpleNamespace(
-        areas=[True], cameras=[False], time_windows=[],
-    ))
+
+    fake = SimpleNamespace(
+        scope=SimpleNamespace(
+            areas=[True],
+            cameras=[False],
+            time_windows=[],
+        )
+    )
     summary, fields = _scope_from_rule(fake)
     assert summary == ""
     assert fields == {}
@@ -233,11 +255,14 @@ def test_scope_from_rule_handles_non_list_areas():
     from types import SimpleNamespace
 
     from kukiihome_ha_agent.web_ui.memory_data import _scope_from_rule
-    fake = SimpleNamespace(scope=SimpleNamespace(
-        areas=True,  # not a list at all
-        cameras=None,
-        time_windows=[],
-    ))
+
+    fake = SimpleNamespace(
+        scope=SimpleNamespace(
+            areas=True,  # not a list at all
+            cameras=None,
+            time_windows=[],
+        )
+    )
     summary, fields = _scope_from_rule(fake)
     assert summary == ""
     assert fields == {}
@@ -249,9 +274,14 @@ def test_scope_from_rule_keeps_int_and_float_as_strings():
     from types import SimpleNamespace
 
     from kukiihome_ha_agent.web_ui.memory_data import _scope_from_rule
-    fake = SimpleNamespace(scope=SimpleNamespace(
-        areas=[1, "garage"], cameras=[], time_windows=[],
-    ))
+
+    fake = SimpleNamespace(
+        scope=SimpleNamespace(
+            areas=[1, "garage"],
+            cameras=[],
+            time_windows=[],
+        )
+    )
     summary, _fields = _scope_from_rule(fake)
     assert "1" in summary
     assert "garage" in summary
@@ -260,14 +290,20 @@ def test_scope_from_rule_keeps_int_and_float_as_strings():
 def test_build_includes_rules_with_scope_summary():
     rs, prefs, pols, areas = _open_stores()
     try:
-        rs.create(Rule(
-            id="", name="Winston front yard", mode="nl",
-            intent_text="alert",
-            scope=RuleScope(areas=["front_yard"]),
-        ))
+        rs.create(
+            Rule(
+                id="",
+                name="Winston front yard",
+                mode="nl",
+                intent_text="alert",
+                scope=RuleScope(areas=["front_yard"]),
+            )
+        )
         entries = build_guidance_entries(
-            rules=rs.all_rules(), preferences=prefs.get(),
-            policies=[], areas=[],
+            rules=rs.all_rules(),
+            preferences=prefs.get(),
+            policies=[],
+            areas=[],
         )
         # 1 rule + 1 vigilance pref baseline (always present)
         assert len(entries) == 2
@@ -286,11 +322,15 @@ def test_build_preferences_flattens_to_rows_per_field():
     rs, prefs, pols, areas = _open_stores()
     try:
         prefs.update(
-            vigilance="high", what_i_care_about="Winston is our dog",
+            vigilance="high",
+            what_i_care_about="Winston is our dog",
         )
         prefs.set_relationship("bob", "household")
         entries = build_guidance_entries(
-            rules=[], preferences=prefs.get(), policies=[], areas=[],
+            rules=[],
+            preferences=prefs.get(),
+            policies=[],
+            areas=[],
         )
         names = {e.name for e in entries}
         assert "Vigilance baseline" in names
@@ -306,13 +346,19 @@ def test_build_preferences_flattens_to_rows_per_field():
 def test_build_policies_lift_descriptor_to_scope_fields():
     rs, prefs, pols, areas = _open_stores()
     try:
-        pols.create(Policy(
-            id="", kind="dismissal", name="Dog at front",
-            descriptor={"camera": "front", "kind": "dog"},
-        ))
+        pols.create(
+            Policy(
+                id="",
+                kind="dismissal",
+                name="Dog at front",
+                descriptor={"camera": "front", "kind": "dog"},
+            )
+        )
         entries = build_guidance_entries(
-            rules=[], preferences=None,
-            policies=pols.all_policies(kind="dismissal"), areas=[],
+            rules=[],
+            preferences=None,
+            policies=pols.all_policies(kind="dismissal"),
+            areas=[],
         )
         e = next(e for e in entries if e.storage_class == "dismissal_policy")
         assert e.scope_fields.get("camera") == "front"
@@ -327,13 +373,18 @@ def test_build_policies_lift_descriptor_to_scope_fields():
 def test_build_situational_context_detected_from_descriptor_marker():
     rs, prefs, pols, areas = _open_stores()
     try:
-        pols.create(Policy(
-            id="", kind="transient_intent", name="Halloween",
-            descriptor={"is_situational_context": True},
-            expires_at=NOW + 3600,
-        ))
+        pols.create(
+            Policy(
+                id="",
+                kind="transient_intent",
+                name="Halloween",
+                descriptor={"is_situational_context": True},
+                expires_at=NOW + 3600,
+            )
+        )
         entries = build_guidance_entries(
-            rules=[], preferences=None,
+            rules=[],
+            preferences=None,
             policies=pols.all_policies(now_ts=NOW),
             areas=[],
         )
@@ -356,11 +407,18 @@ def test_build_area_posture_emitted_only_for_non_default_attention_or_role():
         # attention=attention — emits a row
         areas.create(Area(id="", name="Pool", attention_mode="attention"))
         # role set, default attention — emits a row
-        areas.create(Area(
-            id="", name="Bedroom", attention_mode="normal", role="private",
-        ))
+        areas.create(
+            Area(
+                id="",
+                name="Bedroom",
+                attention_mode="normal",
+                role="private",
+            )
+        )
         entries = build_guidance_entries(
-            rules=[], preferences=None, policies=[],
+            rules=[],
+            preferences=None,
+            policies=[],
             areas=areas.all_areas(),
         )
         names = {e.name for e in entries if e.storage_class == "area_posture"}
@@ -379,18 +437,30 @@ def test_build_provenance_origin_pulled_from_provenance_store():
         Provenance,
         ProvenanceStore,
     )
+
     rs, prefs, pols, areas = _open_stores()
     prov = ProvenanceStore(path=None)
     try:
-        rule = rs.create(Rule(
-            id="", name="X", mode="nl", intent_text="",
-        ))
-        prov.record_provenance(Provenance(
-            guidance_id=rule.id, origin="conversation",
-            transcript_id="t1",
-        ))
+        rule = rs.create(
+            Rule(
+                id="",
+                name="X",
+                mode="nl",
+                intent_text="",
+            )
+        )
+        prov.record_provenance(
+            Provenance(
+                guidance_id=rule.id,
+                origin="conversation",
+                transcript_id="t1",
+            )
+        )
         entries = build_guidance_entries(
-            rules=rs.all_rules(), preferences=None, policies=[], areas=[],
+            rules=rs.all_rules(),
+            preferences=None,
+            policies=[],
+            areas=[],
             provenance_store=prov,
         )
         rule_e = next(e for e in entries if e.storage_class == "rule")

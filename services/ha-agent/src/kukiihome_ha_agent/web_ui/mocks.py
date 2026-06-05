@@ -18,10 +18,7 @@ def _coming_soon(
 ) -> str:
     """One section: title + short description + optional ASCII sketch."""
     sketch_html = f"<div class='sketch'>{_e(sketch)}</div>" if sketch else ""
-    ref_html = (
-        f"<div class='sub' style='margin-top:14px'>{_e(ref)}</div>"
-        if ref else ""
-    )
+    ref_html = f"<div class='sub' style='margin-top:14px'>{_e(ref)}</div>" if ref else ""
     return (
         "<div class='coming-soon'>"
         f"<h3>{_e(title)}</h3>"

@@ -178,11 +178,13 @@ def test_edit_form_shortcut_mode_shows_severity_selected():
 
 
 def test_parse_rule_form_nl_minimal():
-    out = parse_rule_form({
-        "name": "Winston rule",
-        "mode": "nl",
-        "intent_text": "be careful",
-    })
+    out = parse_rule_form(
+        {
+            "name": "Winston rule",
+            "mode": "nl",
+            "intent_text": "be careful",
+        }
+    )
     assert out["name"] == "Winston rule"
     assert out["mode"] == "nl"
     assert out["intent_text"] == "be careful"
@@ -193,24 +195,28 @@ def test_parse_rule_form_nl_minimal():
 
 
 def test_parse_rule_form_shortcut_pickers_and_severity():
-    out = parse_rule_form({
-        "name": "Bob arrives",
-        "mode": "shortcut",
-        "shortcut_subject": "bob",
-        "severity_static": "critical",
-    })
+    out = parse_rule_form(
+        {
+            "name": "Bob arrives",
+            "mode": "shortcut",
+            "shortcut_subject": "bob",
+            "severity_static": "critical",
+        }
+    )
     assert out["shortcut_subject"] == "bob"
     assert out["severity_static"] == "critical"
 
 
 def test_parse_rule_form_custom_subject_overrides_picker():
-    out = parse_rule_form({
-        "name": "Person seen",
-        "mode": "shortcut",
-        "shortcut_subject": "bob",
-        "shortcut_subject_custom": "person",
-        "severity_static": "normal",
-    })
+    out = parse_rule_form(
+        {
+            "name": "Person seen",
+            "mode": "shortcut",
+            "shortcut_subject": "bob",
+            "shortcut_subject_custom": "person",
+            "severity_static": "normal",
+        }
+    )
     assert out["shortcut_subject"] == "person"  # custom wins
 
 
@@ -220,10 +226,14 @@ def test_parse_rule_form_bad_mode_falls_back_to_nl():
 
 
 def test_parse_rule_form_bad_severity_falls_back_to_normal():
-    out = parse_rule_form({
-        "name": "x", "mode": "shortcut", "shortcut_subject": "bob",
-        "severity_static": "ultra-critical",
-    })
+    out = parse_rule_form(
+        {
+            "name": "x",
+            "mode": "shortcut",
+            "shortcut_subject": "bob",
+            "severity_static": "ultra-critical",
+        }
+    )
     assert out["severity_static"] == "normal"
 
 
@@ -242,12 +252,14 @@ def test_parse_rule_form_scope_lists_from_multivalue_form():
                 return default
             return v if isinstance(v, list) else [v]
 
-    form = M({
-        "name": "scoped",
-        "mode": "nl",
-        "cameras": ["pool", "front_south"],
-        "areas": ["front_yard"],
-    })
+    form = M(
+        {
+            "name": "scoped",
+            "mode": "nl",
+            "cameras": ["pool", "front_south"],
+            "areas": ["front_yard"],
+        }
+    )
     out = parse_rule_form(form)
     assert out["scope"].cameras == ["pool", "front_south"]
     assert out["scope"].areas == ["front_yard"]

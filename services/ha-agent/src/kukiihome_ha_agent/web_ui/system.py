@@ -31,14 +31,14 @@ class StorageClassRow:
     label: str
     count: int = 0
     bytes_used: int = 0
-    detail: str = ""                 # one-line breakdown (by camera, etc.)
+    detail: str = ""  # one-line breakdown (by camera, etc.)
 
 
 @dataclass
 class SystemViewModel:
     storage_rows: list[StorageClassRow] = field(default_factory=list)
     total_bytes: int = 0
-    policy: Any = None               # RetentionPolicy (avoid circular import)
+    policy: Any = None  # RetentionPolicy (avoid circular import)
     audit_log: list[Any] = field(default_factory=list)  # AdminAudit rows
     cameras: list[tuple[str, str]] = field(default_factory=list)  # (id, name)
     now_ts: float | None = None
@@ -50,11 +50,11 @@ class SystemViewModel:
 def _format_bytes(n: int) -> str:
     if n < 1024:
         return f"{n} B"
-    if n < 1024 ** 2:
+    if n < 1024**2:
         return f"{n / 1024:.1f} KB"
-    if n < 1024 ** 3:
-        return f"{n / 1024 ** 2:.1f} MB"
-    return f"{n / 1024 ** 3:.2f} GB"
+    if n < 1024**3:
+        return f"{n / 1024**2:.1f} MB"
+    return f"{n / 1024**3:.2f} GB"
 
 
 # ─── Storage card ──────────────────────────────────────────────────
@@ -64,8 +64,7 @@ def _storage_section(vm: SystemViewModel) -> str:
     rows = "".join(
         "<tr>"
         f"<td><b>{_e(r.label)}</b>"
-        + (f"<br><span class='muted'>{_e(r.detail)}</span>"
-           if r.detail else "")
+        + (f"<br><span class='muted'>{_e(r.detail)}</span>" if r.detail else "")
         + "</td>"
         f"<td>{r.count}</td>"
         f"<td>{_format_bytes(r.bytes_used)}</td>"
@@ -143,17 +142,16 @@ def _retention_section(policy: Any) -> str:
 
 
 def _operations_section(vm: SystemViewModel) -> str:
-    camera_options = "".join(
-        f"<option value='{_e(cid)}'>{_e(name)}</option>"
-        for cid, name in vm.cameras
-    ) or "<option value=''>(no cameras configured)</option>"
+    camera_options = (
+        "".join(f"<option value='{_e(cid)}'>{_e(name)}</option>" for cid, name in vm.cameras)
+        or "<option value=''>(no cameras configured)</option>"
+    )
     return (
         "<section class='card'>"
         "<h2>Operations</h2>"
         "<div class='sub'>Surgical privacy controls. Every operation "
         "is logged below and is irreversible — bulk deletes go straight "
         "to disk.</div>"
-
         # Erase last hour — single-action form
         "<h3 style='margin-top:14px'>Erase last hour</h3>"
         "<form method='post' action='system/erase-last-hour' "
@@ -164,7 +162,6 @@ def _operations_section(vm: SystemViewModel) -> str:
         "</form>"
         "<div class='hint'>Bulk-deletes events + frames + clips across "
         "all cameras in the last 60 minutes.</div>"
-
         # Purge by camera + date range
         "<h3 style='margin-top:18px'>Purge by camera + date range</h3>"
         "<form method='post' action='system/purge' "
@@ -177,7 +174,6 @@ def _operations_section(vm: SystemViewModel) -> str:
         "<button class='btn danger' type='submit'>Purge</button>"
         "</div>"
         "</form>"
-
         # Export (deferred)
         "<h3 style='margin-top:18px'>Export</h3>"
         "<div class='empty'>Export everything about an actor / camera "

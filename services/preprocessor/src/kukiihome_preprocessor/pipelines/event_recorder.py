@@ -131,7 +131,10 @@ class EventRecorder:
         """Poll loop. Runs until ``stop`` is set (or forever)."""
         logger.info(
             "event_recorder.start cameras=%s pre=%.0f post=%.0f store=%s",
-            self._cameras, self._cfg.pre_roll_s, self._cfg.post_roll_s, self._cfg.store_dir,
+            self._cameras,
+            self._cfg.pre_roll_s,
+            self._cfg.post_roll_s,
+            self._cfg.store_dir,
         )
         while stop is None or not stop.is_set():
             try:
@@ -191,7 +194,9 @@ class EventRecorder:
         if not buffered:
             logger.warning(
                 "event_recorder.empty cam=%s window=[%.1f,%.1f] (rolled out before close?)",
-                cam, window_start, window_end,
+                cam,
+                window_start,
+                window_end,
             )
             return
 
@@ -219,7 +224,11 @@ class EventRecorder:
         self._events_written += 1
         logger.info(
             "event_recorder.persisted cam=%s id=%s frames=%d motion=%d -> %s",
-            cam, event_id, len(buffered), manifest["motion_frame_count"], event_dir,
+            cam,
+            event_id,
+            len(buffered),
+            manifest["motion_frame_count"],
+            event_dir,
         )
 
         # STEP 2 — enrich the FULL window (every frame, incl. the stationary
@@ -231,8 +240,12 @@ class EventRecorder:
             return
         try:
             fw = await self._frame_buffer.get_window(
-                camera_id=cam, ts_start=window_start, ts_end=window_end,
-                enrich=True, cache=self._cache, enrich_motion_only=False,
+                camera_id=cam,
+                ts_start=window_start,
+                ts_end=window_end,
+                enrich=True,
+                cache=self._cache,
+                enrich_motion_only=False,
             )
             det = getattr(fw, "detections", ()) or ()
             ents = getattr(fw, "identified_entities", ()) or ()
@@ -242,10 +255,15 @@ class EventRecorder:
             kinds = sorted({getattr(d, "kind", "?") for d in det})
             logger.info(
                 "event_recorder.enriched cam=%s id=%s detections=%d kinds=%s",
-                cam, event_id, len(det), kinds,
+                cam,
+                event_id,
+                len(det),
+                kinds,
             )
         except Exception:
-            logger.exception("event_recorder.enrich_failed cam=%s id=%s (frames safe)", cam, event_id)
+            logger.exception(
+                "event_recorder.enrich_failed cam=%s id=%s (frames safe)", cam, event_id
+            )
 
     @staticmethod
     def _write_event(event_dir: Path, buffered: Any, manifest: dict) -> None:

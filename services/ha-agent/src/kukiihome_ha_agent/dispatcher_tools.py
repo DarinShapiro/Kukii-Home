@@ -88,8 +88,14 @@ class SearchExistingGuidance:
         "duplicated. All filters are optional — supply only what you have."
     )
 
-    def __init__(self, *, rules_store: Any = None, policy_store: Any = None,
-                  preferences_store: Any = None, area_store: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        rules_store: Any = None,
+        policy_store: Any = None,
+        preferences_store: Any = None,
+        area_store: Any = None,
+    ) -> None:
         self.rules_store = rules_store
         self.policy_store = policy_store
         self.preferences_store = preferences_store
@@ -104,16 +110,23 @@ class SearchExistingGuidance:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "actor": {"type": "string",
-                                  "description": "snake_case actor id, e.g. 'winston'"},
-                        "area": {"type": "string",
-                                 "description": "snake_case area id, e.g. 'front_yard'"},
-                        "camera": {"type": "string",
-                                   "description": "snake_case camera id"},
-                        "kind": {"type": "string",
-                                 "description": "detection kind, e.g. 'person' / 'dog'"},
-                        "text": {"type": "string",
-                                 "description": "free-text substring to match against intent_text"},
+                        "actor": {
+                            "type": "string",
+                            "description": "snake_case actor id, e.g. 'winston'",
+                        },
+                        "area": {
+                            "type": "string",
+                            "description": "snake_case area id, e.g. 'front_yard'",
+                        },
+                        "camera": {"type": "string", "description": "snake_case camera id"},
+                        "kind": {
+                            "type": "string",
+                            "description": "detection kind, e.g. 'person' / 'dog'",
+                        },
+                        "text": {
+                            "type": "string",
+                            "description": "free-text substring to match against intent_text",
+                        },
                     },
                     "required": [],
                 },
@@ -138,18 +151,23 @@ class SearchExistingGuidance:
                         if camera and camera not in [c.lower() for c in rule.scope.cameras]:
                             continue
                         intent = (rule.intent_text or "").lower()
-                        if (text and text not in intent) or \
-                           (actor and actor not in intent and actor not in rule.name.lower()):
+                        if (text and text not in intent) or (
+                            actor and actor not in intent and actor not in rule.name.lower()
+                        ):
                             if actor or text:
                                 continue
-                        matches.append({
-                            "guidance_id": rule.id,
-                            "storage_class": "rule",
-                            "name": rule.name,
-                            "intent_text": rule.intent_text,
-                            "scope": {"areas": list(rule.scope.areas),
-                                      "cameras": list(rule.scope.cameras)},
-                        })
+                        matches.append(
+                            {
+                                "guidance_id": rule.id,
+                                "storage_class": "rule",
+                                "name": rule.name,
+                                "intent_text": rule.intent_text,
+                                "scope": {
+                                    "areas": list(rule.scope.areas),
+                                    "cameras": list(rule.scope.cameras),
+                                },
+                            }
+                        )
                 except Exception as e:
                     logger.debug("tool.search.rules_failed", error=str(e))
 
@@ -167,18 +185,27 @@ class SearchExistingGuidance:
                         if text and text not in (desc.get("intent_text") or "").lower():
                             continue
                         is_sc = bool(desc.get("is_situational_context"))
-                        matches.append({
-                            "guidance_id": p.id,
-                            "storage_class": (
-                                "situational_context" if is_sc
-                                else ("transient_intent" if p.kind == "transient_intent"
-                                      else "dismissal_policy")
-                            ),
-                            "name": p.name,
-                            "intent_text": desc.get("intent_text") or "",
-                            "scope": {k: v for k, v in desc.items()
-                                       if isinstance(v, str) and k != "intent_text"},
-                        })
+                        matches.append(
+                            {
+                                "guidance_id": p.id,
+                                "storage_class": (
+                                    "situational_context"
+                                    if is_sc
+                                    else (
+                                        "transient_intent"
+                                        if p.kind == "transient_intent"
+                                        else "dismissal_policy"
+                                    )
+                                ),
+                                "name": p.name,
+                                "intent_text": desc.get("intent_text") or "",
+                                "scope": {
+                                    k: v
+                                    for k, v in desc.items()
+                                    if isinstance(v, str) and k != "intent_text"
+                                },
+                            }
+                        )
                 except Exception as e:
                     logger.debug("tool.search.policies_failed", error=str(e))
 
@@ -187,13 +214,15 @@ class SearchExistingGuidance:
                 try:
                     p = self.preferences_store.get()
                     if text in (p.what_i_care_about or "").lower():
-                        matches.append({
-                            "guidance_id": "preferences:singleton",
-                            "storage_class": "preference",
-                            "name": "What I care about",
-                            "intent_text": p.what_i_care_about,
-                            "scope": {},
-                        })
+                        matches.append(
+                            {
+                                "guidance_id": "preferences:singleton",
+                                "storage_class": "preference",
+                                "name": "What I care about",
+                                "intent_text": p.what_i_care_about,
+                                "scope": {},
+                            }
+                        )
                 except Exception as e:
                     logger.debug("tool.search.prefs_failed", error=str(e))
 
@@ -205,16 +234,18 @@ class SearchExistingGuidance:
                             continue
                         if a.attention_mode == "normal" and not a.role:
                             continue
-                        matches.append({
-                            "guidance_id": f"area:{a.id}",
-                            "storage_class": "area_posture",
-                            "name": f"{a.name} posture",
-                            "intent_text": (
-                                f"attention_mode={a.attention_mode}"
-                                + (f" role={a.role}" if a.role else "")
-                            ),
-                            "scope": {"area": a.id},
-                        })
+                        matches.append(
+                            {
+                                "guidance_id": f"area:{a.id}",
+                                "storage_class": "area_posture",
+                                "name": f"{a.name} posture",
+                                "intent_text": (
+                                    f"attention_mode={a.attention_mode}"
+                                    + (f" role={a.role}" if a.role else "")
+                                ),
+                                "scope": {"area": a.id},
+                            }
+                        )
                 except Exception as e:
                     logger.debug("tool.search.areas_failed", error=str(e))
 
@@ -288,13 +319,16 @@ class GetKnownActor:
             from kukiihome_ha_agent.web_ui.identities import (
                 build_identity_subjects,
             )
+
             payload = await self.preprocessor_client.list_identity_subjects()
             subjects = build_identity_subjects(payload)
             needle = name.lower()
             match = next(
-                (s for s in subjects
-                 if s.display_name.lower() == needle
-                 or s.subject_id.lower() == needle),
+                (
+                    s
+                    for s in subjects
+                    if s.display_name.lower() == needle or s.subject_id.lower() == needle
+                ),
                 None,
             )
             if match is None:
@@ -332,12 +366,14 @@ def tools_from_boot(boot: Any) -> list[Tool]:
     an empty list when neither stores nor the preprocessor client are
     available (test environments, fresh installs)."""
     out: list[Tool] = []
-    out.append(SearchExistingGuidance(
-        rules_store=getattr(boot, "rules_store", None),
-        policy_store=getattr(boot, "policy_store", None),
-        preferences_store=getattr(boot, "preferences_store", None),
-        area_store=getattr(boot, "area_store", None),
-    ))
+    out.append(
+        SearchExistingGuidance(
+            rules_store=getattr(boot, "rules_store", None),
+            policy_store=getattr(boot, "policy_store", None),
+            preferences_store=getattr(boot, "preferences_store", None),
+            area_store=getattr(boot, "area_store", None),
+        )
+    )
     pp = getattr(boot, "preprocessor_client", None)
     if pp is not None:
         out.append(GetKnownActor(preprocessor_client=pp))
@@ -351,7 +387,8 @@ def tool_specs_for_llm(tools: list[Tool]) -> list[dict[str, Any]]:
 
 
 def resolve_tool_call(
-    tools: list[Tool], name: str,
+    tools: list[Tool],
+    name: str,
 ) -> Tool | None:
     return next((t for t in tools if t.name == name), None)
 

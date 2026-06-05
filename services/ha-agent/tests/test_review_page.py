@@ -13,10 +13,19 @@ from kukiihome_ha_agent.review_page import (
 
 def _track(track_id, kind="person", status="unresolved", **kw):
     base = {
-        "event_id": "e1", "camera_id": "pool", "track_id": track_id, "kind": kind,
-        "n_frames": 19, "t0": 1.0, "t1": 2.0, "modalities": ["body", "gait"],
-        "status": status, "subject_id": None, "subject_name": None,
-        "confidence": None, "verdict": None,
+        "event_id": "e1",
+        "camera_id": "pool",
+        "track_id": track_id,
+        "kind": kind,
+        "n_frames": 19,
+        "t0": 1.0,
+        "t1": 2.0,
+        "modalities": ["body", "gait"],
+        "status": status,
+        "subject_id": None,
+        "subject_name": None,
+        "confidence": None,
+        "verdict": None,
     }
     base.update(kw)
     return base
@@ -31,9 +40,17 @@ def test_renderers_return_body_only_not_full_document():
         render_review_html([], [], configured=False),
         render_review_html([_track("t1")], [], configured=True),
         render_track_detail_html(
-            {"event_id": "e1", "track_id": "t1", "kind": "person",
-             "camera_id": "pool", "n_frames": 5, "modalities": ["body"],
-             "status": "unresolved", "candidates": [], "margin": None}
+            {
+                "event_id": "e1",
+                "track_id": "t1",
+                "kind": "person",
+                "camera_id": "pool",
+                "n_frames": 5,
+                "modalities": ["body"],
+                "status": "unresolved",
+                "candidates": [],
+                "margin": None,
+            }
         ),
     ]:
         assert "<!doctype" not in html.lower()
@@ -51,8 +68,8 @@ def test_unconfigured_shows_setup_notice():
 
 def test_unresolved_track_renders_label_form_and_relative_thumb():
     html = render_review_html([_track("t1")], [], configured=True)
-    assert "review/thumb/e1/t1.jpg" in html        # relative thumb (ingress-safe)
-    assert "action='review/label'" in html          # relative form action
+    assert "review/thumb/e1/t1.jpg" in html  # relative thumb (ingress-safe)
+    assert "action='review/label'" in html  # relative form action
     assert "name='event_id' value='e1'" in html
     assert "name='track_id' value='t1'" in html
     assert "<span class='badge'>body</span>" in html and "gait" in html
@@ -60,10 +77,27 @@ def test_unresolved_track_renders_label_form_and_relative_thumb():
 
 def test_resolved_track_shows_name_not_form():
     html = render_review_html(
-        [_track("t2", kind="pet", status="resolved",
-                subject_id="rex", subject_name="Rex", confidence=0.82)],
-        [{"subject_id": "rex", "kind": "pet", "display_name": "Rex", "species": "dog",
-          "owner_id": None, "modalities": ["pet"], "appearances": 3}],
+        [
+            _track(
+                "t2",
+                kind="pet",
+                status="resolved",
+                subject_id="rex",
+                subject_name="Rex",
+                confidence=0.82,
+            )
+        ],
+        [
+            {
+                "subject_id": "rex",
+                "kind": "pet",
+                "display_name": "Rex",
+                "species": "dog",
+                "owner_id": None,
+                "modalities": ["pet"],
+                "appearances": 3,
+            }
+        ],
         configured=True,
     )
     assert "✓ Rex" in html
@@ -74,7 +108,8 @@ def test_resolved_track_shows_name_not_form():
 def test_low_confidence_resolution_flagged():
     html = render_review_html(
         [_track("t3", status="resolved", subject_name="Bob", confidence=0.64)],
-        [], configured=True,
+        [],
+        configured=True,
     )
     assert "lowconf" in html  # < 0.70 styled distinctly
 
@@ -93,7 +128,8 @@ def test_flash_rendered():
 def test_resolved_card_has_reject_form():
     html = render_review_html(
         [_track("t2", status="resolved", subject_name="Alice", confidence=0.89)],
-        [], configured=True,
+        [],
+        configured=True,
     )
     assert "action='review/reject'" in html
     assert "✗ not them" in html
@@ -101,13 +137,22 @@ def test_resolved_card_has_reject_form():
 
 
 def _subj(sid, name, kind="person"):
-    return {"subject_id": sid, "kind": kind, "display_name": name, "species": None,
-            "owner_id": None, "modalities": ["body"], "appearances": 1}
+    return {
+        "subject_id": sid,
+        "kind": kind,
+        "display_name": name,
+        "species": None,
+        "owner_id": None,
+        "modalities": ["body"],
+        "appearances": 1,
+    }
 
 
 def test_merge_form_shown_with_two_subjects():
     html = render_review_html(
-        [], [_subj("alice", "Alice"), _subj("bob", "Bob")], configured=True,
+        [],
+        [_subj("alice", "Alice"), _subj("bob", "Bob")],
+        configured=True,
     )
     assert "action='review/merge'" in html
     assert "name='from_id'" in html and "name='into_id'" in html
@@ -120,14 +165,16 @@ def test_merge_form_hidden_with_one_subject():
 
 def test_parse_reject_form():
     assert parse_reject_form({"event_id": "e", "track_id": "t"}) == {
-        "event_id": "e", "track_id": "t",
+        "event_id": "e",
+        "track_id": "t",
     }
     assert parse_reject_form({"event_id": "e"}) is None
 
 
 def test_parse_merge_form():
     assert parse_merge_form({"from_id": "a", "into_id": "b"}) == {
-        "from_id": "a", "into_id": "b",
+        "from_id": "a",
+        "into_id": "b",
     }
     assert parse_merge_form({"from_id": "a", "into_id": "a"}) is None  # self-merge
     assert parse_merge_form({"from_id": "a"}) is None
@@ -143,14 +190,31 @@ def test_card_thumbnail_links_to_detail():
 
 def _detail(**kw):
     base = {
-        "event_id": "e1", "track_id": "t1", "kind": "person", "camera_id": "pool",
-        "n_frames": 15, "modalities": ["body", "face"], "status": "unresolved",
-        "subject_id": None, "subject_name": None, "confidence": None,
+        "event_id": "e1",
+        "track_id": "t1",
+        "kind": "person",
+        "camera_id": "pool",
+        "n_frames": 15,
+        "modalities": ["body", "face"],
+        "status": "unresolved",
+        "subject_id": None,
+        "subject_name": None,
+        "confidence": None,
         "candidates": [
-            {"subject_id": "alice", "name": "Alice", "kind": "person",
-             "score": 0.78, "modality": "face"},
-            {"subject_id": "bob", "name": "Bob", "kind": "person",
-             "score": 0.41, "modality": "body"},
+            {
+                "subject_id": "alice",
+                "name": "Alice",
+                "kind": "person",
+                "score": 0.78,
+                "modality": "face",
+            },
+            {
+                "subject_id": "bob",
+                "name": "Bob",
+                "kind": "person",
+                "score": 0.41,
+                "modality": "body",
+            },
         ],
         "margin": 0.37,
     }
@@ -160,12 +224,12 @@ def _detail(**kw):
 
 def test_track_detail_clip_and_candidates():
     html = render_track_detail_html(_detail())
-    assert "review-track-clip?e=e1&t=t1" in html          # animated clip
+    assert "review-track-clip?e=e1&t=t1" in html  # animated clip
     assert "Confirm Alice" in html and "Confirm Bob" in html
-    assert "action='review/label'" in html                # confirm posts a label
-    assert "0.78" in html and "0.41" in html              # similarity scores
-    assert "label as someone new" in html                 # fallback
-    assert "href='review'" in html                        # back link
+    assert "action='review/label'" in html  # confirm posts a label
+    assert "0.78" in html and "0.41" in html  # similarity scores
+    assert "label as someone new" in html  # fallback
+    assert "href='review'" in html  # back link
 
 
 def test_track_detail_no_candidates_still_labelable():
@@ -184,7 +248,9 @@ def test_track_detail_resolved_shows_reject():
 
 def test_parse_label_form():
     assert parse_label_form({"event_id": "e", "track_id": "t", "name": "Alice"}) == {
-        "event_id": "e", "track_id": "t", "name": "Alice",
+        "event_id": "e",
+        "track_id": "t",
+        "name": "Alice",
     }
     # missing required → None
     assert parse_label_form({"event_id": "e", "track_id": "t", "name": ""}) is None

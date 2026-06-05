@@ -149,7 +149,9 @@ def test_nav_links_carry_drawer_when_drawer_is_open():
     primary nav link should append ?drawer=1 so clicking Home / Areas /
     Cameras / etc. keeps the conversation panel open across navigation."""
     html_out = render_shell(
-        "home", "x", drawer_html="<aside class='drawer'>x</aside>",
+        "home",
+        "x",
+        drawer_html="<aside class='drawer'>x</aside>",
     )
     # Every nav target should carry ?drawer=1
     for path, _label in NAV_ITEMS:
@@ -242,4 +244,7 @@ def test_drawer_trigger_resolves_to_current_page_with_drawer_query():
     assert _resolve(base2, "cameras/pool?drawer=1", "/cameras/pool") == "/cameras/pool?drawer=1"
     # Depth-3
     base3 = base_href_for_path("/areas/pool/edit")
-    assert _resolve(base3, "areas/pool/edit?drawer=1", "/areas/pool/edit") == "/areas/pool/edit?drawer=1"
+    assert (
+        _resolve(base3, "areas/pool/edit?drawer=1", "/areas/pool/edit")
+        == "/areas/pool/edit?drawer=1"
+    )

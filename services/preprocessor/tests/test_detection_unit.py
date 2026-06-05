@@ -210,9 +210,7 @@ def test_per_class_floor_still_drops_very_low_dog():
 def test_inference_floor_is_min_across_all_classes():
     """The conf handed to the model must be the lowest floor, else
     low-floor classes never receive candidate boxes to filter."""
-    det = YOLODetector(
-        DetectionConfig(confidence_min=0.5, per_class_confidence={"dog": 0.25})
-    )
+    det = YOLODetector(DetectionConfig(confidence_min=0.5, per_class_confidence={"dog": 0.25}))
     assert det._inference_floor() == 0.25
 
 

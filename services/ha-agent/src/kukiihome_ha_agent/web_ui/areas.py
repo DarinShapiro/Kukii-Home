@@ -22,7 +22,7 @@ from kukiihome_ha_agent.web_ui.shell import _e
 _MODE_CSS = {"normal": "muted", "attention": "ok", "unattended": "warn"}
 _MODE_LABEL = {
     "normal": "normal",
-    "attention": "attention ●",     # solid dot = continuous monitoring
+    "attention": "attention ●",  # solid dot = continuous monitoring
     "unattended": "unattended",
 }
 
@@ -55,19 +55,16 @@ def render_areas_list(areas: list[Area]) -> str:
         "<b>AttentionMode</b> + normal-hours + role posture. The reasoner "
         "uses these to shape its judgment per area.</div>"
         "<div style='margin:14px 0'><a class='btn primary' "
-        "href='areas/new'>+ New area</a></div>"
-        + body
+        "href='areas/new'>+ New area</a></div>" + body
     )
 
 
 def _area_tile(area: Area) -> str:
-    role_line = (
-        f" · role: <b>{_e(area.role)}</b>" if area.role else ""
-    )
+    role_line = f" · role: <b>{_e(area.role)}</b>" if area.role else ""
     hours_line = (
-        f"{len(area.normal_hours)} normal-hour window"
-        f"{'s' if len(area.normal_hours) != 1 else ''}"
-        if area.normal_hours else "any-time"
+        f"{len(area.normal_hours)} normal-hour window{'s' if len(area.normal_hours) != 1 else ''}"
+        if area.normal_hours
+        else "any-time"
     )
     cam_count = len(area.cameras)
     return (
@@ -127,12 +124,15 @@ def render_area_form(
         )
     )
 
-    cam_checks = "".join(
-        f"<label class='check'><input type='checkbox' name='cameras' "
-        f"value='{_e(cid)}'{' checked' if cid in selected_cams else ''}> "
-        f"{_e(label)}</label>"
-        for cid, label in (available_cameras or [])
-    ) or "<div class='hint'>No cameras configured yet.</div>"
+    cam_checks = (
+        "".join(
+            f"<label class='check'><input type='checkbox' name='cameras' "
+            f"value='{_e(cid)}'{' checked' if cid in selected_cams else ''}> "
+            f"{_e(label)}</label>"
+            for cid, label in (available_cameras or [])
+        )
+        or "<div class='hint'>No cameras configured yet.</div>"
+    )
 
     return (
         f"<a class='back-link' href='areas'>← All areas</a>"
@@ -166,7 +166,8 @@ def render_area_form(
             f"style='display:inline' "
             f"onsubmit='return confirm(\"Retire this area?\")'>"
             f"<button class='btn danger' type='submit'>Delete</button></form>"
-            if not is_new else ""
+            if not is_new
+            else ""
         )
         + "<button class='btn primary' type='submit'>"
         + ("Create" if is_new else "Save")

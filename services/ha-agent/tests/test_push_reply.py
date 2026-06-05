@@ -37,11 +37,16 @@ def test_alert_url_without_drawer_param_does_not_open():
 def test_drawer_renders_alert_context_strip_when_set():
     store = _store()
     sess = store.open_session(
-        "alice", alert_context="evt_42", page_context="alert/evt_42",
+        "alice",
+        alert_context="evt_42",
+        page_context="alert/evt_42",
         now_ts=NOW,
     )
     html = render_drawer(
-        session=sess, turns=[], alert_context="evt_42", now_ts=NOW,
+        session=sess,
+        turns=[],
+        alert_context="evt_42",
+        now_ts=NOW,
     )
     # Context strip surfaces the alert id so user knows what they're refining
     assert "evt_42" in html
@@ -53,10 +58,15 @@ def test_drawer_renders_alert_context_strip_when_set():
 def test_drawer_carries_alert_context_into_composer_hidden_field():
     store = _store()
     sess = store.open_session(
-        "alice", alert_context="evt_42", now_ts=NOW,
+        "alice",
+        alert_context="evt_42",
+        now_ts=NOW,
     )
     html = render_drawer(
-        session=sess, turns=[], alert_context="evt_42", now_ts=NOW,
+        session=sess,
+        turns=[],
+        alert_context="evt_42",
+        now_ts=NOW,
     )
     # The composer's hidden alert_context input carries the value so the
     # POST /api/drawer/turn handler can route the reply against the alert

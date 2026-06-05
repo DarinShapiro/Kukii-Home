@@ -40,10 +40,17 @@ class FakeFrameBuffer:
     def __init__(self):
         self.calls = []
 
-    async def get_window(self, *, camera_id, ts_start, ts_end, enrich, cache,
-                         enrich_motion_only=None):
-        self.calls.append({"ts_start": ts_start, "ts_end": ts_end,
-                           "enrich": enrich, "motion_only": enrich_motion_only})
+    async def get_window(
+        self, *, camera_id, ts_start, ts_end, enrich, cache, enrich_motion_only=None
+    ):
+        self.calls.append(
+            {
+                "ts_start": ts_start,
+                "ts_end": ts_end,
+                "enrich": enrich,
+                "motion_only": enrich_motion_only,
+            }
+        )
         return FakeFrameWindow()
 
 
@@ -55,9 +62,13 @@ def _recorder(tmp_path, frames, **cfg):
     rolling = FakeRolling(frames)
     fb = FakeFrameBuffer()
     rec = EventRecorder(
-        rolling_buffer=rolling, frame_buffer=fb, cache=object(), cameras=["pool"],
-        config=EventRecorderConfig(store_dir=tmp_path, pre_roll_s=10, post_roll_s=30,
-                                   max_duration_s=180, **cfg),
+        rolling_buffer=rolling,
+        frame_buffer=fb,
+        cache=object(),
+        cameras=["pool"],
+        config=EventRecorderConfig(
+            store_dir=tmp_path, pre_roll_s=10, post_roll_s=30, max_duration_s=180, **cfg
+        ),
     )
     return rec, fb
 
@@ -99,8 +110,8 @@ async def test_max_duration_caps_event(tmp_path):
     # Continuous motion -> force-close at max_duration even without a quiet gap.
     frames = [_frame(t, motion=True) for t in range(0, 400)]
     rec, _ = _recorder(tmp_path, frames)
-    await rec._tick("pool", now=5)     # open at trigger=0
-    await rec._tick("pool", now=190)   # duration 190 > max 180 -> close (capped)
+    await rec._tick("pool", now=5)  # open at trigger=0
+    await rec._tick("pool", now=190)  # duration 190 > max 180 -> close (capped)
     await rec.drain()
     assert rec.events_written == 1
 
@@ -135,8 +146,8 @@ async def test_enrich_disabled_persists_but_skips_detection(tmp_path):
     await rec._tick("pool", now=104)
     await rec._tick("pool", now=140)
     await rec.drain()
-    assert rec.events_written == 1          # still persisted
-    assert fb.calls == []                   # but never enriched
+    assert rec.events_written == 1  # still persisted
+    assert fb.calls == []  # but never enriched
     ev = next((tmp_path / "pool").glob("pool_*"))
     manifest = json.loads((ev / "event.json").read_text())
     assert manifest["enriched"] is False

@@ -76,7 +76,10 @@ class GraphClient(Protocol):
         ...
 
     def find_similar_actors(
-        self, embedding: tuple[float, ...], *, k: int = 3,
+        self,
+        embedding: tuple[float, ...],
+        *,
+        k: int = 3,
         min_similarity: float = 0.0,
     ) -> list[tuple[KnownActor, float]]:
         """Vector-search enrolled actors by face-embedding similarity.
@@ -247,7 +250,10 @@ class InMemoryGraphClient:
         return self._actors.get(actor_id)
 
     def find_similar_actors(
-        self, embedding: tuple[float, ...], *, k: int = 3,
+        self,
+        embedding: tuple[float, ...],
+        *,
+        k: int = 3,
         min_similarity: float = 0.0,
     ) -> list[tuple[KnownActor, float]]:
         query = tuple(float(x) for x in embedding)
@@ -487,7 +493,10 @@ class Neo4jGraphClient:
         )
 
     def find_similar_actors(
-        self, embedding: tuple[float, ...], *, k: int = 3,
+        self,
+        embedding: tuple[float, ...],
+        *,
+        k: int = 3,
         min_similarity: float = 0.0,
     ) -> list[tuple[KnownActor, float]]:
         # Native vector index ANN query (Neo4j 5.13+). The index
@@ -511,16 +520,18 @@ class Neo4jGraphClient:
             for r in records:
                 node = r["node"]
                 emb = node.get("face_embedding")
-                out.append((
-                    KnownActor(
-                        id=node["id"],
-                        name=node["name"],
-                        role=node["role"],
-                        face_embedding=tuple(emb) if emb else None,
-                        access_profile=node.get("access_profile", "none"),
-                    ),
-                    float(r["score"]),
-                ))
+                out.append(
+                    (
+                        KnownActor(
+                            id=node["id"],
+                            name=node["name"],
+                            role=node["role"],
+                            face_embedding=tuple(emb) if emb else None,
+                            access_profile=node.get("access_profile", "none"),
+                        ),
+                        float(r["score"]),
+                    )
+                )
         return out
 
     def write_vlm_decision(self, decision: VLMDecision) -> None:

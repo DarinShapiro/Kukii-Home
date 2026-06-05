@@ -22,7 +22,7 @@ NOW = 1_700_000_000.0  # fixed reference time for deterministic relative timesta
 
 def test_shell_renders_nav_with_active_highlight():
     html = render_shell("areas", "<p>hi</p>", version="0.6.0")
-    assert "<base href='./'>" in html                  # ingress-safe
+    assert "<base href='./'>" in html  # ingress-safe
     assert "Kukii-Home" in html
     assert "<p>hi</p>" in html
     assert "0.6.0" in html
@@ -115,64 +115,97 @@ def test_camera_display_name_handles_empty_and_intentional_names():
 def test_headline_uses_explicit_headline_when_present():
     # When the VLM lands, scene_description goes here verbatim
     from kukiihome_ha_agent.web_ui.home import _alert_headline
-    assert _alert_headline({"headline": "Alice arrived at the front door"}) == \
-        "Alice arrived at the front door"
+
+    assert (
+        _alert_headline({"headline": "Alice arrived at the front door"})
+        == "Alice arrived at the front door"
+    )
 
 
 def test_headline_composes_kind_at_friendly_camera():
     from kukiihome_ha_agent.web_ui.home import _alert_headline
-    assert _alert_headline({
-        "kind": "person",
-        "camera_friendly_name": "Front South Camera Fluent",
-    }) == "Person detected at Front South Camera"
 
-    assert _alert_headline({
-        "kind": "dog",
-        "camera_friendly_name": "Backyard Cam Clear",
-    }) == "Dog detected at Backyard Cam"
+    assert (
+        _alert_headline(
+            {
+                "kind": "person",
+                "camera_friendly_name": "Front South Camera Fluent",
+            }
+        )
+        == "Person detected at Front South Camera"
+    )
+
+    assert (
+        _alert_headline(
+            {
+                "kind": "dog",
+                "camera_friendly_name": "Backyard Cam Clear",
+            }
+        )
+        == "Dog detected at Backyard Cam"
+    )
 
 
 def test_headline_actor_name_when_resolved():
     from kukiihome_ha_agent.web_ui.home import _alert_headline
-    assert _alert_headline({
-        "actor_name": "Bob",
-        "camera_friendly_name": "Front South Camera Fluent",
-    }) == "Bob at Front South Camera"
+
+    assert (
+        _alert_headline(
+            {
+                "actor_name": "Bob",
+                "camera_friendly_name": "Front South Camera Fluent",
+            }
+        )
+        == "Bob at Front South Camera"
+    )
     assert _alert_headline({"actor_name": "Bob"}) == "Bob seen"
 
 
 def test_headline_motion_fallback():
     from kukiihome_ha_agent.web_ui.home import _alert_headline
+
     # No kind, no actor, no headline — just camera
-    assert _alert_headline({
-        "camera_friendly_name": "Front South Camera Fluent",
-    }) == "Motion at Front South Camera"
+    assert (
+        _alert_headline(
+            {
+                "camera_friendly_name": "Front South Camera Fluent",
+            }
+        )
+        == "Motion at Front South Camera"
+    )
     # Truly bare alert
     assert _alert_headline({}) == "Motion"
 
 
 def test_activity_row_drops_redundant_slug_when_in_headline():
     from kukiihome_ha_agent.web_ui.home import _render_activity_row
-    html = _render_activity_row({
-        "event_id": "e1",
-        "camera_id": "front_south",
-        "camera_friendly_name": "Front South Camera Fluent",
-        "kind": "person",
-        "trigger_ts": NOW - 600,
-        "triage_status": "alerted",
-    }, now_ts=NOW)
+
+    html = _render_activity_row(
+        {
+            "event_id": "e1",
+            "camera_id": "front_south",
+            "camera_friendly_name": "Front South Camera Fluent",
+            "kind": "person",
+            "trigger_ts": NOW - 600,
+            "triage_status": "alerted",
+        },
+        now_ts=NOW,
+    )
     assert "Person detected at Front South Camera" in html
     # · front_south slug must NOT appear: it's already in the headline
     assert "· front_south" not in html
 
     # When the headline really doesn't mention the camera, the slug DOES help
-    html = _render_activity_row({
-        "event_id": "e2",
-        "camera_id": "front_south",
-        "headline": "Unknown delivery",     # nothing about the camera
-        "trigger_ts": NOW - 600,
-        "triage_status": "alerted",
-    }, now_ts=NOW)
+    html = _render_activity_row(
+        {
+            "event_id": "e2",
+            "camera_id": "front_south",
+            "headline": "Unknown delivery",  # nothing about the camera
+            "trigger_ts": NOW - 600,
+            "triage_status": "alerted",
+        },
+        now_ts=NOW,
+    )
     assert "Unknown delivery" in html
     assert "· front_south" in html
 
@@ -182,9 +215,13 @@ def test_activity_row_drops_redundant_slug_when_in_headline():
 
 def test_home_empty_is_winstate():
     html = render_home_page(
-        alerts_recent=[], unresolved_tracks=0,
-        cameras_total=0, cameras_active=0,
-        preprocessor_ok=None, ha_connected=False, ha_entities=0,
+        alerts_recent=[],
+        unresolved_tracks=0,
+        cameras_total=0,
+        cameras_active=0,
+        preprocessor_ok=None,
+        ha_connected=False,
+        ha_entities=0,
         now_ts=NOW,
     )
     assert "All quiet" in html or "Nothing yet" in html
@@ -197,31 +234,47 @@ def test_home_empty_is_winstate():
 # ─── home page — with real-shaped alert data ───────────────────────
 
 
-def _alert(headline, status="alerted", cam="pool", ts=NOW - 600,
-           acknowledged=False, event_id="e1"):
+def _alert(headline, status="alerted", cam="pool", ts=NOW - 600, acknowledged=False, event_id="e1"):
     return {
-        "headline": headline, "camera_id": cam,
+        "headline": headline,
+        "camera_id": cam,
         # trigger_ts is a plain unix ts — _alert_when_ts will use it when
         # recorded_at is absent (we leave it absent here for simplicity).
         "trigger_ts": ts,
         "triage_status": status,
-        "acknowledged": acknowledged, "event_id": event_id,
+        "acknowledged": acknowledged,
+        "event_id": event_id,
     }
 
 
 def test_home_status_line_and_activity():
     alerts = [
-        _alert("Alice arrived", status="alerted", cam="front_door",
-               ts=NOW - 600, acknowledged=True, event_id="e1"),
-        _alert("Rex in backyard", status="dismissed", cam="backyard",
-               ts=NOW - 3600, event_id="e2"),
-        _alert("Unknown delivery", status="alerted", cam="front_door",
-               ts=NOW - 7200, acknowledged=False, event_id="e3"),
+        _alert(
+            "Alice arrived",
+            status="alerted",
+            cam="front_door",
+            ts=NOW - 600,
+            acknowledged=True,
+            event_id="e1",
+        ),
+        _alert("Rex in backyard", status="dismissed", cam="backyard", ts=NOW - 3600, event_id="e2"),
+        _alert(
+            "Unknown delivery",
+            status="alerted",
+            cam="front_door",
+            ts=NOW - 7200,
+            acknowledged=False,
+            event_id="e3",
+        ),
     ]
     html = render_home_page(
-        alerts_recent=alerts, unresolved_tracks=5,
-        cameras_total=4, cameras_active=4,
-        preprocessor_ok=True, ha_connected=True, ha_entities=18,
+        alerts_recent=alerts,
+        unresolved_tracks=5,
+        cameras_total=4,
+        cameras_active=4,
+        preprocessor_ok=True,
+        ha_connected=True,
+        ha_entities=18,
         now_ts=NOW,
     )
     # Status line reports today's counts including unhandled
@@ -244,9 +297,13 @@ def test_home_status_line_and_activity():
 def test_home_html_escapes_alert_content():
     alerts = [_alert(headline="<img src=x>", event_id="<evil>")]
     html = render_home_page(
-        alerts_recent=alerts, unresolved_tracks=0,
-        cameras_total=1, cameras_active=1,
-        preprocessor_ok=True, ha_connected=True, ha_entities=0,
+        alerts_recent=alerts,
+        unresolved_tracks=0,
+        cameras_total=1,
+        cameras_active=1,
+        preprocessor_ok=True,
+        ha_connected=True,
+        ha_entities=0,
         now_ts=NOW,
     )
     assert "<img src=x>" not in html
@@ -256,9 +313,13 @@ def test_home_html_escapes_alert_content():
 
 def test_home_unresolved_tracks_disappears_when_zero():
     html = render_home_page(
-        alerts_recent=[_alert("ok")], unresolved_tracks=0,
-        cameras_total=1, cameras_active=1,
-        preprocessor_ok=True, ha_connected=True, ha_entities=0,
+        alerts_recent=[_alert("ok")],
+        unresolved_tracks=0,
+        cameras_total=1,
+        cameras_active=1,
+        preprocessor_ok=True,
+        ha_connected=True,
+        ha_entities=0,
         now_ts=NOW,
     )
     assert "unnamed track" not in html  # no row when none unresolved

@@ -30,18 +30,22 @@ def _seed(db_path) -> tuple[DetectionStore, IdentityStore]:
     """Two tracks on the 'pool' cam: t1 (person, body), d1 (dog, pet)."""
     ds = DetectionStore(db_path)
     ds.register_event(event_id="e1", camera_id="pool", captured_ts=100.0)
-    ds.add_detections([
-        DetectionRow("e1", "pool", 5.0, "f5.jpg", "person", 0.9, (0.1, 0.1, 0.5, 0.9), "t1"),
-        DetectionRow("e1", "pool", 6.0, "f6.jpg", "person", 0.8, (0.1, 0.1, 0.5, 0.9), "t1"),
-        DetectionRow("e1", "pool", 5.0, "f5.jpg", "dog", 0.7, (0.6, 0.6, 0.9, 0.9), "d1"),
-    ])
+    ds.add_detections(
+        [
+            DetectionRow("e1", "pool", 5.0, "f5.jpg", "person", 0.9, (0.1, 0.1, 0.5, 0.9), "t1"),
+            DetectionRow("e1", "pool", 6.0, "f6.jpg", "person", 0.8, (0.1, 0.1, 0.5, 0.9), "t1"),
+            DetectionRow("e1", "pool", 5.0, "f5.jpg", "dog", 0.7, (0.6, 0.6, 0.9, 0.9), "d1"),
+        ]
+    )
     alice = _unit([0.2, 0.9, 0.1, 0.3])
     rex = _unit([0.7, 0.1, 0.2, 0.4])
-    ds.add_embeddings([
-        EmbeddingRow("e1", "pool", "t1", 5.0, "body", "body_id_osnet", alice),
-        EmbeddingRow("e1", "pool", "t1", 6.0, "body", "body_id_osnet", alice),
-        EmbeddingRow("e1", "pool", "d1", 5.0, "pet", "pet_dinov2", rex),
-    ])
+    ds.add_embeddings(
+        [
+            EmbeddingRow("e1", "pool", "t1", 5.0, "body", "body_id_osnet", alice),
+            EmbeddingRow("e1", "pool", "t1", 6.0, "body", "body_id_osnet", alice),
+            EmbeddingRow("e1", "pool", "d1", 5.0, "pet", "pet_dinov2", rex),
+        ]
+    )
     ds.mark_enriched("e1", 130.0)
     return ds, IdentityStore(db_path)
 
@@ -107,8 +111,12 @@ def client(tmp_path):
     db = tmp_path / "det.db"
     ds, idn = _seed(db)
     state = AppState(
-        config=_min_config(), cache=ActorCache(), frame_buffer=object(),
-        started_ts=0.0, detection_store=ds, identity_store=idn,
+        config=_min_config(),
+        cache=ActorCache(),
+        frame_buffer=object(),
+        started_ts=0.0,
+        detection_store=ds,
+        identity_store=idn,
         event_store_dir=str(tmp_path / "events"),
     )
     return TestClient(create_app(state))
@@ -210,20 +218,29 @@ def test_merge_repoints_and_deactivates(tmp_path):
     b = idn.upsert_subject(display_name="Bob", kind="person")
     idn.enroll_from_track(ds, subject_id=b, event_id="e1", track_id="t1")
     idn.persist_resolutions(
-        (ActorMatch(actor_id="bob", confidence=0.8, match_method="body_id_osnet",
-                    frame_ts=5.0, track_id="t1"),),
-        camera_id="pool", event_id="e1",
+        (
+            ActorMatch(
+                actor_id="bob",
+                confidence=0.8,
+                match_method="body_id_osnet",
+                frame_ts=5.0,
+                track_id="t1",
+            ),
+        ),
+        camera_id="pool",
+        event_id="e1",
     )
 
     assert idn.merge_subjects("bob", "alice") is True
     assert {s.display_name for s in idn.list_subjects()} == {"Alice"}  # bob deactivated
-    row = idn._conn.execute(
-        "SELECT subject_id FROM resolutions WHERE track_id='t1'"
-    ).fetchone()
+    row = idn._conn.execute("SELECT subject_id FROM resolutions WHERE track_id='t1'").fetchone()
     assert row["subject_id"] == "alice"  # repointed
-    assert idn._conn.execute(
-        "SELECT COUNT(*) FROM subject_templates WHERE subject_id='bob'"
-    ).fetchone()[0] == 0  # bob's templates folded away
+    assert (
+        idn._conn.execute(
+            "SELECT COUNT(*) FROM subject_templates WHERE subject_id='bob'"
+        ).fetchone()[0]
+        == 0
+    )  # bob's templates folded away
 
 
 def test_merge_guards(tmp_path):
@@ -233,15 +250,13 @@ def test_merge_guards(tmp_path):
     r = idn.upsert_subject(display_name="Rex", kind="pet")
     idn.enroll_from_track(ds, subject_id=r, event_id="e1", track_id="d1")
     with pytest.raises(ValueError):
-        idn.merge_subjects("rex", "alice")          # cross-kind
+        idn.merge_subjects("rex", "alice")  # cross-kind
     assert idn.merge_subjects("alice", "alice") is False  # self
     assert idn.merge_subjects("ghost", "alice") is False  # unknown
 
 
 def _d1(client):
-    return next(
-        t for t in client.get("/identity/tracks").json()["tracks"] if t["track_id"] == "d1"
-    )
+    return next(t for t in client.get("/identity/tracks").json()["tracks"] if t["track_id"] == "d1")
 
 
 def test_relabel_after_reject_overrides(client):
@@ -269,16 +284,20 @@ def _seed_two_people(db_path):
     ds = DetectionStore(db_path)
     ds.register_event(event_id="e1", camera_id="pool", captured_ts=100.0)
     alice, bob = _unit([0.2, 0.9, 0.1, 0.3]), _unit([0.9, 0.1, 0.2, 0.1])
-    ds.add_detections([
-        DetectionRow("e1", "pool", 5.0, "f5.jpg", "person", 0.9, (0.1, 0.1, 0.5, 0.9), "t1"),
-        DetectionRow("e1", "pool", 5.5, "f5b.jpg", "person", 0.85, (0.12, 0.1, 0.5, 0.9), "t1"),
-        DetectionRow("e1", "pool", 6.0, "f6.jpg", "person", 0.8, (0.5, 0.1, 0.9, 0.9), "t2"),
-    ])
-    ds.add_embeddings([
-        EmbeddingRow("e1", "pool", "t1", 5.0, "body", "body_id_osnet", alice),
-        EmbeddingRow("e1", "pool", "t1", 5.5, "body", "body_id_osnet", alice),
-        EmbeddingRow("e1", "pool", "t2", 6.0, "body", "body_id_osnet", bob),
-    ])
+    ds.add_detections(
+        [
+            DetectionRow("e1", "pool", 5.0, "f5.jpg", "person", 0.9, (0.1, 0.1, 0.5, 0.9), "t1"),
+            DetectionRow("e1", "pool", 5.5, "f5b.jpg", "person", 0.85, (0.12, 0.1, 0.5, 0.9), "t1"),
+            DetectionRow("e1", "pool", 6.0, "f6.jpg", "person", 0.8, (0.5, 0.1, 0.9, 0.9), "t2"),
+        ]
+    )
+    ds.add_embeddings(
+        [
+            EmbeddingRow("e1", "pool", "t1", 5.0, "body", "body_id_osnet", alice),
+            EmbeddingRow("e1", "pool", "t1", 5.5, "body", "body_id_osnet", alice),
+            EmbeddingRow("e1", "pool", "t2", 6.0, "body", "body_id_osnet", bob),
+        ]
+    )
     ds.mark_enriched("e1", 130.0)
     return ds, IdentityStore(db_path)
 
@@ -288,28 +307,39 @@ def test_fragments_decluttered_by_quality_not_length(tmp_path):
     body track stays. Quality, not frame count."""
     ds = DetectionStore(tmp_path / "det.db")
     ds.register_event(event_id="e1", camera_id="pool", captured_ts=100.0)
-    ds.add_detections([
-        DetectionRow("e1", "pool", t, f"{t}.jpg", "person", 0.9, (0.1, 0.1, 0.5, 0.9), tid)
-        for tid, t in [("body", 1.0), ("body", 2.0), ("body", 3.0),  # 3-frame body
-                       ("frag", 4.0),                                  # 1-frame, no face
-                       ("face", 5.0)]                                  # 1-frame, but face
-    ])
+    ds.add_detections(
+        [
+            DetectionRow("e1", "pool", t, f"{t}.jpg", "person", 0.9, (0.1, 0.1, 0.5, 0.9), tid)
+            for tid, t in [
+                ("body", 1.0),
+                ("body", 2.0),
+                ("body", 3.0),  # 3-frame body
+                ("frag", 4.0),  # 1-frame, no face
+                ("face", 5.0),
+            ]  # 1-frame, but face
+        ]
+    )
     v = _unit([1.0, 0.0])
-    ds.add_embeddings([
-        EmbeddingRow("e1", "pool", "body", 1.0, "body", "body_id_osnet", v),
-        EmbeddingRow("e1", "pool", "body", 2.0, "body", "body_id_osnet", v),
-        EmbeddingRow("e1", "pool", "body", 3.0, "body", "body_id_osnet", v),
-        EmbeddingRow("e1", "pool", "frag", 4.0, "body", "body_id_osnet", v),   # top-of-head
-        EmbeddingRow("e1", "pool", "face", 5.0, "face", "face_arcface", v),     # clear face
-    ])
+    ds.add_embeddings(
+        [
+            EmbeddingRow("e1", "pool", "body", 1.0, "body", "body_id_osnet", v),
+            EmbeddingRow("e1", "pool", "body", 2.0, "body", "body_id_osnet", v),
+            EmbeddingRow("e1", "pool", "body", 3.0, "body", "body_id_osnet", v),
+            EmbeddingRow("e1", "pool", "frag", 4.0, "body", "body_id_osnet", v),  # top-of-head
+            EmbeddingRow("e1", "pool", "face", 5.0, "face", "face_arcface", v),  # clear face
+        ]
+    )
     idn = IdentityStore(tmp_path / "det.db")
 
     kept = {t.track_id for t in idn.track_summaries()}
-    assert kept == {"body", "face"}        # substantial body + clear face kept
-    assert "frag" not in kept              # faceless 1-frame splinter hidden
+    assert kept == {"body", "face"}  # substantial body + clear face kept
+    assert "frag" not in kept  # faceless 1-frame splinter hidden
     # toggle reveals everything (nothing is truly lost)
     assert {t.track_id for t in idn.track_summaries(include_fragments=True)} == {
-        "body", "frag", "face"}
+        "body",
+        "frag",
+        "face",
+    }
 
 
 def test_track_frames_ordered(tmp_path):
@@ -328,9 +358,9 @@ def test_candidates_rank_and_margin(tmp_path):
 
     c = idn.candidates("e1", "t1")
     cands = c["candidates"]
-    assert cands[0]["name"] == "Alice" and cands[0]["score"] > 0.9      # self, top
+    assert cands[0]["name"] == "Alice" and cands[0]["score"] > 0.9  # self, top
     assert cands[1]["name"] == "Bob" and cands[1]["score"] < cands[0]["score"]
-    assert c["margin"] > 0                                              # ranked, separated
+    assert c["margin"] > 0  # ranked, separated
     assert cands[0]["modality"] == "body"
 
 
@@ -360,8 +390,13 @@ def test_api_clip_gif_and_detail(tmp_path):
     for name in ("f5.jpg", "f5b.jpg", "f6.jpg"):
         cv2.imwrite(str(ev / name), np.full((400, 300, 3), 110, np.uint8))
     state = AppState(
-        config=_min_config(), cache=ActorCache(), frame_buffer=object(), started_ts=0.0,
-        detection_store=ds, identity_store=idn, event_store_dir=str(tmp_path / "events"),
+        config=_min_config(),
+        cache=ActorCache(),
+        frame_buffer=object(),
+        started_ts=0.0,
+        detection_store=ds,
+        identity_store=idn,
+        event_store_dir=str(tmp_path / "events"),
     )
     c = TestClient(create_app(state))
 
@@ -380,21 +415,29 @@ def test_api_reject_and_merge_endpoints(client):
     client.post("/identity/label", json={"event_id": "e1", "track_id": "t1", "name": "Alice"})
     assert any(
         t["status"] == "resolved"
-        for t in client.get("/identity/tracks").json()["tracks"] if t["track_id"] == "t1"
+        for t in client.get("/identity/tracks").json()["tracks"]
+        if t["track_id"] == "t1"
     )
     r = client.post("/identity/reject", json={"event_id": "e1", "track_id": "t1"})
     assert r.status_code == 200 and r.json()["rejected"] >= 1
     assert all(
         t["status"] == "unresolved"
-        for t in client.get("/identity/tracks").json()["tracks"] if t["track_id"] == "t1"
+        for t in client.get("/identity/tracks").json()["tracks"]
+        if t["track_id"] == "t1"
     )
 
     # cross-kind merge rejected (400); unknown subject 404.
     client.post("/identity/label", json={"event_id": "e1", "track_id": "t1", "name": "Alice"})
     client.post("/identity/label", json={"event_id": "e1", "track_id": "d1", "name": "Rex"})
-    assert client.post(
-        "/identity/subjects/merge", json={"from_id": "rex", "into_id": "alice"}
-    ).status_code == 400
-    assert client.post(
-        "/identity/subjects/merge", json={"from_id": "ghost", "into_id": "alice"}
-    ).status_code == 404
+    assert (
+        client.post(
+            "/identity/subjects/merge", json={"from_id": "rex", "into_id": "alice"}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/identity/subjects/merge", json={"from_id": "ghost", "into_id": "alice"}
+        ).status_code
+        == 404
+    )

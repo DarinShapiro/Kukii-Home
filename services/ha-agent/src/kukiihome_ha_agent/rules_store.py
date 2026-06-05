@@ -228,17 +228,13 @@ class RulesStore:
         )
 
     def get(self, rule_id: str) -> Rule | None:
-        row = self._conn.execute(
-            "SELECT * FROM rules WHERE id = ?", (rule_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM rules WHERE id = ?", (rule_id,)).fetchone()
         return self._row_to_rule(row) if row else None
 
     def all_rules(self, *, include_retired: bool = False) -> list[Rule]:
         """All rules, ordered by ``updated_at`` desc. Retired hidden by default."""
         if include_retired:
-            rows = self._conn.execute(
-                "SELECT * FROM rules ORDER BY updated_at DESC"
-            ).fetchall()
+            rows = self._conn.execute("SELECT * FROM rules ORDER BY updated_at DESC").fetchall()
         else:
             rows = self._conn.execute(
                 "SELECT * FROM rules WHERE retired_at IS NULL ORDER BY updated_at DESC"
@@ -248,8 +244,7 @@ class RulesStore:
     def active_rules(self) -> list[Rule]:
         """Enabled + non-retired — the set triage cares about."""
         rows = self._conn.execute(
-            "SELECT * FROM rules WHERE enabled = 1 AND retired_at IS NULL "
-            "ORDER BY updated_at DESC"
+            "SELECT * FROM rules WHERE enabled = 1 AND retired_at IS NULL ORDER BY updated_at DESC"
         ).fetchall()
         return [self._row_to_rule(r) for r in rows]
 
@@ -273,10 +268,19 @@ class RulesStore:
             "matched_count, last_matched_at, retired_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                rule.id, rule.name, int(rule.enabled), rule.mode,
-                rule.shortcut_subject, rule.scope.to_json(), rule.intent_text,
-                rule.severity_static, rule.created_at, rule.updated_at,
-                rule.matched_count, rule.last_matched_at, rule.retired_at,
+                rule.id,
+                rule.name,
+                int(rule.enabled),
+                rule.mode,
+                rule.shortcut_subject,
+                rule.scope.to_json(),
+                rule.intent_text,
+                rule.severity_static,
+                rule.created_at,
+                rule.updated_at,
+                rule.matched_count,
+                rule.last_matched_at,
+                rule.retired_at,
             ),
         )
         self._conn.commit()
@@ -292,24 +296,37 @@ class RulesStore:
         if rule is None:
             return None
         allowed = {
-            "name", "enabled", "mode", "shortcut_subject",
-            "intent_text", "severity_static",
+            "name",
+            "enabled",
+            "mode",
+            "shortcut_subject",
+            "intent_text",
+            "severity_static",
         }
         for k, v in fields.items():
             if k in allowed:
                 setattr(rule, k, v)
         if "scope" in fields:
-            rule.scope = fields["scope"] if isinstance(fields["scope"], RuleScope) \
+            rule.scope = (
+                fields["scope"]
+                if isinstance(fields["scope"], RuleScope)
                 else RuleScope.from_json(str(fields["scope"]))
+            )
         rule.updated_at = time.time()
         self._conn.execute(
             "UPDATE rules SET name=?, enabled=?, mode=?, shortcut_subject=?, "
             "scope_json=?, intent_text=?, severity_static=?, updated_at=? "
             "WHERE id=?",
             (
-                rule.name, int(rule.enabled), rule.mode, rule.shortcut_subject,
-                rule.scope.to_json(), rule.intent_text, rule.severity_static,
-                rule.updated_at, rule_id,
+                rule.name,
+                int(rule.enabled),
+                rule.mode,
+                rule.shortcut_subject,
+                rule.scope.to_json(),
+                rule.intent_text,
+                rule.severity_static,
+                rule.updated_at,
+                rule_id,
             ),
         )
         self._conn.commit()
@@ -357,8 +374,13 @@ class RulesStore:
             "protective_actions_taken, alert_emitted) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (
-                m.rule_id, m.incident_id, m.matched_at, m.severity,
-                m.confidence, m.reasoning, int(m.matched),
+                m.rule_id,
+                m.incident_id,
+                m.matched_at,
+                m.severity,
+                m.confidence,
+                m.reasoning,
+                int(m.matched),
                 json.dumps(m.protective_actions_taken),
                 int(m.alert_emitted),
             ),
@@ -387,14 +409,20 @@ class RulesStore:
                 actions = json.loads(r["protective_actions_taken"] or "[]")
             except json.JSONDecodeError:
                 actions = []
-            out.append(RuleMatch(
-                id=r["id"], rule_id=r["rule_id"], incident_id=r["incident_id"],
-                matched_at=r["matched_at"], severity=r["severity"],
-                confidence=r["confidence"], reasoning=r["reasoning"],
-                matched=bool(r["matched"]),
-                protective_actions_taken=actions,
-                alert_emitted=bool(r["alert_emitted"]),
-            ))
+            out.append(
+                RuleMatch(
+                    id=r["id"],
+                    rule_id=r["rule_id"],
+                    incident_id=r["incident_id"],
+                    matched_at=r["matched_at"],
+                    severity=r["severity"],
+                    confidence=r["confidence"],
+                    reasoning=r["reasoning"],
+                    matched=bool(r["matched"]),
+                    protective_actions_taken=actions,
+                    alert_emitted=bool(r["alert_emitted"]),
+                )
+            )
         return out
 
     def matches_for_incident(self, incident_id: str) -> list[RuleMatch]:
@@ -405,13 +433,15 @@ class RulesStore:
         ).fetchall()
         return [
             RuleMatch(
-                id=r["id"], rule_id=r["rule_id"], incident_id=r["incident_id"],
-                matched_at=r["matched_at"], severity=r["severity"],
-                confidence=r["confidence"], reasoning=r["reasoning"],
+                id=r["id"],
+                rule_id=r["rule_id"],
+                incident_id=r["incident_id"],
+                matched_at=r["matched_at"],
+                severity=r["severity"],
+                confidence=r["confidence"],
+                reasoning=r["reasoning"],
                 matched=bool(r["matched"]),
-                protective_actions_taken=json.loads(
-                    r["protective_actions_taken"] or "[]"
-                ),
+                protective_actions_taken=json.loads(r["protective_actions_taken"] or "[]"),
                 alert_emitted=bool(r["alert_emitted"]),
             )
             for r in rows

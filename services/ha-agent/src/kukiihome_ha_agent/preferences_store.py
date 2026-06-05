@@ -37,9 +37,7 @@ logger = structlog.get_logger(__name__)
 
 
 Vigilance = Literal["low", "normal", "high"]
-Relationship = Literal[
-    "resident", "household", "guest", "vendor", "stranger", "unknown"
-]
+Relationship = Literal["resident", "household", "guest", "vendor", "stranger", "unknown"]
 
 
 # ─── Dataclass ──────────────────────────────────────────────────────
@@ -96,9 +94,7 @@ class PreferencesStore:
         self._conn.commit()
 
     def get(self) -> Preferences:
-        row = self._conn.execute(
-            "SELECT * FROM preferences WHERE id = 1"
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM preferences WHERE id = 1").fetchone()
         try:
             quiet = json.loads(row["quiet_hours"] or "[]")
         except (json.JSONDecodeError, TypeError):
@@ -116,7 +112,8 @@ class PreferencesStore:
         )
 
     def update(
-        self, *,
+        self,
+        *,
         vigilance: Vigilance | None = None,
         what_i_care_about: str | None = None,
         quiet_hours: list[dict[str, Any]] | None = None,
@@ -133,8 +130,10 @@ class PreferencesStore:
             "UPDATE preferences SET vigilance=?, what_i_care_about=?, "
             "quiet_hours=?, updated_at=? WHERE id = 1",
             (
-                cur.vigilance, cur.what_i_care_about,
-                json.dumps(cur.quiet_hours), cur.updated_at,
+                cur.vigilance,
+                cur.what_i_care_about,
+                json.dumps(cur.quiet_hours),
+                cur.updated_at,
             ),
         )
         self._conn.commit()
@@ -142,7 +141,9 @@ class PreferencesStore:
         return cur
 
     def set_relationship(
-        self, actor_id: str, relationship: Relationship,
+        self,
+        actor_id: str,
+        relationship: Relationship,
     ) -> None:
         now = time.time()
         self._conn.execute(
@@ -155,7 +156,8 @@ class PreferencesStore:
 
     def clear_relationship(self, actor_id: str) -> None:
         self._conn.execute(
-            "DELETE FROM actor_relationships WHERE actor_id = ?", (actor_id,),
+            "DELETE FROM actor_relationships WHERE actor_id = ?",
+            (actor_id,),
         )
         self._conn.commit()
 

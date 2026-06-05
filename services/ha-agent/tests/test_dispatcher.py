@@ -32,7 +32,8 @@ def _dispatcher():
 
 def test_notify_persistent_rule_with_actor_and_area():
     p = _dispatcher().propose(
-        "Notify me when Winston is in the Front yard alone", ctx=_ctx(),
+        "Notify me when Winston is in the Front yard alone",
+        ctx=_ctx(),
     )
     assert p.storage_class == "rule"
     assert p.lifecycle == "persistent"
@@ -44,7 +45,8 @@ def test_notify_persistent_rule_with_actor_and_area():
 
 def test_actor_resolved_with_canonical_casing():
     p = _dispatcher().propose(
-        "alert me when bob arrives", ctx=_ctx(),
+        "alert me when bob arrives",
+        ctx=_ctx(),
     )
     # case-insensitive match, but actor_name is the canonical "Bob"
     assert p.scope.get("actor_name") == "Bob"
@@ -55,11 +57,11 @@ def test_camera_used_when_no_area_mentioned():
     # utterance mentions a camera that overlaps an area name, the area
     # wins; this is by-design — areas are the higher-level grouping.
     p = _dispatcher().propose(
-        "Tell me when motion happens on the Front Camera", ctx=_ctx(),
+        "Tell me when motion happens on the Front Camera",
+        ctx=_ctx(),
     )
     # Either path is acceptable; assert at least one was resolved.
-    assert p.scope.get("camera") == "front_camera" or \
-        p.scope.get("area") == "front_yard"
+    assert p.scope.get("camera") == "front_camera" or p.scope.get("area") == "front_yard"
 
 
 # ─── Transient intent branch ──────────────────────────────────────
@@ -67,7 +69,8 @@ def test_camera_used_when_no_area_mentioned():
 
 def test_tonight_keyword_routes_to_transient_intent():
     p = _dispatcher().propose(
-        "Notify me when Bob's car arrives tonight", ctx=_ctx(),
+        "Notify me when Bob's car arrives tonight",
+        ctx=_ctx(),
     )
     assert p.storage_class == "transient_intent"
     assert p.lifecycle == "temporal"
@@ -77,7 +80,8 @@ def test_tonight_keyword_routes_to_transient_intent():
 
 def test_today_keyword_routes_to_transient_intent():
     p = _dispatcher().propose(
-        "Alert me if anyone is at the pool today", ctx=_ctx(),
+        "Alert me if anyone is at the pool today",
+        ctx=_ctx(),
     )
     assert p.storage_class == "transient_intent"
 
@@ -87,7 +91,8 @@ def test_today_keyword_routes_to_transient_intent():
 
 def test_dont_alert_routes_to_dismissal_policy():
     p = _dispatcher().propose(
-        "Don't alert me when there's a dog at the front camera", ctx=_ctx(),
+        "Don't alert me when there's a dog at the front camera",
+        ctx=_ctx(),
     )
     assert p.storage_class == "dismissal_policy"
     assert p.fire_affordance == "dismiss"
@@ -95,14 +100,16 @@ def test_dont_alert_routes_to_dismissal_policy():
 
 def test_boring_routes_to_dismissal():
     p = _dispatcher().propose(
-        "These wind-in-tree events are boring noise", ctx=_ctx(),
+        "These wind-in-tree events are boring noise",
+        ctx=_ctx(),
     )
     assert p.storage_class == "dismissal_policy"
 
 
 def test_dismissal_with_temporal_marker_is_temporal_lifecycle():
     p = _dispatcher().propose(
-        "Ignore alerts at the Pool tonight", ctx=_ctx(),
+        "Ignore alerts at the Pool tonight",
+        ctx=_ctx(),
     )
     assert p.storage_class == "dismissal_policy"
     assert p.lifecycle == "temporal"
@@ -156,7 +163,8 @@ def test_proposals_always_include_reasoning_field():
 
 def test_reasoning_field_is_concise():
     p = _dispatcher().propose(
-        "Notify me when Winston is at the front yard", ctx=_ctx(),
+        "Notify me when Winston is at the front yard",
+        ctx=_ctx(),
     )
     # Single sentence guidance — under 200 chars keeps the audit row legible.
     assert len(p.reasoning) < 200
@@ -167,7 +175,8 @@ def test_reasoning_field_is_concise():
 
 def test_rule_proposal_carries_a_default_severity():
     p = _dispatcher().propose(
-        "Tell me when Winston is in the Front yard alone", ctx=_ctx(),
+        "Tell me when Winston is in the Front yard alone",
+        ctx=_ctx(),
     )
     # Heuristic provider doesn't infer severity from text in v1 — defaults to
     # 'normal' for rules so the rule can fire without VLM grading.
@@ -186,7 +195,11 @@ class _FakeLLMClient:
         self.calls: list[tuple[str, str]] = []
 
     async def complete(
-        self, *, system: str, user: str, max_tokens: int = 800,
+        self,
+        *,
+        system: str,
+        user: str,
+        max_tokens: int = 800,
     ) -> str:
         self.calls.append((system, user))
         if not self.responses:
@@ -211,7 +224,8 @@ async def test_llm_provider_happy_path_returns_proposal():
     client = _FakeLLMClient([_good_response_json()])
     provider = LLMDispatcherProvider(client)
     p = await provider.propose_async(
-        "Tell me when Winston is alone in the Front yard", ctx=_ctx(),
+        "Tell me when Winston is alone in the Front yard",
+        ctx=_ctx(),
     )
     assert isinstance(p, PlacementProposal)
     assert p.storage_class == "rule"
@@ -240,12 +254,15 @@ async def test_llm_provider_retries_on_invalid_json_then_succeeds():
 
 @pytest.mark.asyncio
 async def test_llm_provider_retries_on_schema_failure_then_succeeds():
-    bad = '{"storage_class": "garbage", "name": "x", "scope": {}, ' \
-          '"lifecycle": "persistent", "fire_affordance": "alert", ' \
-          '"intent_text": "x", "reasoning": "x"}'
+    bad = (
+        '{"storage_class": "garbage", "name": "x", "scope": {}, '
+        '"lifecycle": "persistent", "fire_affordance": "alert", '
+        '"intent_text": "x", "reasoning": "x"}'
+    )
     client = _FakeLLMClient([bad, _good_response_json()])
     p = await LLMDispatcherProvider(client).propose_async(
-        "Tell me when Winston is alone", ctx=_ctx(),
+        "Tell me when Winston is alone",
+        ctx=_ctx(),
     )
     assert p.storage_class == "rule"
     # Retry prompt mentions schema failure
@@ -268,7 +285,8 @@ async def test_llm_provider_raises_when_client_errors_twice():
 
     with pytest.raises(RuntimeError):
         await LLMDispatcherProvider(_BoomClient()).propose_async(
-            "anything", ctx=_ctx(),
+            "anything",
+            ctx=_ctx(),
         )
 
 
@@ -293,7 +311,8 @@ async def test_composite_uses_llm_when_available():
     client = _FakeLLMClient([_good_response_json()])
     composite = CompositeDispatcherProvider(llm=LLMDispatcherProvider(client))
     p = await composite.propose_async(
-        "Tell me when Winston is alone", ctx=_ctx(),
+        "Tell me when Winston is alone",
+        ctx=_ctx(),
     )
     assert p.storage_class == "rule"
     # Reasoning is the LLM's own — no fallback marker
@@ -305,7 +324,8 @@ async def test_composite_falls_back_to_heuristic_on_llm_error():
     client = _FakeLLMClient(["not json", "still not json"])
     composite = CompositeDispatcherProvider(llm=LLMDispatcherProvider(client))
     p = await composite.propose_async(
-        "Notify me when Winston is in the Front yard", ctx=_ctx(),
+        "Notify me when Winston is in the Front yard",
+        ctx=_ctx(),
     )
     # Heuristic produced a placement; reasoning carries the fallback marker
     assert p.reasoning.startswith("(LLM unavailable")
@@ -316,7 +336,8 @@ async def test_composite_falls_back_to_heuristic_on_llm_error():
 async def test_composite_with_no_llm_uses_heuristic_directly():
     composite = CompositeDispatcherProvider(llm=None)
     p = await composite.propose_async(
-        "Notify me when Winston is in the Front yard", ctx=_ctx(),
+        "Notify me when Winston is in the Front yard",
+        ctx=_ctx(),
     )
     # No fallback marker since the LLM was never tried
     assert not p.reasoning.startswith("(LLM unavailable")

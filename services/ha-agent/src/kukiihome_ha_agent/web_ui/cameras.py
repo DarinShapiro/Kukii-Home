@@ -43,8 +43,8 @@ class CameraSummary:
     HACameraLoop in the route handler."""
 
     camera_id: str
-    name: str                       # friendly name (suffix-stripped)
-    state: str                      # 'running' / 'opening' / 'error' / ...
+    name: str  # friendly name (suffix-stripped)
+    state: str  # 'running' / 'opening' / 'error' / ...
     last_error: str = ""
     events_24h: int = 0
     last_motion_ts: float | None = None
@@ -56,11 +56,11 @@ class CameraSummary:
 class CapabilityRow:
     """One row in the per-camera capability matrix (§12)."""
 
-    signal: str                     # 'motion' / 'person' / 'vehicle' / 'dog' / 'package' / ...
-    source: str                     # 'NATIVE' / 'AUGMENTED' / 'SUBSTITUTED' / 'DELEGATED' / 'MISSING'
-    detail: str = ""                # human-readable provider (e.g. "Dahua SMD")
+    signal: str  # 'motion' / 'person' / 'vehicle' / 'dog' / 'package' / ...
+    source: str  # 'NATIVE' / 'AUGMENTED' / 'SUBSTITUTED' / 'DELEGATED' / 'MISSING'
+    detail: str = ""  # human-readable provider (e.g. "Dahua SMD")
     critical_if_missing: bool = False
-    needs_action: bool = False      # show ⚠ + drift-to-Needs-Attention hint
+    needs_action: bool = False  # show ⚠ + drift-to-Needs-Attention hint
 
 
 @dataclass
@@ -153,21 +153,18 @@ def render_cameras_list(cameras: list[CameraSummary]) -> str:
         "<h1>Cameras</h1>"
         "<div class='sub'>Per-camera identity, detection capabilities, "
         "health, authorized actions. Not an NVR — multi-camera grid + "
-        "scrubbing are Agent DVR's job (see the design doc §15).</div>"
-        + body
+        "scrubbing are Agent DVR's job (see the design doc §15).</div>" + body
     )
 
 
 def _camera_tile(cam: CameraSummary) -> str:
     name = camera_display_name(cam.name) or cam.camera_id
     last_seen = (
-        friendly_time_html(cam.last_motion_ts) if cam.last_motion_ts
+        friendly_time_html(cam.last_motion_ts)
+        if cam.last_motion_ts
         else "<span class='muted'>no motion yet</span>"
     )
-    err_html = (
-        f"<div class='err'>{_e(cam.last_error)}</div>" if cam.last_error
-        else ""
-    )
+    err_html = f"<div class='err'>{_e(cam.last_error)}</div>" if cam.last_error else ""
     role_line = f" · {_e(cam.role)}" if cam.role else ""
     return (
         f"<a class='camera-tile' href='cameras/{_e(cam.camera_id)}'>"
@@ -192,12 +189,10 @@ def _at_a_glance(vm: CameraDetailViewModel) -> str:
     snap = (
         f"<img class='cam-snap' src='{_e(vm.snapshot_url)}' "
         "alt='camera snapshot' onerror=\"this.style.display='none'\">"
-        if vm.snapshot_url else ""
-    )
-    err_html = (
-        f"<div class='err'>{_e(vm.last_error)}</div>" if vm.last_error
+        if vm.snapshot_url
         else ""
     )
+    err_html = f"<div class='err'>{_e(vm.last_error)}</div>" if vm.last_error else ""
     return (
         "<section class='card'>"
         "<div class='card-head'>"
@@ -221,11 +216,10 @@ def _identity_role(vm: CameraDetailViewModel) -> str:
     if vm.indoor_outdoor:
         bits.append(_e(vm.indoor_outdoor))
     if vm.public_facing is not None:
-        bits.append(
-            "faces public: " + ("<b>yes</b>" if vm.public_facing else "no")
-        )
+        bits.append("faces public: " + ("<b>yes</b>" if vm.public_facing else "no"))
     body = (
-        " · ".join(bits) if bits
+        " · ".join(bits)
+        if bits
         else "<span class='muted'>Not configured yet. Iteration 2.C will "
         "let you assign area + role from this card.</span>"
     )
@@ -293,8 +287,8 @@ def _whitelist_editor(vm: CameraDetailViewModel) -> str:
             for p in vm.perception_whitelist
         )
         or "<tr><td colspan='4' class='empty'>No perception actions "
-           "authorized. Add lights or PTZ ops the agent may briefly use "
-           "during its own reasoning loop.</td></tr>"
+        "authorized. Add lights or PTZ ops the agent may briefly use "
+        "during its own reasoning loop.</td></tr>"
     )
     prot = (
         "".join(
@@ -316,8 +310,8 @@ def _whitelist_editor(vm: CameraDetailViewModel) -> str:
             for p in vm.protective_whitelist
         )
         or "<tr><td colspan='5' class='empty'>No protective actions "
-           "authorized. Locks, sirens, floods etc. require explicit "
-           "opt-in per camera per action — see §7.7.</td></tr>"
+        "authorized. Locks, sirens, floods etc. require explicit "
+        "opt-in per camera per action — see §7.7.</td></tr>"
     )
     return (
         "<section class='card'>"
@@ -414,12 +408,13 @@ def render_perception_form(
         "</section>"
         "<section class='card'><h3>Target</h3>"
         f"<input type='text' name='target' placeholder='"
-        "ha_service: \"light.turn_on:light.front_porch\" — "
-        "camera_api: \"ptz_zoom\"' required>"
+        'ha_service: "light.turn_on:light.front_porch" — '
+        'camera_api: "ptz_zoom"\' required>'
         + (
             f"<datalist>{options}</datalist><div class='hint'>"
             "Suggested entities pulled from HA + preprocessor tune ops.</div>"
-            if options else ""
+            if options
+            else ""
         )
         + "</section>"
         "<section class='card'><h3>Max duration (seconds)</h3>"

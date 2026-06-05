@@ -117,14 +117,19 @@ def _ok_chip(ok: bool | None, *, when_ok: str, when_bad: str) -> str:
 
 def _system_section(vm: DiagnosticsViewModel) -> str:
     prep_chip = _ok_chip(
-        vm.preprocessor_ok, when_ok="reachable", when_bad="unreachable",
+        vm.preprocessor_ok,
+        when_ok="reachable",
+        when_bad="unreachable",
     )
     ha_chip = _ok_chip(
-        vm.ha_connected, when_ok="connected", when_bad="disconnected",
+        vm.ha_connected,
+        when_ok="connected",
+        when_bad="disconnected",
     )
     prep_url = (
         f"<span class='muted'>at {_e(vm.preprocessor_url)}</span>"
-        if vm.preprocessor_url else "<span class='muted'>no URL configured</span>"
+        if vm.preprocessor_url
+        else "<span class='muted'>no URL configured</span>"
     )
     return (
         "<section class='card'>"
@@ -211,12 +216,7 @@ def _cameras_section(rows: list[CameraHealthRow]) -> str:
             )
             + "</tbody></table>"
         )
-    return (
-        "<section class='card'>"
-        "<h2>Cameras</h2>"
-        f"{body}"
-        "</section>"
-    )
+    return f"<section class='card'><h2>Cameras</h2>{body}</section>"
 
 
 def _action_runtime_section(stats: ActionRuntimeStats) -> str:
@@ -345,18 +345,18 @@ def build_diagnostics_vm(
     # (once each for perception/protective sums + once for cam health
     # rows below). Compute the list once + reuse.
     cam_summaries_for_counts = build_camera_summaries(
-        registry_statuses=registry_statuses, ha_loops=ha_loops,
-        alerts=[], now_ts=now_ts,
+        registry_statuses=registry_statuses,
+        ha_loops=ha_loops,
+        alerts=[],
+        now_ts=now_ts,
     )
     if action_store is not None:
         try:
             stores.perception_entries = sum(
-                len(action_store.perception_for(c.camera_id))
-                for c in cam_summaries_for_counts
+                len(action_store.perception_for(c.camera_id)) for c in cam_summaries_for_counts
             )
             stores.protective_entries = sum(
-                len(action_store.protective_for(c.camera_id))
-                for c in cam_summaries_for_counts
+                len(action_store.protective_for(c.camera_id)) for c in cam_summaries_for_counts
             )
         except Exception as e:
             # Each store read is best-effort — a broken store shouldn't
@@ -390,16 +390,18 @@ def build_diagnostics_vm(
 
     # Camera health rows
     cam_summaries = build_camera_summaries(
-        registry_statuses=registry_statuses, ha_loops=ha_loops,
-        alerts=alerts, now_ts=now_ts,
+        registry_statuses=registry_statuses,
+        ha_loops=ha_loops,
+        alerts=alerts,
+        now_ts=now_ts,
     )
     # Map registry frames/motion_events back onto rows.
-    by_id = {
-        getattr(s, "camera_id", ""): s for s in (registry_statuses or [])
-    }
+    by_id = {getattr(s, "camera_id", ""): s for s in (registry_statuses or [])}
     camera_rows = [
         CameraHealthRow(
-            camera_id=c.camera_id, name=c.name, state=c.state,
+            camera_id=c.camera_id,
+            name=c.name,
+            state=c.state,
             last_error=c.last_error,
             frames_read=getattr(by_id.get(c.camera_id), "frames_read", 0),
             motion_events=getattr(by_id.get(c.camera_id), "motion_events", 0),
@@ -457,8 +459,10 @@ def build_diagnostics_vm(
         cameras=camera_rows,
         action_runtime=action_stats,
         reasoner=ReasonerStats(
-            decisions_24h=decisions_24h, alerts_24h=alerts_24h,
-            dismissed_24h=dismissed_24h, last_decision_ts=last_decision_ts,
+            decisions_24h=decisions_24h,
+            alerts_24h=alerts_24h,
+            dismissed_24h=dismissed_24h,
+            last_decision_ts=last_decision_ts,
         ),
         graph=graph,
         now_ts=now_ts,

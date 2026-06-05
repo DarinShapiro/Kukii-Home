@@ -43,7 +43,10 @@ def test_render_drawer_with_user_turn():
     store = _store()
     sess = store.open_session("alice", now_ts=NOW)
     t = store.append_turn(
-        sess.id, role="user", utterance="watch for Bob", now_ts=NOW,
+        sess.id,
+        role="user",
+        utterance="watch for Bob",
+        now_ts=NOW,
     )
     html = render_drawer(session=sess, turns=[t], now_ts=NOW)
     assert "watch for Bob" in html
@@ -55,23 +58,33 @@ def test_render_drawer_with_proposal_card():
     store = _store()
     sess = store.open_session("alice", now_ts=NOW)
     user_turn = store.append_turn(
-        sess.id, role="user", utterance="Alert when Bob arrives", now_ts=NOW,
+        sess.id,
+        role="user",
+        utterance="Alert when Bob arrives",
+        now_ts=NOW,
     )
     proposal = PlacementProposal(
-        storage_class="rule", name="Bob arrives",
-        scope={"actor": "bob"}, lifecycle="persistent",
-        fire_affordance="alert", intent_text="alert when bob arrives",
+        storage_class="rule",
+        name="Bob arrives",
+        scope={"actor": "bob"},
+        lifecycle="persistent",
+        fire_affordance="alert",
+        intent_text="alert when bob arrives",
         reasoning="explicit fire + persistent → Rule",
-        confidence=0.92, severity="normal",
+        confidence=0.92,
+        severity="normal",
     )
     sys_turn = store.append_turn(
-        sess.id, role="system",
+        sess.id,
+        role="system",
         utterance=proposal.reasoning,
         proposal_json=proposal.to_json(),
         now_ts=NOW + 1,
     )
     html = render_drawer(
-        session=sess, turns=[user_turn, sys_turn], now_ts=NOW + 60,
+        session=sess,
+        turns=[user_turn, sys_turn],
+        now_ts=NOW + 60,
     )
     # Proposal preview card surfaces
     assert "Bob arrives" in html
@@ -88,16 +101,19 @@ def test_render_drawer_disambiguation_shows_questions_no_confirm():
     store = _store()
     sess = store.open_session("alice", now_ts=NOW)
     proposal = PlacementProposal(
-        storage_class="rule", name="Ambiguous",
-        scope={}, lifecycle="persistent", fire_affordance="alert",
+        storage_class="rule",
+        name="Ambiguous",
+        scope={},
+        lifecycle="persistent",
+        fire_affordance="alert",
         intent_text="watch for stuff",
         reasoning="uncertain — asking lifecycle + fire affordance",
         confidence=0.4,
-        clarifying_questions=["Just tonight, or always?",
-                              "Ping you, or shift my judging?"],
+        clarifying_questions=["Just tonight, or always?", "Ping you, or shift my judging?"],
     )
     sys_turn = store.append_turn(
-        sess.id, role="system",
+        sess.id,
+        role="system",
         utterance=proposal.reasoning,
         proposal_json=proposal.to_json(),
         now_ts=NOW,
@@ -114,8 +130,11 @@ def test_render_drawer_committed_marker():
     store = _store()
     sess = store.open_session("alice", now_ts=NOW)
     t = store.append_turn(
-        sess.id, role="system",
-        utterance="committed", committed_to="rule_xyz", now_ts=NOW,
+        sess.id,
+        role="system",
+        utterance="committed",
+        committed_to="rule_xyz",
+        now_ts=NOW,
     )
     html = render_drawer(session=sess, turns=[t], now_ts=NOW)
     assert "committed" in html
@@ -127,7 +146,10 @@ def test_render_drawer_alert_context_strip_when_set():
     store = _store()
     sess = store.open_session("alice", alert_context="alert_42", now_ts=NOW)
     html = render_drawer(
-        session=sess, turns=[], alert_context="alert_42", now_ts=NOW,
+        session=sess,
+        turns=[],
+        alert_context="alert_42",
+        now_ts=NOW,
     )
     assert "alert_42" in html
     assert "drawer-context" in html
@@ -138,7 +160,10 @@ def test_render_drawer_escapes_utterance():
     store = _store()
     sess = store.open_session("alice", now_ts=NOW)
     t = store.append_turn(
-        sess.id, role="user", utterance="<script>alert(1)</script>", now_ts=NOW,
+        sess.id,
+        role="user",
+        utterance="<script>alert(1)</script>",
+        now_ts=NOW,
     )
     html = render_drawer(session=sess, turns=[t], now_ts=NOW)
     assert "<script>" not in html

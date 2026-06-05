@@ -27,9 +27,11 @@ def _wrap_chat_response(content: str) -> dict:
         "id": "cmpl_x",
         "object": "chat.completion",
         "choices": [
-            {"index": 0,
-             "message": {"role": "assistant", "content": content},
-             "finish_reason": "stop"},
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+            },
         ],
         "model": "fake-model",
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
@@ -44,9 +46,11 @@ async def test_openai_chat_client_returns_assistant_content():
         captured["url"] = str(request.url)
         captured["headers"] = dict(request.headers)
         import json
+
         captured["body"] = json.loads(request.content.decode())
         return httpx.Response(
-            200, json=_wrap_chat_response('{"storage_class": "rule"}'),
+            200,
+            json=_wrap_chat_response('{"storage_class": "rule"}'),
         )
 
     transport = httpx.MockTransport(transport_handler)
@@ -58,6 +62,7 @@ async def test_openai_chat_client_returns_assistant_content():
         return real_async_client(*args, **kwargs)
 
     import kukiihome_ha_agent.llm_client as mod
+
     mod.httpx.AsyncClient = _factory
     try:
         client = OpenAIChatClient(
@@ -86,14 +91,18 @@ def test_openai_chat_client_normalizes_base_url_without_v1():
     """Caller may pass the host root; we add /v1 so end users don't
     have to remember the convention."""
     client = OpenAIChatClient(
-        base_url="https://api.cerebras.ai", api_key="x", model="y",
+        base_url="https://api.cerebras.ai",
+        api_key="x",
+        model="y",
     )
     assert client.base_url == "https://api.cerebras.ai/v1"
 
 
 def test_openai_chat_client_keeps_existing_v1():
     client = OpenAIChatClient(
-        base_url="https://api.cerebras.ai/v1/", api_key="x", model="y",
+        base_url="https://api.cerebras.ai/v1/",
+        api_key="x",
+        model="y",
     )
     assert client.base_url == "https://api.cerebras.ai/v1"
 
@@ -111,6 +120,7 @@ async def test_openai_chat_client_raises_on_http_error():
         return real(*args, **kwargs)
 
     import kukiihome_ha_agent.llm_client as mod
+
     mod.httpx.AsyncClient = _factory
     try:
         client = OpenAIChatClient(base_url="https://x", api_key="k", model="m")
@@ -134,6 +144,7 @@ async def test_openai_chat_client_raises_on_unexpected_shape():
         return real(*args, **kwargs)
 
     import kukiihome_ha_agent.llm_client as mod
+
     mod.httpx.AsyncClient = _factory
     try:
         client = OpenAIChatClient(base_url="https://x", api_key="k", model="m")
@@ -200,10 +211,16 @@ class _FakeLLM:
         if self.raise_with:
             raise self.raise_with
         from kukiihome_ha_agent.provenance_store import PlacementProposal
+
         return PlacementProposal(
-            storage_class="rule", name="x", scope={},
-            lifecycle="persistent", fire_affordance="alert",
-            intent_text="x", reasoning="r", confidence=0.9,
+            storage_class="rule",
+            name="x",
+            scope={},
+            lifecycle="persistent",
+            fire_affordance="alert",
+            intent_text="x",
+            reasoning="r",
+            confidence=0.9,
         )
 
 
@@ -211,10 +228,12 @@ class _FakeLLM:
 async def test_composite_records_success_to_tracker():
     tracker = LLMHealthTracker()
     composite = CompositeDispatcherProvider(
-        llm=_FakeLLM(), health=tracker,
+        llm=_FakeLLM(),
+        health=tracker,
     )
     await composite.propose_async(
-        "alert me", ctx=DispatcherContext([], [], []),
+        "alert me",
+        ctx=DispatcherContext([], [], []),
     )
     assert tracker.status.ok is True
     assert tracker.status.total_failures == 0
@@ -228,7 +247,8 @@ async def test_composite_records_failure_to_tracker_on_llm_error():
         health=tracker,
     )
     await composite.propose_async(
-        "alert me when Bob arrives", ctx=DispatcherContext([], [], []),
+        "alert me when Bob arrives",
+        ctx=DispatcherContext([], [], []),
     )
     s = tracker.status
     assert s.ok is False
@@ -240,7 +260,8 @@ async def test_composite_with_no_tracker_still_works():
     """The tracker is optional. None-safe path stays functional."""
     composite = CompositeDispatcherProvider(llm=_FakeLLM(), health=None)
     p = await composite.propose_async(
-        "alert me", ctx=DispatcherContext([], [], []),
+        "alert me",
+        ctx=DispatcherContext([], [], []),
     )
     assert p.storage_class == "rule"
 
@@ -250,7 +271,8 @@ async def test_composite_with_no_tracker_still_works():
 
 def test_memory_page_renders_llm_down_banner_when_unhealthy():
     health = LLMHealth(
-        ok=False, last_failure_reason="connection refused",
+        ok=False,
+        last_failure_reason="connection refused",
         last_failure_at=NOW,
     )
     html = render_memory_page([], llm_health=health, now_ts=NOW)
@@ -285,7 +307,8 @@ def test_memory_page_no_banner_when_health_none():
 
 def test_memory_page_llm_banner_escapes_failure_reason():
     health = LLMHealth(
-        ok=False, last_failure_reason="<script>bad</script>",
+        ok=False,
+        last_failure_reason="<script>bad</script>",
         last_failure_at=NOW,
     )
     html = render_memory_page([], llm_health=health, now_ts=NOW)
@@ -296,14 +319,25 @@ def test_memory_page_llm_banner_escapes_failure_reason():
 def test_memory_page_llm_banner_appears_above_drift_banner():
     """LLM failure is more urgent than drift — surface it first."""
     from kukiihome_ha_agent.drift_detector import DriftSuggestion
+
     health = LLMHealth(
-        ok=False, last_failure_reason="x", last_failure_at=NOW,
+        ok=False,
+        last_failure_reason="x",
+        last_failure_at=NOW,
     )
-    drift = [DriftSuggestion(
-        guidance_id="r1", kind="rule", name="Stale",
-        summary="y", recommended_action="convert_to_preference",
-    )]
+    drift = [
+        DriftSuggestion(
+            guidance_id="r1",
+            kind="rule",
+            name="Stale",
+            summary="y",
+            recommended_action="convert_to_preference",
+        )
+    ]
     html = render_memory_page(
-        [], llm_health=health, drift_suggestions=drift, now_ts=NOW,
+        [],
+        llm_health=health,
+        drift_suggestions=drift,
+        now_ts=NOW,
     )
     assert html.index("llm-down-banner") < html.index("drift-banner")

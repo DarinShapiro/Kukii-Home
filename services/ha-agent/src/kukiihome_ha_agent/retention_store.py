@@ -50,7 +50,7 @@ class AdminAudit:
     ts: float
     actor: str
     operation: str
-    scope: str                  # JSON-ish description of what was scoped
+    scope: str  # JSON-ish description of what was scoped
     bytes_removed: int = 0
     rows_removed: int = 0
     notes: str = ""
@@ -98,8 +98,13 @@ class RetentionStore:
             "INSERT OR IGNORE INTO retention_policy "
             "(id, events_days, events_max_gb, frames_days, audit_days, updated_at) "
             "VALUES (1, ?, ?, ?, ?, ?)",
-            (DEFAULT_EVENTS_DAYS, DEFAULT_EVENTS_MAX_GB,
-             DEFAULT_FRAMES_DAYS, DEFAULT_AUDIT_DAYS, time.time()),
+            (
+                DEFAULT_EVENTS_DAYS,
+                DEFAULT_EVENTS_MAX_GB,
+                DEFAULT_FRAMES_DAYS,
+                DEFAULT_AUDIT_DAYS,
+                time.time(),
+            ),
         )
         self._conn.commit()
 
@@ -118,7 +123,8 @@ class RetentionStore:
         )
 
     def update_policy(
-        self, *,
+        self,
+        *,
         events_days: int | None = None,
         events_max_gb: int | None = None,
         frames_days: int | None = None,
@@ -137,13 +143,13 @@ class RetentionStore:
         self._conn.execute(
             "UPDATE retention_policy SET events_days=?, events_max_gb=?, "
             "frames_days=?, audit_days=?, updated_at=? WHERE id = 1",
-            (cur.events_days, cur.events_max_gb, cur.frames_days,
-             cur.audit_days, cur.updated_at),
+            (cur.events_days, cur.events_max_gb, cur.frames_days, cur.audit_days, cur.updated_at),
         )
         self._conn.commit()
         logger.info(
             "retention.policy.updated",
-            events_days=cur.events_days, frames_days=cur.frames_days,
+            events_days=cur.events_days,
+            frames_days=cur.frames_days,
         )
         return cur
 
@@ -154,13 +160,21 @@ class RetentionStore:
             "INSERT INTO admin_audit "
             "(ts, actor, operation, scope, bytes_removed, rows_removed, notes) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (audit.ts, audit.actor, audit.operation, audit.scope,
-             audit.bytes_removed, audit.rows_removed, audit.notes),
+            (
+                audit.ts,
+                audit.actor,
+                audit.operation,
+                audit.scope,
+                audit.bytes_removed,
+                audit.rows_removed,
+                audit.notes,
+            ),
         )
         self._conn.commit()
         logger.info(
             "retention.audit.recorded",
-            operation=audit.operation, actor=audit.actor,
+            operation=audit.operation,
+            actor=audit.actor,
         )
         return cur.lastrowid or 0
 
@@ -171,10 +185,14 @@ class RetentionStore:
         ).fetchall()
         return [
             AdminAudit(
-                id=r["id"], ts=r["ts"], actor=r["actor"],
-                operation=r["operation"], scope=r["scope"],
+                id=r["id"],
+                ts=r["ts"],
+                actor=r["actor"],
+                operation=r["operation"],
+                scope=r["scope"],
                 bytes_removed=r["bytes_removed"],
-                rows_removed=r["rows_removed"], notes=r["notes"],
+                rows_removed=r["rows_removed"],
+                notes=r["notes"],
             )
             for r in rows
         ]

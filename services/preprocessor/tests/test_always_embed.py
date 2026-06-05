@@ -53,8 +53,11 @@ def _real_jpeg(ts: float, w: int = 100, h: int = 100) -> BufferedFrame:
 
 def _person(track_id: str, ts: float = 1.0) -> DetectionTag:
     return DetectionTag(
-        kind="person", confidence=0.9, bbox=(0.1, 0.1, 0.9, 0.9),
-        track_id=track_id, frame_ts=ts,
+        kind="person",
+        confidence=0.9,
+        bbox=(0.1, 0.1, 0.9, 0.9),
+        track_id=track_id,
+        frame_ts=ts,
     )
 
 
@@ -77,8 +80,9 @@ class _StubBodyIdRecognizer:
 async def test_embed_returns_track_embedding_with_no_corpus():
     emb = _unit([1.0, 2.0, 3.0, 4.0])
     rec = _StubBodyIdRecognizer(
-        bodies=(DetectedBody(track_id="t1", embedding=emb,
-                             matched_actor_id=None, match_confidence=0.0),)
+        bodies=(
+            DetectedBody(track_id="t1", embedding=emb, matched_actor_id=None, match_confidence=0.0),
+        )
     )
     p = BodyIdPipeline(rec)
     out = await p.embed(frame=_real_jpeg(42.0), detections=(_person("t1", 42.0),))
@@ -99,16 +103,21 @@ async def test_embed_returns_track_embedding_with_no_corpus():
 async def test_embed_drops_zero_vectors_and_untracked():
     rec = _StubBodyIdRecognizer(
         bodies=(
-            DetectedBody(track_id="t1", embedding=np.zeros(4, dtype=np.float32),
-                         matched_actor_id=None, match_confidence=0.0),
+            DetectedBody(
+                track_id="t1",
+                embedding=np.zeros(4, dtype=np.float32),
+                matched_actor_id=None,
+                match_confidence=0.0,
+            ),
         )
     )
     p = BodyIdPipeline(rec)
     # zero embedding (degenerate crop) → dropped; never persist pure noise.
     assert await p.embed(frame=_real_jpeg(1.0), detections=(_person("t1"),)) == ()
     # untracked person → never reaches the recognizer.
-    untracked = DetectionTag(kind="person", confidence=0.9, bbox=(0.0, 0.0, 1.0, 1.0),
-                             track_id=None, frame_ts=1.0)
+    untracked = DetectionTag(
+        kind="person", confidence=0.9, bbox=(0.0, 0.0, 1.0, 1.0), track_id=None, frame_ts=1.0
+    )
     rec.enrolled_seen.clear()
     assert await p.embed(frame=_real_jpeg(1.0), detections=(untracked,)) == ()
     assert rec.enrolled_seen == []
@@ -134,10 +143,15 @@ class _MatchOnlyPipeline:
 @pytest.mark.asyncio
 async def test_collect_skips_pipelines_without_embed():
     emb = _unit([1.0, 0.0, 0.0])
-    body = BodyIdPipeline(_StubBodyIdRecognizer(
-        bodies=(DetectedBody(track_id="t1", embedding=emb,
-                             matched_actor_id=None, match_confidence=0.0),)
-    ))
+    body = BodyIdPipeline(
+        _StubBodyIdRecognizer(
+            bodies=(
+                DetectedBody(
+                    track_id="t1", embedding=emb, matched_actor_id=None, match_confidence=0.0
+                ),
+            )
+        )
+    )
     out = await collect_embeddings(
         [body, _MatchOnlyPipeline()],
         frame=_real_jpeg(1.0),
@@ -152,24 +166,35 @@ async def test_collect_skips_pipelines_without_embed():
 
 def _persist(store: DetectionStore, event_id: str, cam: str, embeddings) -> None:
     store.register_event(event_id=event_id, camera_id=cam, captured_ts=10.0)
-    store.add_embeddings([
-        EmbeddingRow(
-            event_id=event_id, camera_id=cam, track_id=te.track_id, frame_ts=te.frame_ts,
-            modality=te.modality, match_method=te.match_method,
-            embedding=np.asarray(te.embedding, dtype=np.float32),
-        )
-        for te in embeddings
-    ])
+    store.add_embeddings(
+        [
+            EmbeddingRow(
+                event_id=event_id,
+                camera_id=cam,
+                track_id=te.track_id,
+                frame_ts=te.frame_ts,
+                modality=te.modality,
+                match_method=te.match_method,
+                embedding=np.asarray(te.embedding, dtype=np.float32),
+            )
+            for te in embeddings
+        ]
+    )
 
 
 @pytest.mark.asyncio
 async def test_persist_with_no_actor_then_resolve_after_enrollment(tmp_path):
     """The headline loop: embed an unknown person now, name them later."""
     alice_vec = _unit([0.2, 0.9, 0.1, 0.3])
-    body = BodyIdPipeline(_StubBodyIdRecognizer(
-        bodies=(DetectedBody(track_id="t1", embedding=alice_vec,
-                             matched_actor_id=None, match_confidence=0.0),)
-    ))
+    body = BodyIdPipeline(
+        _StubBodyIdRecognizer(
+            bodies=(
+                DetectedBody(
+                    track_id="t1", embedding=alice_vec, matched_actor_id=None, match_confidence=0.0
+                ),
+            )
+        )
+    )
     # 1. Embed + persist with an EMPTY corpus (nobody enrolled yet).
     embeddings = await body.embed(frame=_real_jpeg(7.0), detections=(_person("t1", 7.0),))
     store = DetectionStore(tmp_path / "det.db")
@@ -191,9 +216,13 @@ async def test_persist_with_no_actor_then_resolve_after_enrollment(tmp_path):
 
 
 def test_resolve_below_threshold_names_nobody(tmp_path):
-    stored = TrackEmbedding(modality="body", match_method="body_id_osnet",
-                            track_id="t1", frame_ts=1.0,
-                            embedding=tuple(_unit([1.0, 0.0, 0.0]).tolist()))
+    stored = TrackEmbedding(
+        modality="body",
+        match_method="body_id_osnet",
+        track_id="t1",
+        frame_ts=1.0,
+        embedding=tuple(_unit([1.0, 0.0, 0.0]).tolist()),
+    )
     store = DetectionStore(tmp_path / "det.db")
     _persist(store, "e1", "cam", [stored])
     # Near-orthogonal enrollment → cosine well under the 0.6 body threshold.
@@ -218,17 +247,27 @@ class _StubPetRecognizer:
 
 
 def _dog(track_id: str, ts: float = 1.0) -> DetectionTag:
-    return DetectionTag(kind="dog", confidence=0.9, bbox=(0.2, 0.2, 0.8, 0.8),
-                        track_id=track_id, frame_ts=ts)
+    return DetectionTag(
+        kind="dog", confidence=0.9, bbox=(0.2, 0.2, 0.8, 0.8), track_id=track_id, frame_ts=ts
+    )
 
 
 @pytest.mark.asyncio
 async def test_pet_embed_ungated_and_resolves(tmp_path):
     rex = _unit([0.3, 0.7, 0.1, 0.2])
-    pet = PetPipeline(_StubPetRecognizer(
-        pets=(DetectedPet(track_id="d1", kind="dog", embedding=rex,
-                          matched_actor_id=None, match_confidence=0.0),)
-    ))
+    pet = PetPipeline(
+        _StubPetRecognizer(
+            pets=(
+                DetectedPet(
+                    track_id="d1",
+                    kind="dog",
+                    embedding=rex,
+                    matched_actor_id=None,
+                    match_confidence=0.0,
+                ),
+            )
+        )
+    )
     assert isinstance(pet, EmbeddingPipeline)
 
     out = await pet.embed(frame=_real_jpeg(5.0), detections=(_dog("d1", 5.0),))
@@ -252,16 +291,35 @@ async def test_pet_embed_ungated_and_resolves(tmp_path):
 async def test_collect_embeddings_routes_person_and_pet(tmp_path):
     """Worker hands ALL tracked dets to collect_embeddings; each pipeline
     self-filters by triggers_on (body→person, pet→dog)."""
-    body = BodyIdPipeline(_StubBodyIdRecognizer(
-        bodies=(DetectedBody(track_id="p1", embedding=_unit([1.0, 0.0]),
-                             matched_actor_id=None, match_confidence=0.0),)
-    ))
-    pet = PetPipeline(_StubPetRecognizer(
-        pets=(DetectedPet(track_id="d1", kind="dog", embedding=_unit([0.0, 1.0]),
-                          matched_actor_id=None, match_confidence=0.0),)
-    ))
+    body = BodyIdPipeline(
+        _StubBodyIdRecognizer(
+            bodies=(
+                DetectedBody(
+                    track_id="p1",
+                    embedding=_unit([1.0, 0.0]),
+                    matched_actor_id=None,
+                    match_confidence=0.0,
+                ),
+            )
+        )
+    )
+    pet = PetPipeline(
+        _StubPetRecognizer(
+            pets=(
+                DetectedPet(
+                    track_id="d1",
+                    kind="dog",
+                    embedding=_unit([0.0, 1.0]),
+                    matched_actor_id=None,
+                    match_confidence=0.0,
+                ),
+            )
+        )
+    )
     out = await collect_embeddings(
-        [body, pet], frame=_real_jpeg(1.0), detections=(_person("p1"), _dog("d1")),
+        [body, pet],
+        frame=_real_jpeg(1.0),
+        detections=(_person("p1"), _dog("d1")),
     )
     assert {te.modality for te in out} == {"body", "pet"}
 
@@ -280,8 +338,13 @@ class _StubFaceRecognizer:
 
 
 def _face(vec, bbox=(0.2, 0.1, 0.6, 0.7), det=0.9) -> DetectedFace:
-    return DetectedFace(bbox=bbox, det_confidence=det, embedding=_unit(vec),
-                        matched_actor_id=None, match_confidence=0.0)
+    return DetectedFace(
+        bbox=bbox,
+        det_confidence=det,
+        embedding=_unit(vec),
+        matched_actor_id=None,
+        match_confidence=0.0,
+    )
 
 
 @pytest.mark.asyncio
@@ -307,10 +370,12 @@ async def test_face_embed_ungated_and_resolves(tmp_path):
 @pytest.mark.asyncio
 async def test_face_embed_keeps_largest_face_in_head_region():
     big, small = _unit([1.0, 0.0, 0.0]), _unit([0.0, 1.0, 0.0])
-    rec = _StubFaceRecognizer(faces=(
-        _face(small, bbox=(0.0, 0.0, 0.2, 0.2)),   # tiny background head
-        _face(big, bbox=(0.1, 0.1, 0.9, 0.9)),     # foreground person
-    ))
+    rec = _StubFaceRecognizer(
+        faces=(
+            _face(small, bbox=(0.0, 0.0, 0.2, 0.2)),  # tiny background head
+            _face(big, bbox=(0.1, 0.1, 0.9, 0.9)),  # foreground person
+        )
+    )
     out = await FacePipeline(rec).embed(frame=_real_jpeg(1.0), detections=(_person("t1"),))
     assert len(out) == 1
     np.testing.assert_allclose(np.asarray(out[0].embedding, dtype=np.float32), big, rtol=1e-6)
@@ -327,12 +392,20 @@ async def test_face_embed_no_face_detected_yields_nothing():
 
 @pytest.mark.asyncio
 async def test_collect_embeddings_routes_body_and_face(tmp_path):
-    body = BodyIdPipeline(_StubBodyIdRecognizer(
-        bodies=(DetectedBody(track_id="t1", embedding=_unit([1.0, 0.0]),
-                             matched_actor_id=None, match_confidence=0.0),)))
+    body = BodyIdPipeline(
+        _StubBodyIdRecognizer(
+            bodies=(
+                DetectedBody(
+                    track_id="t1",
+                    embedding=_unit([1.0, 0.0]),
+                    matched_actor_id=None,
+                    match_confidence=0.0,
+                ),
+            )
+        )
+    )
     face = FacePipeline(_StubFaceRecognizer(faces=(_face([0.0, 1.0, 0.0]),)))
-    out = await collect_embeddings(
-        [body, face], frame=_real_jpeg(1.0), detections=(_person("t1"),))
+    out = await collect_embeddings([body, face], frame=_real_jpeg(1.0), detections=(_person("t1"),))
     assert {te.modality for te in out} == {"body", "face"}  # one person → two modalities
 
 
@@ -353,8 +426,16 @@ class _StubGaitRecognizer:
 async def test_gait_embed_sequence_ungated_and_resolves(tmp_path):
     walk = _unit([0.1] * 8)
     rec = _StubGaitRecognizer(
-        gaits=(DetectedGait(track_id="t1", embedding=walk, matched_actor_id=None,
-                            match_confidence=0.0, frame_ts=9.0, n_silhouettes=18),)
+        gaits=(
+            DetectedGait(
+                track_id="t1",
+                embedding=walk,
+                matched_actor_id=None,
+                match_confidence=0.0,
+                frame_ts=9.0,
+                n_silhouettes=18,
+            ),
+        )
     )
     gait = GaitPipeline(rec)
     # gait is temporal: NOT a per-frame EmbeddingPipeline, IS a TemporalEmbeddingPipeline.
@@ -382,11 +463,20 @@ async def test_gait_embed_sequence_ungated_and_resolves(tmp_path):
 @pytest.mark.asyncio
 async def test_collect_track_embeddings_picks_only_temporal():
     body = BodyIdPipeline(_StubBodyIdRecognizer())  # per-frame, not temporal
-    gait = GaitPipeline(_StubGaitRecognizer(
-        gaits=(DetectedGait(track_id="t1", embedding=_unit([0.1] * 8),
-                            matched_actor_id=None, match_confidence=0.0,
-                            frame_ts=1.0, n_silhouettes=20),)
-    ))
+    gait = GaitPipeline(
+        _StubGaitRecognizer(
+            gaits=(
+                DetectedGait(
+                    track_id="t1",
+                    embedding=_unit([0.1] * 8),
+                    matched_actor_id=None,
+                    match_confidence=0.0,
+                    frame_ts=1.0,
+                    n_silhouettes=20,
+                ),
+            )
+        )
+    )
     seq = {"t1": ((_real_jpeg(1.0), (0.0, 0.0, 1.0, 1.0)),)}
     out = await collect_track_embeddings([body, gait], tracks=seq)
     assert len(out) == 1 and out[0].modality == "gait"
@@ -394,16 +484,33 @@ async def test_collect_track_embeddings_picks_only_temporal():
 
 def test_resolve_only_requested_modalities(tmp_path):
     store = DetectionStore(tmp_path / "det.db")
-    _persist(store, "e1", "cam", [
-        TrackEmbedding(modality="body", match_method="body_id_osnet", track_id="t1",
-                       frame_ts=1.0, embedding=tuple(_unit([1.0, 0.0]).tolist())),
-        TrackEmbedding(modality="gait", match_method="gait_opengait", track_id="t1",
-                       frame_ts=1.0, embedding=tuple(_unit([1.0, 0.0, 0.0]).tolist())),
-    ])
-    corpus = EnrolledCorpus(templates={
-        "body": {"alice": _unit([1.0, 0.0])},
-        "gait": {"alice": _unit([1.0, 0.0, 0.0])},
-    })
+    _persist(
+        store,
+        "e1",
+        "cam",
+        [
+            TrackEmbedding(
+                modality="body",
+                match_method="body_id_osnet",
+                track_id="t1",
+                frame_ts=1.0,
+                embedding=tuple(_unit([1.0, 0.0]).tolist()),
+            ),
+            TrackEmbedding(
+                modality="gait",
+                match_method="gait_opengait",
+                track_id="t1",
+                frame_ts=1.0,
+                embedding=tuple(_unit([1.0, 0.0, 0.0]).tolist()),
+            ),
+        ],
+    )
+    corpus = EnrolledCorpus(
+        templates={
+            "body": {"alice": _unit([1.0, 0.0])},
+            "gait": {"alice": _unit([1.0, 0.0, 0.0])},
+        }
+    )
     both = resolve_event(store, "e1", corpus)
     assert {m.match_method for m in both} == {"body_id_osnet", "gait_opengait"}
     body_only = resolve_event(store, "e1", corpus, modalities=["body"])

@@ -28,8 +28,7 @@ NOW = 1_700_000_000.0
 
 
 class _FakeStatus:
-    def __init__(self, cid, *, state="running", err="",
-                 frames=0, motions=0):
+    def __init__(self, cid, *, state="running", err="", frames=0, motions=0):
         self.camera_id = cid
         self.state = state
         self.last_error = err
@@ -45,18 +44,20 @@ class _FakeHALoop:
 
 def _alert(camera_id, *, kind="person", ts=NOW - 600):
     return {
-        "camera_id": camera_id, "trigger_ts": ts,
+        "camera_id": camera_id,
+        "trigger_ts": ts,
         "sensor_classification": kind,
     }
 
 
 def test_build_camera_summaries_merges_registry_and_ha_loops():
     statuses = [_FakeStatus("pool", state="running")]
-    loops = [_FakeHALoop("pool", "Pool Camera Fluent"),
-             _FakeHALoop("front", "Front Door Cam")]
+    loops = [_FakeHALoop("pool", "Pool Camera Fluent"), _FakeHALoop("front", "Front Door Cam")]
     summaries = build_camera_summaries(
-        registry_statuses=statuses, ha_loops=loops,
-        alerts=[], now_ts=NOW,
+        registry_statuses=statuses,
+        ha_loops=loops,
+        alerts=[],
+        now_ts=NOW,
     )
     by_id = {c.camera_id: c for c in summaries}
     assert "pool" in by_id and "front" in by_id
@@ -70,9 +71,9 @@ def test_build_camera_summaries_events_24h_filter():
         registry_statuses=[_FakeStatus("pool")],
         ha_loops=[],
         alerts=[
-            _alert("pool", ts=NOW - 3600),       # within 24h
+            _alert("pool", ts=NOW - 3600),  # within 24h
             _alert("pool", ts=NOW - 30 * 3600),  # outside 24h
-            _alert("other", ts=NOW - 100),       # different camera
+            _alert("other", ts=NOW - 100),  # different camera
         ],
         now_ts=NOW,
     )
@@ -83,8 +84,7 @@ def test_build_camera_summaries_last_motion_ts_is_most_recent():
     summaries = build_camera_summaries(
         registry_statuses=[_FakeStatus("pool")],
         ha_loops=[],
-        alerts=[_alert("pool", ts=NOW - 100),
-                _alert("pool", ts=NOW - 7000)],
+        alerts=[_alert("pool", ts=NOW - 100), _alert("pool", ts=NOW - 7000)],
         now_ts=NOW,
     )
     assert summaries[0].last_motion_ts == NOW - 100
@@ -95,7 +95,8 @@ def test_build_camera_summaries_last_motion_ts_is_most_recent():
 
 def test_capability_matrix_motion_always_present_when_events_seen():
     rows = infer_capability_matrix(
-        [_alert("pool", kind="person")], camera_id="pool",
+        [_alert("pool", kind="person")],
+        camera_id="pool",
     )
     motion_row = next(r for r in rows if r.signal == "motion")
     assert motion_row.source == "NATIVE"
@@ -111,7 +112,8 @@ def test_capability_matrix_missing_motion_when_no_events_warns():
 
 def test_capability_matrix_person_inferred_from_classification():
     rows = infer_capability_matrix(
-        [_alert("pool", kind="person")], camera_id="pool",
+        [_alert("pool", kind="person")],
+        camera_id="pool",
     )
     p = next(r for r in rows if r.signal == "person")
     assert p.source == "AUGMENTED"
@@ -119,7 +121,8 @@ def test_capability_matrix_person_inferred_from_classification():
 
 def test_capability_matrix_signals_missing_when_never_classified():
     rows = infer_capability_matrix(
-        [_alert("pool", kind="person")], camera_id="pool",
+        [_alert("pool", kind="person")],
+        camera_id="pool",
     )
     v = next(r for r in rows if r.signal == "vehicle")
     assert v.source == "MISSING"
@@ -129,24 +132,44 @@ def test_capability_matrix_signals_missing_when_never_classified():
 
 
 def test_build_camera_detail_returns_none_for_unknown_camera():
-    assert build_camera_detail(
-        camera_id="ghost", registry_statuses=[],
-        ha_loops=[], alerts=[], perception_entries=[], protective_entries=[],
-        now_ts=NOW,
-    ) is None
+    assert (
+        build_camera_detail(
+            camera_id="ghost",
+            registry_statuses=[],
+            ha_loops=[],
+            alerts=[],
+            perception_entries=[],
+            protective_entries=[],
+            now_ts=NOW,
+        )
+        is None
+    )
 
 
 def test_build_camera_detail_includes_whitelist_entries():
-    perc = [PerceptionEntry(camera_id="pool", target_kind="ha_service",
-                             target="light.turn_on:light.pool")]
-    prot = [ProtectiveEntry(
-        camera_id="pool", action_class="siren", service="switch.turn_on",
-        target="switch.siren_one", min_severity="critical", min_confidence=0.9,
-    )]
+    perc = [
+        PerceptionEntry(
+            camera_id="pool", target_kind="ha_service", target="light.turn_on:light.pool"
+        )
+    ]
+    prot = [
+        ProtectiveEntry(
+            camera_id="pool",
+            action_class="siren",
+            service="switch.turn_on",
+            target="switch.siren_one",
+            min_severity="critical",
+            min_confidence=0.9,
+        )
+    ]
     vm = build_camera_detail(
-        camera_id="pool", registry_statuses=[_FakeStatus("pool")],
-        ha_loops=[_FakeHALoop("pool", "Pool")], alerts=[],
-        perception_entries=perc, protective_entries=prot, now_ts=NOW,
+        camera_id="pool",
+        registry_statuses=[_FakeStatus("pool")],
+        ha_loops=[_FakeHALoop("pool", "Pool")],
+        alerts=[],
+        perception_entries=perc,
+        protective_entries=prot,
+        now_ts=NOW,
     )
     assert vm is not None
     assert len(vm.perception_whitelist) == 1
@@ -165,10 +188,10 @@ def test_render_cameras_list_empty_state_explains_discovery():
 
 def test_render_cameras_list_renders_tiles_with_state_chips():
     cams = [
-        CameraSummary(camera_id="pool", name="Pool Camera",
-                      state="running", events_24h=5),
-        CameraSummary(camera_id="front", name="Front Camera",
-                      state="error", last_error="rtsp timeout"),
+        CameraSummary(camera_id="pool", name="Pool Camera", state="running", events_24h=5),
+        CameraSummary(
+            camera_id="front", name="Front Camera", state="error", last_error="rtsp timeout"
+        ),
     ]
     html = render_cameras_list(cams)
     assert "Pool Camera" in html
@@ -192,8 +215,7 @@ def test_render_cameras_list_sorts_alphabetically():
 
 
 def test_render_cameras_list_html_escapes_camera_names():
-    cams = [CameraSummary(camera_id="evil", name="<script>",
-                          state="running")]
+    cams = [CameraSummary(camera_id="evil", name="<script>", state="running")]
     html = render_cameras_list(cams)
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
@@ -204,8 +226,11 @@ def test_render_cameras_list_html_escapes_camera_names():
 
 def _make_vm(**kw):
     base: dict = dict(  # noqa: C408
-        camera_id="pool", name="Pool Camera", state="running",
-        events_24h=12, last_motion_ts=NOW - 600,
+        camera_id="pool",
+        name="Pool Camera",
+        state="running",
+        events_24h=12,
+        last_motion_ts=NOW - 600,
     )
     base.update(kw)
     return CameraDetailViewModel(**base)
@@ -214,17 +239,14 @@ def _make_vm(**kw):
 def test_detail_page_includes_all_sections():
     vm = _make_vm(
         capabilities=[
-            CapabilityRow(signal="motion", source="NATIVE",
-                          detail="Dahua SMD"),
-            CapabilityRow(signal="person", source="AUGMENTED",
-                          detail="Dahua trigger + YOLO"),
+            CapabilityRow(signal="motion", source="NATIVE", detail="Dahua SMD"),
+            CapabilityRow(signal="person", source="AUGMENTED", detail="Dahua trigger + YOLO"),
         ],
         health={"frames_read": 1234, "motion_events": 8},
     )
     html = render_camera_detail(vm)
     # Each card heading is present
-    for heading in ("Identity", "Detection capability",
-                    "Authorized actions", "Health"):
+    for heading in ("Identity", "Detection capability", "Authorized actions", "Health"):
         assert heading in html
     # Matrix entries surface
     assert "motion" in html and "NATIVE" in html
@@ -240,16 +262,24 @@ def test_detail_page_shows_whitelist_remove_buttons():
         PerceptionEntryView,
         ProtectiveEntryView,
     )
+
     vm = _make_vm(
-        perception_whitelist=[PerceptionEntryView(
-            target_kind="ha_service",
-            target="light.turn_on:light.pool", max_duration_s=60,
-        )],
-        protective_whitelist=[ProtectiveEntryView(
-            action_class="lock", service="lock.lock",
-            target="lock.back_door", min_severity="critical",
-            min_confidence=0.8,
-        )],
+        perception_whitelist=[
+            PerceptionEntryView(
+                target_kind="ha_service",
+                target="light.turn_on:light.pool",
+                max_duration_s=60,
+            )
+        ],
+        protective_whitelist=[
+            ProtectiveEntryView(
+                action_class="lock",
+                service="lock.lock",
+                target="lock.back_door",
+                min_severity="critical",
+                min_confidence=0.8,
+            )
+        ],
     )
     html = render_camera_detail(vm)
     assert "light.turn_on:light.pool" in html
@@ -267,11 +297,17 @@ def test_detail_page_empty_whitelist_shows_onboarding_copy():
 
 
 def test_detail_page_capability_warning_for_missing_critical():
-    vm = _make_vm(capabilities=[
-        CapabilityRow(signal="motion", source="MISSING",
-                      detail="no events recorded yet",
-                      critical_if_missing=True, needs_action=True),
-    ])
+    vm = _make_vm(
+        capabilities=[
+            CapabilityRow(
+                signal="motion",
+                source="MISSING",
+                detail="no events recorded yet",
+                critical_if_missing=True,
+                needs_action=True,
+            ),
+        ]
+    )
     html = render_camera_detail(vm)
     assert "MISSING" in html
     assert "⚠" in html
@@ -298,21 +334,21 @@ def test_protective_form_includes_severity_radios():
 
 
 def test_parse_perception_form_minimum_required_target():
-    out = parse_perception_form({
-        "target_kind": "ha_service",
-        "target": "light.turn_on:light.pool",
-        "max_duration_s": "60",
-    })
+    out = parse_perception_form(
+        {
+            "target_kind": "ha_service",
+            "target": "light.turn_on:light.pool",
+            "max_duration_s": "60",
+        }
+    )
     assert out["target_kind"] == "ha_service"
     assert out["target"] == "light.turn_on:light.pool"
     assert out["max_duration_s"] == 60
 
 
 def test_parse_perception_form_caps_max_duration():
-    assert parse_perception_form({"target": "x", "max_duration_s": "9999"})[
-        "max_duration_s"] == 600
-    assert parse_perception_form({"target": "x", "max_duration_s": "0"})[
-        "max_duration_s"] == 1
+    assert parse_perception_form({"target": "x", "max_duration_s": "9999"})["max_duration_s"] == 600
+    assert parse_perception_form({"target": "x", "max_duration_s": "0"})["max_duration_s"] == 1
 
 
 def test_parse_perception_form_bad_kind_falls_back():
@@ -326,20 +362,30 @@ def test_parse_perception_form_missing_target_raises():
 
 
 def test_parse_protective_form_complete_path():
-    out = parse_protective_form({
-        "action_class": "lock", "service": "lock.lock",
-        "target": "lock.x", "min_severity": "critical",
-        "min_confidence": "0.85", "redundancy_required": "1",
-    })
+    out = parse_protective_form(
+        {
+            "action_class": "lock",
+            "service": "lock.lock",
+            "target": "lock.x",
+            "min_severity": "critical",
+            "min_confidence": "0.85",
+            "redundancy_required": "1",
+        }
+    )
     assert out["min_confidence"] == pytest.approx(0.85)
     assert out["redundancy_required"] == 1
 
 
 def test_parse_protective_form_caps_confidence_and_redundancy():
-    out = parse_protective_form({
-        "action_class": "a", "service": "s", "target": "t",
-        "min_confidence": "5", "redundancy_required": "100",
-    })
+    out = parse_protective_form(
+        {
+            "action_class": "a",
+            "service": "s",
+            "target": "t",
+            "min_confidence": "5",
+            "redundancy_required": "100",
+        }
+    )
     assert out["min_confidence"] == 1.0
     assert out["redundancy_required"] == 5
 
@@ -350,8 +396,12 @@ def test_parse_protective_form_missing_required_raises():
 
 
 def test_parse_protective_form_bad_severity_falls_back():
-    out = parse_protective_form({
-        "action_class": "a", "service": "s", "target": "t",
-        "min_severity": "garbage",
-    })
+    out = parse_protective_form(
+        {
+            "action_class": "a",
+            "service": "s",
+            "target": "t",
+            "min_severity": "garbage",
+        }
+    )
     assert out["min_severity"] == "critical"

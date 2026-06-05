@@ -44,14 +44,16 @@ def mirror_event_from_alert(graph_client: Any, alert: dict[str, Any]) -> None:
         event_id = alert.get("alert_id") or alert.get("event_id")
         if not event_id:
             return
-        graph_client.write_event(Event(
-            id=str(event_id),
-            ts=_coerce_ts(alert),
-            camera_id=str(alert.get("camera_id") or ""),
-            tag_set=_tag_set_from_alert(alert),
-            matched_actor_ids=_actor_ids_from_alert(alert),
-            metadata=_event_metadata(alert),
-        ))
+        graph_client.write_event(
+            Event(
+                id=str(event_id),
+                ts=_coerce_ts(alert),
+                camera_id=str(alert.get("camera_id") or ""),
+                tag_set=_tag_set_from_alert(alert),
+                matched_actor_ids=_actor_ids_from_alert(alert),
+                metadata=_event_metadata(alert),
+            )
+        )
     except Exception as e:
         logger.debug("graph_mirror.event_failed", error=str(e))
 
@@ -71,24 +73,18 @@ def mirror_policy(graph_client: Any, policy: Any) -> None:
         descriptor = getattr(policy, "descriptor", None) or {}
         created = float(getattr(policy, "created_at", 0.0) or 0.0) or time.time()
         expires = getattr(policy, "expires_at", None)
-        ttl = (
-            max(0.0, float(expires) - created)
-            if expires is not None
-            else 0.0
+        ttl = max(0.0, float(expires) - created) if expires is not None else 0.0
+        graph_client.write_policy(
+            GraphPolicy(
+                id=str(getattr(policy, "id", "") or ""),
+                kind=str(getattr(policy, "kind", "") or "dismissal"),
+                scope_camera=(descriptor.get("camera") or None),
+                match_tag_subset=_tag_subset_from_descriptor(descriptor),
+                ttl_seconds=ttl,
+                created_ts=created,
+                rationale=str(descriptor.get("intent_text") or getattr(policy, "name", "") or ""),
+            )
         )
-        graph_client.write_policy(GraphPolicy(
-            id=str(getattr(policy, "id", "") or ""),
-            kind=str(getattr(policy, "kind", "") or "dismissal"),
-            scope_camera=(descriptor.get("camera") or None),
-            match_tag_subset=_tag_subset_from_descriptor(descriptor),
-            ttl_seconds=ttl,
-            created_ts=created,
-            rationale=str(
-                descriptor.get("intent_text")
-                or getattr(policy, "name", "")
-                or ""
-            ),
-        ))
     except Exception as e:
         logger.debug("graph_mirror.policy_failed", error=str(e))
 
@@ -108,18 +104,14 @@ def _tag_set_from_alert(alert: dict[str, Any]) -> tuple[str, ...]:
     """Best-effort tag set. Alerts don't carry a canonical tag list yet;
     we pull from the most likely fields and normalize to a sorted tuple
     of non-empty strings so the graph stays queryable."""
-    raw: Any = (
-        alert.get("tag_set")
-        or alert.get("tags")
-        or alert.get("subject")
-        or ()
-    )
+    raw: Any = alert.get("tag_set") or alert.get("tags") or alert.get("subject") or ()
     if isinstance(raw, str):
         raw = [raw]
-    out = sorted({
-        s.strip() for s in raw
-        if isinstance(s, str) and s.strip()
-    }) if isinstance(raw, (list, tuple, set)) else []
+    out = (
+        sorted({s.strip() for s in raw if isinstance(s, str) and s.strip()})
+        if isinstance(raw, (list, tuple, set))
+        else []
+    )
     return tuple(out)
 
 
@@ -127,9 +119,7 @@ def _actor_ids_from_alert(alert: dict[str, Any]) -> tuple[str, ...]:
     raw: Any = alert.get("matched_actor_ids") or alert.get("identities") or ()
     if not isinstance(raw, (list, tuple, set)):
         return ()
-    return tuple(
-        str(a) for a in raw if isinstance(a, (str, int)) and str(a)
-    )
+    return tuple(str(a) for a in raw if isinstance(a, (str, int)) and str(a))
 
 
 def _event_metadata(alert: dict[str, Any]) -> dict[str, str]:
@@ -156,6 +146,4 @@ def _tag_subset_from_descriptor(descriptor: dict[str, Any]) -> tuple[str, ...]:
         raw = [raw]
     if not isinstance(raw, (list, tuple, set)):
         return ()
-    return tuple(sorted({
-        s.strip() for s in raw if isinstance(s, str) and s.strip()
-    }))
+    return tuple(sorted({s.strip() for s in raw if isinstance(s, str) and s.strip()}))

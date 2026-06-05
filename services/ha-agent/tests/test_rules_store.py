@@ -23,7 +23,9 @@ def store():
 
 def _make_rule(name="Winston unsupervised", **overrides):
     rule = Rule(
-        id="", name=name, mode="nl",
+        id="",
+        name=name,
+        mode="nl",
         intent_text="Winston seems to have gotten outside without supervision.",
         scope=RuleScope(cameras=["front_south"]),
     )
@@ -130,16 +132,28 @@ def test_disabled_rules_hidden_from_active_visible_in_all(store):
 def test_record_match_bumps_counter_for_matched_only(store):
     r = store.create(_make_rule())
     now = time.time()
-    store.record_match(RuleMatch(
-        rule_id=r.id, incident_id="i1", matched_at=now,
-        severity="critical", confidence=0.92, reasoning="match",
-        matched=True,
-    ))
-    store.record_match(RuleMatch(
-        rule_id=r.id, incident_id="i2", matched_at=now + 1,
-        severity=None, confidence=0.20, reasoning="non-match",
-        matched=False,
-    ))
+    store.record_match(
+        RuleMatch(
+            rule_id=r.id,
+            incident_id="i1",
+            matched_at=now,
+            severity="critical",
+            confidence=0.92,
+            reasoning="match",
+            matched=True,
+        )
+    )
+    store.record_match(
+        RuleMatch(
+            rule_id=r.id,
+            incident_id="i2",
+            matched_at=now + 1,
+            severity=None,
+            confidence=0.20,
+            reasoning="non-match",
+            matched=False,
+        )
+    )
     refreshed = store.get(r.id)
     assert refreshed.matched_count == 1
     assert refreshed.last_matched_at == now
@@ -149,10 +163,17 @@ def test_matches_for_rule_returns_newest_first(store):
     r = store.create(_make_rule())
     base = time.time()
     for i, sev in enumerate(["low", "normal", "critical"]):
-        store.record_match(RuleMatch(
-            rule_id=r.id, incident_id=f"i{i}", matched_at=base + i,
-            severity=sev, confidence=0.7, reasoning="m", matched=True,
-        ))
+        store.record_match(
+            RuleMatch(
+                rule_id=r.id,
+                incident_id=f"i{i}",
+                matched_at=base + i,
+                severity=sev,
+                confidence=0.7,
+                reasoning="m",
+                matched=True,
+            )
+        )
     rows = store.matches_for_rule(r.id)
     assert len(rows) == 3
     assert rows[0].severity == "critical"
@@ -162,14 +183,28 @@ def test_matches_for_rule_returns_newest_first(store):
 def test_matches_for_rule_only_matched_filters_non_matches(store):
     r = store.create(_make_rule())
     base = time.time()
-    store.record_match(RuleMatch(
-        rule_id=r.id, incident_id="i1", matched_at=base,
-        severity="normal", confidence=0.8, reasoning="x", matched=True,
-    ))
-    store.record_match(RuleMatch(
-        rule_id=r.id, incident_id="i2", matched_at=base + 1,
-        severity=None, confidence=0.1, reasoning="y", matched=False,
-    ))
+    store.record_match(
+        RuleMatch(
+            rule_id=r.id,
+            incident_id="i1",
+            matched_at=base,
+            severity="normal",
+            confidence=0.8,
+            reasoning="x",
+            matched=True,
+        )
+    )
+    store.record_match(
+        RuleMatch(
+            rule_id=r.id,
+            incident_id="i2",
+            matched_at=base + 1,
+            severity=None,
+            confidence=0.1,
+            reasoning="y",
+            matched=False,
+        )
+    )
     rows = store.matches_for_rule(r.id, only_matched=True)
     assert len(rows) == 1
 
@@ -178,12 +213,28 @@ def test_matches_for_incident_returns_all_rule_evaluations(store):
     r1 = store.create(_make_rule(name="r1"))
     r2 = store.create(_make_rule(name="r2"))
     now = time.time()
-    store.record_match(RuleMatch(rule_id=r1.id, incident_id="inc99",
-                                 matched_at=now, severity="low", confidence=0.7,
-                                 reasoning="a", matched=True))
-    store.record_match(RuleMatch(rule_id=r2.id, incident_id="inc99",
-                                 matched_at=now, severity=None, confidence=0.2,
-                                 reasoning="b", matched=False))
+    store.record_match(
+        RuleMatch(
+            rule_id=r1.id,
+            incident_id="inc99",
+            matched_at=now,
+            severity="low",
+            confidence=0.7,
+            reasoning="a",
+            matched=True,
+        )
+    )
+    store.record_match(
+        RuleMatch(
+            rule_id=r2.id,
+            incident_id="inc99",
+            matched_at=now,
+            severity=None,
+            confidence=0.2,
+            reasoning="b",
+            matched=False,
+        )
+    )
     rows = store.matches_for_incident("inc99")
     assert {row.rule_id for row in rows} == {r1.id, r2.id}
 
@@ -194,11 +245,18 @@ def test_protective_actions_roundtrip_as_json(store):
         {"service": "lock.lock", "target": "lock.back_door", "result": "ok"},
         {"service": "light.turn_on", "target": "light.flood", "result": "ok"},
     ]
-    store.record_match(RuleMatch(
-        rule_id=r.id, incident_id="i1", matched_at=time.time(),
-        severity="critical", confidence=0.9, reasoning="x",
-        matched=True, protective_actions_taken=actions,
-    ))
+    store.record_match(
+        RuleMatch(
+            rule_id=r.id,
+            incident_id="i1",
+            matched_at=time.time(),
+            severity="critical",
+            confidence=0.9,
+            reasoning="x",
+            matched=True,
+            protective_actions_taken=actions,
+        )
+    )
     rows = store.matches_for_rule(r.id)
     assert rows[0].protective_actions_taken == actions
 

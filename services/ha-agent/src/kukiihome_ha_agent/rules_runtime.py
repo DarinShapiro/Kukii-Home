@@ -151,11 +151,13 @@ def evaluate_shortcuts(
             continue
         for kind, actor_id in subjects:
             if r.shortcut_subject == actor_id or r.shortcut_subject == kind:
-                out.append(ShortcutOutcome(
-                    rule=r,
-                    matched_subject_id=actor_id,
-                    severity=r.severity_static or "normal",
-                ))
+                out.append(
+                    ShortcutOutcome(
+                        rule=r,
+                        matched_subject_id=actor_id,
+                        severity=r.severity_static or "normal",
+                    )
+                )
                 break  # one match per rule per alert; multi-subject is one fire
     return out
 
@@ -173,9 +175,9 @@ def nl_rules_in_scope(
     """Subset of NL rules whose scope allows this incident — the input list
     for prompt-section building."""
     return [
-        r for r in rules
-        if r.mode == "nl"
-        and rule_in_scope(r, camera_id=camera_id, area_id=area_id, ts=ts)
+        r
+        for r in rules
+        if r.mode == "nl" and rule_in_scope(r, camera_id=camera_id, area_id=area_id, ts=ts)
     ]
 
 
@@ -188,14 +190,13 @@ def build_nl_prompt_section(rules: list[Rule]) -> str:
     match + reason about severity."""
     if not rules:
         return ""
-    parts = ["Named user intents — for each rule below, judge match (yes/no, "
-             "confidence) and reason about severity (critical/normal/low) "
-             "given the scene + time-of-day + context:"]
+    parts = [
+        "Named user intents — for each rule below, judge match (yes/no, "
+        "confidence) and reason about severity (critical/normal/low) "
+        "given the scene + time-of-day + context:"
+    ]
     for r in rules:
-        parts.append(
-            f'  [rule:{r.id}] "{r.name}"\n'
-            f'    Intent: {r.intent_text.strip()}'
-        )
+        parts.append(f'  [rule:{r.id}] "{r.name}"\n    Intent: {r.intent_text.strip()}')
     return "\n".join(parts)
 
 
@@ -223,11 +224,17 @@ def parse_matched_rules(
         claimed = bool(entry.get("matched"))
         real_match = claimed and conf >= threshold
         sev = entry.get("severity") if real_match else None
-        out.append(RuleMatch(
-            rule_id=rid, incident_id="",  # caller fills incident_id
-            matched_at=now, severity=sev, confidence=conf,
-            reasoning=entry.get("reasoning"), matched=real_match,
-        ))
+        out.append(
+            RuleMatch(
+                rule_id=rid,
+                incident_id="",  # caller fills incident_id
+                matched_at=now,
+                severity=sev,
+                confidence=conf,
+                reasoning=entry.get("reasoning"),
+                matched=real_match,
+            )
+        )
     return out
 
 
@@ -258,19 +265,32 @@ class RulesRuntime:
         return self._cache
 
     def shortcuts_for(
-        self, *, alert: dict[str, Any],
-        camera_id: str | None, area_id: str | None, ts: float | None,
+        self,
+        *,
+        alert: dict[str, Any],
+        camera_id: str | None,
+        area_id: str | None,
+        ts: float | None,
     ) -> list[ShortcutOutcome]:
         return evaluate_shortcuts(
             self.active_rules(),
-            alert=alert, camera_id=camera_id, area_id=area_id, ts=ts,
+            alert=alert,
+            camera_id=camera_id,
+            area_id=area_id,
+            ts=ts,
         )
 
     def nl_rules_for(
-        self, *, camera_id: str | None, area_id: str | None, ts: float | None,
+        self,
+        *,
+        camera_id: str | None,
+        area_id: str | None,
+        ts: float | None,
     ) -> list[Rule]:
         """In-scope NL rules — fed to VLM prompt assembly."""
         return nl_rules_in_scope(
             self.active_rules(),
-            camera_id=camera_id, area_id=area_id, ts=ts,
+            camera_id=camera_id,
+            area_id=area_id,
+            ts=ts,
         )

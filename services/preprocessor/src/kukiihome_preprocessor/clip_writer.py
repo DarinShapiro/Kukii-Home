@@ -70,9 +70,7 @@ def mux_jpegs_to_mp4(
     manifest_path = event_dir / "event.json"
     frames = _resolve_frame_paths(event_dir, manifest_path)
     if not frames:
-        raise FileNotFoundError(
-            f"no frames to mux in {event_dir} (manifest missing or empty)"
-        )
+        raise FileNotFoundError(f"no frames to mux in {event_dir} (manifest missing or empty)")
 
     # We need image dimensions to set up the encoder. Pull from frame 0.
     with av.open(str(frames[0][0]), mode="r") as probe:
@@ -109,7 +107,9 @@ def mux_jpegs_to_mp4(
             # dimensions. If a frame has a different size from frame 0
             # (rare; would be a config change mid-event) we resize.
             new_frame = img_frame.reformat(
-                width=width, height=height, format=DEFAULT_PIX_FMT,
+                width=width,
+                height=height,
+                format=DEFAULT_PIX_FMT,
             )
             new_frame.pts = pts
             new_frame.time_base = stream.codec_context.time_base
@@ -122,7 +122,10 @@ def mux_jpegs_to_mp4(
         out_container.close()
     logger.info(
         "clip_writer.muxed event_dir=%s frames=%d output=%s size=%d",
-        event_dir, len(frames), output, output.stat().st_size,
+        event_dir,
+        len(frames),
+        output,
+        output.stat().st_size,
     )
     return output
 
@@ -131,7 +134,9 @@ def mux_jpegs_to_mp4(
 
 
 async def get_or_build_clip(
-    *, event_dir: Path, target_fps: float = 4.0,
+    *,
+    event_dir: Path,
+    target_fps: float = 4.0,
 ) -> Path:
     """Async-friendly version of :func:`mux_jpegs_to_mp4` with per-event
     coalescing. Two concurrent calls for the same event_id share one
@@ -140,7 +145,9 @@ async def get_or_build_clip(
     lock = _MUX_LOCKS[event_id]
     async with lock:
         return await asyncio.to_thread(
-            mux_jpegs_to_mp4, event_dir=event_dir, target_fps=target_fps,
+            mux_jpegs_to_mp4,
+            event_dir=event_dir,
+            target_fps=target_fps,
         )
 
 
@@ -148,7 +155,8 @@ async def get_or_build_clip(
 
 
 def _resolve_frame_paths(
-    event_dir: Path, manifest_path: Path,
+    event_dir: Path,
+    manifest_path: Path,
 ) -> list[tuple[Path, float]]:
     """Return [(jpg_path, ts), ...] in chronological order.
 

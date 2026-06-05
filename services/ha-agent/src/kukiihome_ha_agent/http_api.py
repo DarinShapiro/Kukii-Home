@@ -158,7 +158,8 @@ class HAAgentAPI:
         # POST /api/intent/rules → create
         if method == "POST" and path == base:
             rule = Rule(
-                id="", name=str(body.get("name") or "").strip(),
+                id="",
+                name=str(body.get("name") or "").strip(),
                 mode=str(body.get("mode") or "nl"),
                 intent_text=str(body.get("intent_text") or ""),
                 scope=RuleScope(
@@ -176,7 +177,7 @@ class HAAgentAPI:
 
         # Sub-paths: /api/intent/rules/{id}[/<action>]
         if path.startswith(f"{base}/"):
-            tail = path[len(base) + 1:]
+            tail = path[len(base) + 1 :]
             parts = tail.split("/", 1)
             rule_id = parts[0]
             action = parts[1] if len(parts) > 1 else ""
@@ -187,15 +188,21 @@ class HAAgentAPI:
                 rule = store.get(rule_id)
                 return (
                     (200, {"rule": self._rule_to_dict(rule)})
-                    if rule else (404, {"error": "rule not found"})
+                    if rule
+                    else (404, {"error": "rule not found"})
                 )
 
             if method in ("PUT", "POST") and not action:
                 patch = {
-                    k: body[k] for k in (
-                        "name", "mode", "intent_text",
-                        "shortcut_subject", "severity_static",
-                    ) if k in body
+                    k: body[k]
+                    for k in (
+                        "name",
+                        "mode",
+                        "intent_text",
+                        "shortcut_subject",
+                        "severity_static",
+                    )
+                    if k in body
                 }
                 if "enabled" in body:
                     patch["enabled"] = bool(body["enabled"])
@@ -208,7 +215,8 @@ class HAAgentAPI:
                 updated = store.update(rule_id, **patch)
                 return (
                     (200, {"rule": self._rule_to_dict(updated)})
-                    if updated else (404, {"error": "rule not found"})
+                    if updated
+                    else (404, {"error": "rule not found"})
                 )
 
             if method == "POST" and action == "enable":
@@ -216,14 +224,16 @@ class HAAgentAPI:
                 out = store.set_enabled(rule_id, enabled)
                 return (
                     (200, {"rule": self._rule_to_dict(out)})
-                    if out else (404, {"error": "rule not found"})
+                    if out
+                    else (404, {"error": "rule not found"})
                 )
 
             if method == "DELETE" and not action:
                 out = store.soft_delete(rule_id)
                 return (
                     (200, {"rule": self._rule_to_dict(out)})
-                    if out else (404, {"error": "rule not found"})
+                    if out
+                    else (404, {"error": "rule not found"})
                 )
 
             if method == "GET" and action == "matches":
@@ -232,9 +242,12 @@ class HAAgentAPI:
                 return 200, {
                     "matches": [
                         {
-                            "rule_id": m.rule_id, "incident_id": m.incident_id,
-                            "matched_at": m.matched_at, "severity": m.severity,
-                            "confidence": m.confidence, "reasoning": m.reasoning,
+                            "rule_id": m.rule_id,
+                            "incident_id": m.incident_id,
+                            "matched_at": m.matched_at,
+                            "severity": m.severity,
+                            "confidence": m.confidence,
+                            "reasoning": m.reasoning,
                             "matched": m.matched,
                             "alert_emitted": m.alert_emitted,
                             "protective_actions_taken": m.protective_actions_taken,
@@ -250,7 +263,9 @@ class HAAgentAPI:
         """Wire-format mapping for Rule → JSON. Kept on the API side so the
         dataclass itself stays import-free of presentation concerns."""
         return {
-            "id": rule.id, "name": rule.name, "mode": rule.mode,
+            "id": rule.id,
+            "name": rule.name,
+            "mode": rule.mode,
             "intent_text": rule.intent_text,
             "scope": {
                 "cameras": rule.scope.cameras,

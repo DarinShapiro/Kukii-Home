@@ -126,24 +126,27 @@ class AreaStore:
         except json.JSONDecodeError:
             hours = []
         cams = [
-            r["camera_id"] for r in self._conn.execute(
-                "SELECT camera_id FROM area_cameras WHERE area_id = ? "
-                "ORDER BY camera_id",
+            r["camera_id"]
+            for r in self._conn.execute(
+                "SELECT camera_id FROM area_cameras WHERE area_id = ? ORDER BY camera_id",
                 (row["id"],),
             ).fetchall()
         ]
         return Area(
-            id=row["id"], name=row["name"],
-            attention_mode=row["attention_mode"], role=row["role"],
-            description=row["description"], normal_hours=hours,
-            created_at=row["created_at"], updated_at=row["updated_at"],
-            retired_at=row["retired_at"], cameras=cams,
+            id=row["id"],
+            name=row["name"],
+            attention_mode=row["attention_mode"],
+            role=row["role"],
+            description=row["description"],
+            normal_hours=hours,
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            retired_at=row["retired_at"],
+            cameras=cams,
         )
 
     def get(self, area_id: str) -> Area | None:
-        row = self._conn.execute(
-            "SELECT * FROM areas WHERE id = ?", (area_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM areas WHERE id = ?", (area_id,)).fetchone()
         return self._row_to_area(row) if row else None
 
     def all_areas(self, *, include_retired: bool = False) -> list[Area]:
@@ -179,15 +182,21 @@ class AreaStore:
             "normal_hours, created_at, updated_at, retired_at) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (
-                area.id, area.name, area.attention_mode, area.role,
-                area.description, json.dumps(area.normal_hours),
-                area.created_at, area.updated_at, area.retired_at,
+                area.id,
+                area.name,
+                area.attention_mode,
+                area.role,
+                area.description,
+                json.dumps(area.normal_hours),
+                area.created_at,
+                area.updated_at,
+                area.retired_at,
             ),
         )
         for cid in area.cameras:
             self._conn.execute(
-                "INSERT OR IGNORE INTO area_cameras (area_id, camera_id) "
-                "VALUES (?, ?)", (area.id, cid),
+                "INSERT OR IGNORE INTO area_cameras (area_id, camera_id) VALUES (?, ?)",
+                (area.id, cid),
             )
         self._conn.commit()
         logger.info("areas.created", area_id=area.id, name=area.name)
@@ -208,18 +217,24 @@ class AreaStore:
             "UPDATE areas SET name=?, attention_mode=?, role=?, description=?, "
             "normal_hours=?, updated_at=? WHERE id=?",
             (
-                area.name, area.attention_mode, area.role, area.description,
-                json.dumps(area.normal_hours), area.updated_at, area_id,
+                area.name,
+                area.attention_mode,
+                area.role,
+                area.description,
+                json.dumps(area.normal_hours),
+                area.updated_at,
+                area_id,
             ),
         )
         if "cameras" in fields:
             self._conn.execute(
-                "DELETE FROM area_cameras WHERE area_id = ?", (area_id,),
+                "DELETE FROM area_cameras WHERE area_id = ?",
+                (area_id,),
             )
-            for cid in (fields["cameras"] or []):
+            for cid in fields["cameras"] or []:
                 self._conn.execute(
-                    "INSERT OR IGNORE INTO area_cameras (area_id, camera_id) "
-                    "VALUES (?, ?)", (area_id, cid),
+                    "INSERT OR IGNORE INTO area_cameras (area_id, camera_id) VALUES (?, ?)",
+                    (area_id, cid),
                 )
         self._conn.commit()
         logger.info("areas.updated", area_id=area_id, fields=list(fields.keys()))

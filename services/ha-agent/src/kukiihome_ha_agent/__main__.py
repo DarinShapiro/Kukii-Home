@@ -491,7 +491,10 @@ async def _render_notifications_card(boot: BootState) -> str:
 
 
 def _erase_recent_event_dirs(
-    events_root: Any, cutoff: float, shutil_mod: Any, log: Any,
+    events_root: Any,
+    cutoff: float,
+    shutil_mod: Any,
+    log: Any,
 ) -> tuple[int, int]:
     """Sync helper for the /system erase-last-hour endpoint. Walks the
     events directory and removes event-dirs whose mtime is newer than
@@ -519,7 +522,8 @@ def _erase_recent_event_dirs(
         except OSError as e:
             log.warning(
                 "system.erase_last_hour.dir_skipped",
-                path=str(ev_dir), error=str(e),
+                path=str(ev_dir),
+                error=str(e),
             )
     return bytes_removed, rows_removed
 
@@ -546,8 +550,10 @@ def _render_alert_404(event_id: str) -> str:
 
 
 def _render_alert_page(
-    event: dict[str, Any], event_id: str,
-    *, audit_chain_html: str = "",
+    event: dict[str, Any],
+    event_id: str,
+    *,
+    audit_chain_html: str = "",
 ) -> str:
     """Render the per-alert page the notification tap opens to.
 
@@ -1379,12 +1385,8 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
                 # block). camera_id is server-controlled today but
                 # could leak through a future adapter ingestion path.
                 safe_cam_id = html.escape(str(cs.camera_id), quote=True)
-                cam_snap_url = (
-                    f"cameras/{safe_cam_id}/snapshot?v={cs.motion_events}"
-                )
-                cam_snap_url_js = (
-                    cam_snap_url.replace("\\", "\\\\").replace("'", "\\'")
-                )
+                cam_snap_url = f"cameras/{safe_cam_id}/snapshot?v={cs.motion_events}"
+                cam_snap_url_js = cam_snap_url.replace("\\", "\\\\").replace("'", "\\'")
                 thumb_html = (
                     # Relative URL — see comment on alerts-table thumbnails about
                     # why absolute paths break under HA ingress.
@@ -1465,7 +1467,8 @@ async def _render_status(boot: BootState, alert_log: AlertLog) -> str:
 
 def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore) -> web.Application:
     api = HAAgentAPI(
-        tools=None, alert_log=alert_log,
+        tools=None,
+        alert_log=alert_log,
         rules_store=boot.rules_store,  # may be None pre-Task9 boot paths
     )  # tools rebound below
 
@@ -1552,6 +1555,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         import time as _time
 
         from kukiihome_ha_agent.web_ui.trace import build_audit_chain_html
+
         audit_html = build_audit_chain_html(
             incident_id=event_id,
             rules_store=getattr(boot, "rules_store", None),
@@ -1565,10 +1569,15 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # (which lives in the path, not the query — so the generic
         # ?alert=… extraction in _shell_response wouldn't find it).
         body = _render_alert_page(
-            event, event_id, audit_chain_html=audit_html,
+            event,
+            event_id,
+            audit_chain_html=audit_html,
         )
         return _shell_response(
-            request, "", body, alert_context=event_id,
+            request,
+            "",
+            body,
+            alert_context=event_id,
         )
 
     async def alert_frame(request: web.Request) -> web.Response:
@@ -2136,7 +2145,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             flash = "That action failed (preprocessor unreachable or rejected it)."
 
         body = render_review_html(
-            tracks, subjects, configured=configured, flash=flash,
+            tracks,
+            subjects,
+            configured=configured,
+            flash=flash,
         )
         return _shell_response(request, "identities", body)
 
@@ -2230,7 +2242,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         if boot.preprocessor_client is not None:
             try:
                 tracks = await boot.preprocessor_client.list_identity_tracks(
-                    status="unresolved", limit=200,
+                    status="unresolved",
+                    limit=200,
                 )
                 unresolved = len(tracks)
             except Exception as e:
@@ -2249,6 +2262,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         except Exception as e:
             logger.info("v2.home.snapshot_failed", error=str(e))
         import time as _time
+
         content = render_home_page(
             alerts_recent=recent,
             unresolved_tracks=unresolved,
@@ -2283,9 +2297,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         live entries, falling back to ``camera_id`` when there's no friendly
         name to display."""
         from kukiihome_ha_agent.web_ui.shell import camera_display_name
+
         out: list[tuple[str, str]] = []
         try:
-            for loop in (boot.ha_camera_loops or []):
+            for loop in boot.ha_camera_loops or []:
                 cid = getattr(loop, "camera_id", None) or getattr(loop, "id", "")
                 friendly = getattr(loop, "friendly_name", "") or cid
                 if cid:
@@ -2313,7 +2328,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         all_alerts = alert_log.recent(500)
         filters = parse_filters(dict(request.rel_url.query))
         content = render_activity_page(
-            alerts_all=all_alerts, now_ts=_time.time(), **filters,
+            alerts_all=all_alerts,
+            now_ts=_time.time(),
+            **filters,
         )
         return _shell_response(request, "activity", content)
 
@@ -2330,7 +2347,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         from kukiihome_ha_agent.web_ui.areas import render_area_form
 
         body = render_area_form(
-            None, available_cameras=_intent_known_cameras(boot),
+            None,
+            available_cameras=_intent_known_cameras(boot),
         )
         return _shell_response(request, "areas", body)
 
@@ -2344,7 +2362,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         if area is None:
             return web.HTTPNotFound(text="area not found")
         body = render_area_form(
-            area, available_cameras=_intent_known_cameras(boot),
+            area,
+            available_cameras=_intent_known_cameras(boot),
         )
         return _shell_response(request, "areas", body)
 
@@ -2389,26 +2408,20 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         if cut not in ("by_context", "by_type"):
             cut = "by_context"
 
-        rules = (
-            boot.rules_store.all_rules()
-            if getattr(boot, "rules_store", None) else []
-        )
-        prefs = (
-            boot.preferences_store.get()
-            if getattr(boot, "preferences_store", None) else None
-        )
+        rules = boot.rules_store.all_rules() if getattr(boot, "rules_store", None) else []
+        prefs = boot.preferences_store.get() if getattr(boot, "preferences_store", None) else None
         # Surface BOTH active dismissals AND TIs in /memory. Stale-revoked
         # entries hide naturally because all_policies filters them by default.
         pols: list = []
         if getattr(boot, "policy_store", None):
             pols.extend(boot.policy_store.all_policies(kind="dismissal"))
             pols.extend(boot.policy_store.all_policies(kind="transient_intent"))
-        areas = (
-            boot.area_store.all_areas()
-            if getattr(boot, "area_store", None) else []
-        )
+        areas = boot.area_store.all_areas() if getattr(boot, "area_store", None) else []
         entries = build_guidance_entries(
-            rules=rules, preferences=prefs, policies=pols, areas=areas,
+            rules=rules,
+            preferences=prefs,
+            policies=pols,
+            areas=areas,
             provenance_store=getattr(boot, "provenance_store", None),
         )
 
@@ -2416,16 +2429,18 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # that haven't earned their placement. Cheap inline call; a
         # nightly background sweep lands as a follow-up if the cost grows.
         from kukiihome_ha_agent.drift_detector import detect_all_drift
+
         drift = detect_all_drift(
-            rules=rules, policies=pols, now_ts=_time.time(),
+            rules=rules,
+            policies=pols,
+            now_ts=_time.time(),
         )
         # Iter 3 (Part X §35): degraded-mode banner when LLM is down.
-        llm_health = (
-            boot.llm_health.status
-            if getattr(boot, "llm_health", None) else None
-        )
+        llm_health = boot.llm_health.status if getattr(boot, "llm_health", None) else None
         body = render_memory_page(
-            entries, cut=cut, now_ts=_time.time(),
+            entries,
+            cut=cut,
+            now_ts=_time.time(),
             drift_suggestions=drift,
             llm_health=llm_health,
         )
@@ -2444,8 +2459,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
 
     def _build_drawer_html(
-        request: web.Request, *,
-        alert_context: str = "", page_context: str = "",
+        request: web.Request,
+        *,
+        alert_context: str = "",
+        page_context: str = "",
     ) -> str:
         """Compose the drawer aside for a route handler. Re-attaches the
         active session (opening a fresh one if idle) and renders the
@@ -2466,14 +2483,18 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
         turns = prov.turns_for_session(sess.id)
         return render_drawer(
-            session=sess, turns=turns,
+            session=sess,
+            turns=turns,
             alert_context=alert_context,
             request_path=request.path,
             now_ts=_time.time(),
         )
 
     def _shell_response(
-        request: web.Request, active: str, body_html: str, *,
+        request: web.Request,
+        active: str,
+        body_html: str,
+        *,
         flash: str | None = None,
         alert_context: str = "",
     ) -> web.Response:
@@ -2499,15 +2520,15 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             drawer_html = _build_drawer_html(
                 request,
                 page_context=request.path,
-                alert_context=(
-                    alert_context
-                    or request.rel_url.query.get("alert", "")
-                ),
+                alert_context=(alert_context or request.rel_url.query.get("alert", "")),
             )
         return web.Response(
             text=render_shell(
-                active, body_html, version=__version__,
-                drawer_html=drawer_html, flash=flash,
+                active,
+                body_html,
+                version=__version__,
+                drawer_html=drawer_html,
+                flash=flash,
                 request_path=request.path,
             ),
             content_type="text/html",
@@ -2541,7 +2562,10 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             now_ts=_time.time(),
         )
         prov.append_turn(
-            sess.id, role="user", utterance=utterance, now_ts=_time.time(),
+            sess.id,
+            role="user",
+            utterance=utterance,
+            now_ts=_time.time(),
         )
 
         # Iter 3 (Part X §35): use boot.dispatcher — Composite (LLM →
@@ -2550,7 +2574,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # /memory degraded-mode banner.
         dispatcher = getattr(boot, "dispatcher", None) or HeuristicDispatcherProvider()
         ctx = context_from_boot(
-            boot, session_id=sess.id,
+            boot,
+            session_id=sess.id,
         )
         ctx.page_context = "memory"
         ctx.alert_context = alert_context
@@ -2559,7 +2584,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         else:
             proposal = dispatcher.propose(utterance, ctx=ctx)
         prov.append_turn(
-            sess.id, role="system",
+            sess.id,
+            role="system",
             utterance=proposal.reasoning,
             proposal_json=proposal.to_json(),
             now_ts=_time.time(),
@@ -2618,7 +2644,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         )
         try:
             gid = commit_guidance(
-                proposal, stores=stores, origin="conversation",
+                proposal,
+                stores=stores,
+                origin="conversation",
                 transcript_id=turn_id,
                 user_utterance=prior_user_utterance,
                 now_ts=_time.time(),
@@ -2628,7 +2656,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
 
         # Append a committed-marker turn so the drawer thread shows the result.
         prov.append_turn(
-            session_id, role="system",
+            session_id,
+            role="system",
             utterance=f"committed as {gid}",
             committed_to=gid,
             now_ts=_time.time(),
@@ -2661,17 +2690,17 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
 
         if boot.rules_store is None:
             body = (
-                "<h1>Intent</h1>"
-                "<div class='empty'>Rules storage isn't wired in this build.</div>"
+                "<h1>Intent</h1><div class='empty'>Rules storage isn't wired in this build.</div>"
             )
         else:
             rules = boot.rules_store.all_rules()
             prefs = (
-                boot.preferences_store.get()
-                if getattr(boot, "preferences_store", None) else None
+                boot.preferences_store.get() if getattr(boot, "preferences_store", None) else None
             )
             body = render_intent_page(
-                rules, now_ts=_time.time(), preferences=prefs,
+                rules,
+                now_ts=_time.time(),
+                preferences=prefs,
             )
         return _shell_response(request, "intent", body)
 
@@ -2720,13 +2749,17 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         if rule_id:
             boot.rules_store.update(rule_id, **patch)
         else:
-            boot.rules_store.create(Rule(
-                id="", name=patch["name"], mode=patch["mode"],
-                intent_text=patch.get("intent_text", ""),
-                scope=patch.get("scope") or RuleScope(),
-                shortcut_subject=patch.get("shortcut_subject"),
-                severity_static=patch.get("severity_static"),
-            ))
+            boot.rules_store.create(
+                Rule(
+                    id="",
+                    name=patch["name"],
+                    mode=patch["mode"],
+                    intent_text=patch.get("intent_text", ""),
+                    scope=patch.get("scope") or RuleScope(),
+                    shortcut_subject=patch.get("shortcut_subject"),
+                    severity_static=patch.get("severity_static"),
+                )
+            )
         raise web.HTTPSeeOther(location="intent")
 
     async def v2_intent_rule_enable(request: web.Request) -> web.Response:
@@ -2756,7 +2789,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             vigilance = "normal"
         what = (form.get("what_i_care_about") or "").strip()
         boot.preferences_store.update(
-            vigilance=vigilance, what_i_care_about=what,
+            vigilance=vigilance,
+            what_i_care_about=what,
         )
         raise web.HTTPSeeOther(location="intent")
 
@@ -2772,16 +2806,19 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         if rule is None:
             return web.HTTPNotFound(text="rule not found")
         matches = boot.rules_store.matches_for_rule(rule_id, limit=50)
-        rows_html = "".join(
-            "<tr>"
-            f"<td>{_e(m.matched_at)}</td>"
-            f"<td>{_e(m.severity or '—')}</td>"
-            f"<td>{_e(round(m.confidence or 0.0, 2))}</td>"
-            f"<td>{_e(m.reasoning or '')}</td>"
-            f"<td>{'matched' if m.matched else 'non-match'}</td>"
-            "</tr>"
-            for m in matches
-        ) or "<tr><td colspan='5' class='empty'>No matches yet.</td></tr>"
+        rows_html = (
+            "".join(
+                "<tr>"
+                f"<td>{_e(m.matched_at)}</td>"
+                f"<td>{_e(m.severity or '—')}</td>"
+                f"<td>{_e(round(m.confidence or 0.0, 2))}</td>"
+                f"<td>{_e(m.reasoning or '')}</td>"
+                f"<td>{'matched' if m.matched else 'non-match'}</td>"
+                "</tr>"
+                for m in matches
+            )
+            or "<tr><td colspan='5' class='empty'>No matches yet.</td></tr>"
+        )
         body = (
             f"<h1>Matches · {_e(rule.name)}</h1>"
             "<div class='sub'>Most recent rule evaluations — match and "
@@ -2803,7 +2840,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             dismissals = boot.policy_store.all_policies(kind="dismissal")
             transients = boot.policy_store.all_policies(kind="transient_intent")
             body = render_policies_page(
-                dismissals=dismissals, transient_intents=transients,
+                dismissals=dismissals,
+                transient_intents=transients,
             )
         return _shell_response(request, "policies", body)
 
@@ -2823,13 +2861,14 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         from kukiihome_ha_agent.web_ui.cameras import render_cameras_list
 
         statuses = (
-            list(boot.camera_registry.all())
-            if getattr(boot, "camera_registry", None) else []
+            list(boot.camera_registry.all()) if getattr(boot, "camera_registry", None) else []
         )
         ha_loops = list(getattr(boot, "ha_camera_loops", []) or [])
         summaries = build_camera_summaries(
-            registry_statuses=statuses, ha_loops=ha_loops,
-            alerts=alert_log.recent(500), now_ts=_time.time(),
+            registry_statuses=statuses,
+            ha_loops=ha_loops,
+            alerts=alert_log.recent(500),
+            now_ts=_time.time(),
         )
         body = render_cameras_list(summaries)
         return _shell_response(request, "cameras", body)
@@ -2842,22 +2881,26 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
 
         camera_id = request.match_info["camera_id"]
         statuses = (
-            list(boot.camera_registry.all())
-            if getattr(boot, "camera_registry", None) else []
+            list(boot.camera_registry.all()) if getattr(boot, "camera_registry", None) else []
         )
         ha_loops = list(getattr(boot, "ha_camera_loops", []) or [])
         perc = (
             boot.action_store.perception_for(camera_id)
-            if getattr(boot, "action_store", None) else []
+            if getattr(boot, "action_store", None)
+            else []
         )
         prot = (
             boot.action_store.protective_for(camera_id)
-            if getattr(boot, "action_store", None) else []
+            if getattr(boot, "action_store", None)
+            else []
         )
         vm = build_camera_detail(
-            camera_id=camera_id, registry_statuses=statuses,
-            ha_loops=ha_loops, alerts=alert_log.recent(500),
-            perception_entries=perc, protective_entries=prot,
+            camera_id=camera_id,
+            registry_statuses=statuses,
+            ha_loops=ha_loops,
+            alerts=alert_log.recent(500),
+            perception_entries=perc,
+            protective_entries=prot,
             now_ts=_time.time(),
         )
         if vm is None:
@@ -2890,9 +2933,12 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             patch = parse_perception_form(dict(await request.post()))
         except ValueError as e:
             return web.HTTPBadRequest(text=str(e))
-        boot.action_store.upsert_perception(PerceptionEntry(
-            camera_id=camera_id, **patch,
-        ))
+        boot.action_store.upsert_perception(
+            PerceptionEntry(
+                camera_id=camera_id,
+                **patch,
+            )
+        )
         raise web.HTTPSeeOther(location=f"cameras/{camera_id}")
 
     async def v2_cam_wl_save_prot(request: web.Request) -> web.Response:
@@ -2906,9 +2952,12 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             patch = parse_protective_form(dict(await request.post()))
         except ValueError as e:
             return web.HTTPBadRequest(text=str(e))
-        boot.action_store.upsert_protective(ProtectiveEntry(
-            camera_id=camera_id, **patch,
-        ))
+        boot.action_store.upsert_protective(
+            ProtectiveEntry(
+                camera_id=camera_id,
+                **patch,
+            )
+        )
         raise web.HTTPSeeOther(location=f"cameras/{camera_id}")
 
     async def v2_cam_wl_del_perc(request: web.Request) -> web.Response:
@@ -2968,7 +3017,9 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         if not subjects and unresolved_count > 0:
             raise web.HTTPSeeOther(location="review")
         body = render_identities_list(
-            subjects, unresolved_count=unresolved_count, tab="enrolled",
+            subjects,
+            unresolved_count=unresolved_count,
+            tab="enrolled",
         )
         return _shell_response(request, "identities", body)
 
@@ -2992,7 +3043,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
                 payload = await boot.preprocessor_client.list_identity_subjects()
                 subs = build_identity_subjects(payload)
                 subject = next(
-                    (s for s in subs if s.subject_id == subject_id), None,
+                    (s for s in subs if s.subject_id == subject_id),
+                    None,
                 )
             except Exception as e:
                 logger.warning("v2.identity_detail.fetch_failed", error=str(e))
@@ -3000,24 +3052,18 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             return web.HTTPNotFound(text=f"subject {subject_id!r} not found")
 
         # Linked guidance — pull all entries + filter by subject
-        rules = (
-            boot.rules_store.all_rules()
-            if getattr(boot, "rules_store", None) else []
-        )
-        prefs = (
-            boot.preferences_store.get()
-            if getattr(boot, "preferences_store", None) else None
-        )
+        rules = boot.rules_store.all_rules() if getattr(boot, "rules_store", None) else []
+        prefs = boot.preferences_store.get() if getattr(boot, "preferences_store", None) else None
         pols: list = []
         if getattr(boot, "policy_store", None):
             pols.extend(boot.policy_store.all_policies(kind="dismissal"))
             pols.extend(boot.policy_store.all_policies(kind="transient_intent"))
-        areas = (
-            boot.area_store.all_areas()
-            if getattr(boot, "area_store", None) else []
-        )
+        areas = boot.area_store.all_areas() if getattr(boot, "area_store", None) else []
         entries = build_guidance_entries(
-            rules=rules, preferences=prefs, policies=pols, areas=areas,
+            rules=rules,
+            preferences=prefs,
+            policies=pols,
+            areas=areas,
             provenance_store=getattr(boot, "provenance_store", None),
         )
         linked = filter_guidance_for_subject(entries, subject=subject)
@@ -3043,20 +3089,23 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
 
         # Camera (id, friendly_name) pairs for the purge form dropdown.
         statuses = (
-            list(boot.camera_registry.all())
-            if getattr(boot, "camera_registry", None) else []
+            list(boot.camera_registry.all()) if getattr(boot, "camera_registry", None) else []
         )
         ha_loops = list(getattr(boot, "ha_camera_loops", []) or [])
         summaries = build_camera_summaries(
-            registry_statuses=statuses, ha_loops=ha_loops,
-            alerts=[], now_ts=_time.time(),
+            registry_statuses=statuses,
+            ha_loops=ha_loops,
+            alerts=[],
+            now_ts=_time.time(),
         )
         cameras = [(c.camera_id, c.name) for c in summaries]
 
         vm = build_system_vm(
             data_root="/data/kukiihome",
-            policy=policy, audit_log=audit_log,
-            cameras=cameras, now_ts=_time.time(),
+            policy=policy,
+            audit_log=audit_log,
+            cameras=cameras,
+            now_ts=_time.time(),
         )
         return _shell_response(request, "system", render_system_page(vm))
 
@@ -3084,12 +3133,17 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         import time as _time
 
         from kukiihome_ha_agent.retention_store import AdminAudit
-        ret.record_audit(AdminAudit(
-            id=None, ts=_time.time(),
-            actor=_user_id_for(request),
-            operation="retention.policy.updated",
-            scope="global", notes="via /system page",
-        ))
+
+        ret.record_audit(
+            AdminAudit(
+                id=None,
+                ts=_time.time(),
+                actor=_user_id_for(request),
+                operation="retention.policy.updated",
+                scope="global",
+                notes="via /system page",
+            )
+        )
         raise web.HTTPSeeOther(location="system")
 
     async def v2_system_erase_last_hour(request: web.Request) -> web.Response:
@@ -3112,17 +3166,25 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         # loop responsive — this is a rarely-pressed panic button so the
         # overhead is fine.
         bytes_removed, rows_removed = await asyncio.to_thread(
-            _erase_recent_event_dirs, events_root, cutoff, shutil, logger,
+            _erase_recent_event_dirs,
+            events_root,
+            cutoff,
+            shutil,
+            logger,
         )
 
-        ret.record_audit(AdminAudit(
-            id=None, ts=_time.time(),
-            actor=_user_id_for(request),
-            operation="erase_last_hour",
-            scope="all cameras / last 60 min",
-            bytes_removed=bytes_removed, rows_removed=rows_removed,
-            notes=f"{rows_removed} event dirs removed",
-        ))
+        ret.record_audit(
+            AdminAudit(
+                id=None,
+                ts=_time.time(),
+                actor=_user_id_for(request),
+                operation="erase_last_hour",
+                scope="all cameras / last 60 min",
+                bytes_removed=bytes_removed,
+                rows_removed=rows_removed,
+                notes=f"{rows_removed} event dirs removed",
+            )
+        )
         raise web.HTTPSeeOther(location="system")
 
     async def v2_system_purge(request: web.Request) -> web.Response:
@@ -3133,6 +3195,7 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         import time as _time
 
         from kukiihome_ha_agent.retention_store import AdminAudit
+
         ret = getattr(boot, "retention_store", None)
         if ret is None:
             return web.HTTPServiceUnavailable(text="retention store unavailable")
@@ -3140,13 +3203,16 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         camera_id = (form.get("camera_id") or "").strip()
         start_date = (form.get("start_date") or "").strip()
         end_date = (form.get("end_date") or "").strip()
-        ret.record_audit(AdminAudit(
-            id=None, ts=_time.time(),
-            actor=_user_id_for(request),
-            operation="purge.scheduled",
-            scope=f"camera={camera_id} from {start_date} to {end_date}",
-            notes="purge worker not yet implemented; audit only",
-        ))
+        ret.record_audit(
+            AdminAudit(
+                id=None,
+                ts=_time.time(),
+                actor=_user_id_for(request),
+                operation="purge.scheduled",
+                scope=f"camera={camera_id} from {start_date} to {end_date}",
+                notes="purge worker not yet implemented; audit only",
+            )
+        )
         raise web.HTTPSeeOther(location="system")
 
     async def v2_diagnostics(request: web.Request) -> web.Response:
@@ -3178,15 +3244,16 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
 
         vm = build_diagnostics_vm(
             version=__version__,
-            preprocessor_ok=prep_ok, preprocessor_url=prep_url,
-            ha_connected=ha_connected, ha_entities=ha_entities,
+            preprocessor_ok=prep_ok,
+            preprocessor_url=prep_url,
+            ha_connected=ha_connected,
+            ha_entities=ha_entities,
             rules_store=getattr(boot, "rules_store", None),
             action_store=getattr(boot, "action_store", None),
             area_store=getattr(boot, "area_store", None),
             policy_store=getattr(boot, "policy_store", None),
             registry_statuses=(
-                list(boot.camera_registry.all())
-                if getattr(boot, "camera_registry", None) else []
+                list(boot.camera_registry.all()) if getattr(boot, "camera_registry", None) else []
             ),
             ha_loops=list(getattr(boot, "ha_camera_loops", []) or []),
             alerts=alert_log.recent(500),
@@ -3306,15 +3373,15 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         app.router.add_get(path, api_get)
     for path in ("/service", "/acknowledge_alert"):
         app.router.add_post(path, api_post)
+
     # Task 9: /api/intent/rules CRUD goes through the same dispatcher so
     # external HTTP clients (HA integration, scripts, future native app)
     # see the same view of rules the web UI does.
     async def api_delete(request: web.Request) -> web.Response:
         api._tools = boot.tools
-        status, payload = await api.dispatch(
-            method="DELETE", path=request.path, body={}
-        )
+        status, payload = await api.dispatch(method="DELETE", path=request.path, body={})
         return web.json_response(payload, status=status)
+
     app.router.add_get("/api/intent/rules", api_get)
     app.router.add_get("/api/intent/rules/{rest:.*}", api_get)
     app.router.add_post("/api/intent/rules", api_post)
@@ -3628,27 +3695,34 @@ async def _run() -> None:
     # add-on upgrades. The store is plumbed through BootState so route
     # handlers can reach it without rewiring the api object.
     from kukiihome_ha_agent.rules_store import RulesStore
+
     boot.rules_store = RulesStore(path="/data/kukiihome/rules.db")
     # Task 10: action whitelist + audit. Sister store to rules.db; the
     # cameras page's Authorized actions card reads + writes through it.
     from kukiihome_ha_agent.action_store import ActionStore
+
     boot.action_store = ActionStore(path="/data/kukiihome/actions.db")
     # Iter 2.C: areas store. Sister to rules.db / actions.db.
     from kukiihome_ha_agent.area_store import AreaStore
+
     boot.area_store = AreaStore(path="/data/kukiihome/areas.db")
     # Iter 2.A: preferences store (singleton row + per-actor relationships).
     from kukiihome_ha_agent.preferences_store import PreferencesStore
+
     boot.preferences_store = PreferencesStore(path="/data/kukiihome/preferences.db")
     # Iter 2.D: policies store (dismissals + transient intents + hits).
     from kukiihome_ha_agent.policy_store import PolicyStore
+
     boot.policy_store = PolicyStore(path="/data/kukiihome/policies.db")
     # Iter 3 (Part X §36): provenance store — sessions + transcripts +
     # per-guidance audit. Underlies /memory, the drawer, and the audit
     # chain extension on /alert/{id}.
     from kukiihome_ha_agent.provenance_store import ProvenanceStore
+
     boot.provenance_store = ProvenanceStore(path="/data/kukiihome/sessions.db")
     # Iter 3 (Part IX §30): retention policy + admin audit log.
     from kukiihome_ha_agent.retention_store import RetentionStore
+
     boot.retention_store = RetentionStore(path="/data/kukiihome/retention.db")
     # Epic 10.2 (graph DB integration, Phase 1+2): memory-graph substrate.
     # In-memory shadow by default; connects to a Neo4j sidecar / bolt URL
@@ -3657,6 +3731,7 @@ async def _run() -> None:
     # fails because of the graph. Events + policies are mirrored into it
     # (see graph_mirror); /diagnostics reports the backend + node counts.
     from kukiihome_ha_agent.graph_runtime import make_graph_client
+
     boot.graph_client, boot.graph_backend = make_graph_client(
         neo4j_url=os.environ.get("KUKIIHOME_NEO4J_URL", ""),
         neo4j_user=os.environ.get("KUKIIHOME_NEO4J_USER", "neo4j"),
@@ -3677,18 +3752,22 @@ async def _run() -> None:
         LLMDispatcherProvider,
     )
     from kukiihome_ha_agent.llm_client import LLMHealthTracker, OpenAIChatClient
+
     boot.llm_health = LLMHealthTracker()
     llm_url = (_os.environ.get("KUKIIHOME_LLM_URL") or "").strip()
     llm_key = (_os.environ.get("KUKIIHOME_LLM_API_KEY") or "").strip()
     llm_model = (_os.environ.get("KUKIIHOME_LLM_MODEL") or "llama-3.3-70b").strip()
     if llm_url and llm_key:
         client = OpenAIChatClient(
-            base_url=llm_url, api_key=llm_key, model=llm_model,
+            base_url=llm_url,
+            api_key=llm_key,
+            model=llm_model,
         )
         # Iter 3 follow-up (Task 53): tool-calling enabled. The LLM can
         # search existing guidance + look up KnownActor profiles before
         # placing, so multi-turn refinement avoids duplicate rules.
         from kukiihome_ha_agent.dispatcher_tools import tools_from_boot
+
         tools = tools_from_boot(boot)
         boot.dispatcher = CompositeDispatcherProvider(
             llm=LLMDispatcherProvider(client, tools=tools),
@@ -3697,7 +3776,8 @@ async def _run() -> None:
         )
         logger.info(
             "dispatcher.llm.configured",
-            base_url=llm_url, model=llm_model,
+            base_url=llm_url,
+            model=llm_model,
             tool_count=len(tools),
         )
     else:
@@ -3719,9 +3799,8 @@ async def _run() -> None:
     # mirror swallows its own errors so a graph hiccup can't break alert
     # recording (the SQLite/EventStore path stays authoritative).
     from kukiihome_ha_agent.graph_mirror import mirror_event_from_alert
-    alert_log.add_on_record(
-        lambda a: mirror_event_from_alert(boot.graph_client, a)
-    )
+
+    alert_log.add_on_record(lambda a: mirror_event_from_alert(boot.graph_client, a))
 
     # Epic 10.9: enrich alerts with preprocessor recognition. When a
     # preprocessor URL is configured, every recorded alert triggers an

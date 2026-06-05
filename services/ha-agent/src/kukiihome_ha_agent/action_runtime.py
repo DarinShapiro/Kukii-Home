@@ -54,11 +54,11 @@ class PerceptionRequest:
     """One transient-action request from the VLM's perception_requests list."""
 
     kind: Literal["ha_service", "camera_api"]
-    service: str | None = None       # ha_service path: "light.turn_on"
-    target: str | None = None        # entity_id
+    service: str | None = None  # ha_service path: "light.turn_on"
+    target: str | None = None  # entity_id
     data: dict[str, Any] = field(default_factory=dict)
-    camera_id: str | None = None     # required for camera_api
-    op: str | None = None            # camera_api op ("ptz_zoom")
+    camera_id: str | None = None  # required for camera_api
+    op: str | None = None  # camera_api op ("ptz_zoom")
     revert_after_s: float = 45.0
     rationale: str | None = None
 
@@ -72,7 +72,7 @@ class ProtectiveRecommendation:
     target: str
     data: dict[str, Any] = field(default_factory=dict)
     confidence: float | None = None
-    urgency: str | None = None       # mirrors severity (critical/normal/low)
+    urgency: str | None = None  # mirrors severity (critical/normal/low)
     rationale: str | None = None
     camera_id: str | None = None
 
@@ -138,34 +138,33 @@ class PerceptionRuntime:
         innocuous-looking class-2 requests; class 2's transient-ness is a
         contract, not a guess."""
         target_kind = req.kind
-        target = (
-            f"{req.service}:{req.target}" if req.kind == "ha_service"
-            else (req.op or "")
-        )
+        target = f"{req.service}:{req.target}" if req.kind == "ha_service" else (req.op or "")
         for entry in self.store.perception_for(camera_id):
             if entry.target_kind == target_kind and entry.target == target:
                 return True
         return False
 
-    async def execute(
-        self, req: PerceptionRequest, *, incident_id: str
-    ) -> str:
+    async def execute(self, req: PerceptionRequest, *, incident_id: str) -> str:
         """Run one perception request. Returns one of:
-          "ok"                 — call executed; revert scheduled
-          "no_authorization"   — whitelist missed (no call made)
-          "no_camera_scope"    — missing camera_id (no call made)
-          "failed"             — execution raised (revert not scheduled)
+        "ok"                 — call executed; revert scheduled
+        "no_authorization"   — whitelist missed (no call made)
+        "no_camera_scope"    — missing camera_id (no call made)
+        "failed"             — execution raised (revert not scheduled)
         """
         if not req.camera_id:
             logger.info(
-                "perception.no_camera_scope", incident_id=incident_id,
-                kind=req.kind, target=req.target,
+                "perception.no_camera_scope",
+                incident_id=incident_id,
+                kind=req.kind,
+                target=req.target,
             )
             return "no_camera_scope"
         if not self._whitelisted(req.camera_id, req):
             logger.info(
-                "perception.rejected", incident_id=incident_id,
-                camera_id=req.camera_id, kind=req.kind,
+                "perception.rejected",
+                incident_id=incident_id,
+                camera_id=req.camera_id,
+                kind=req.kind,
                 target=req.target or req.op,
                 reason="no_authorization",
             )
@@ -173,15 +172,19 @@ class PerceptionRuntime:
 
         coalesce_key = (
             req.kind,
-            f"{req.service}:{req.target}" if req.kind == "ha_service"
+            f"{req.service}:{req.target}"
+            if req.kind == "ha_service"
             else f"{req.camera_id}:{req.op}",
         )
         try:
             await self._apply(req)
         except Exception as e:
             logger.warning(
-                "perception.failed", incident_id=incident_id,
-                kind=req.kind, target=req.target or req.op, error=str(e),
+                "perception.failed",
+                incident_id=incident_id,
+                kind=req.kind,
+                target=req.target or req.op,
+                error=str(e),
             )
             return "failed"
 
@@ -194,8 +197,10 @@ class PerceptionRuntime:
         self._pending[coalesce_key] = _PendingRevert(task=task, request=req)
         logger.info(
             "perception.executed",
-            incident_id=incident_id, kind=req.kind,
-            target=req.target or req.op, revert_in_s=req.revert_after_s,
+            incident_id=incident_id,
+            kind=req.kind,
+            target=req.target or req.op,
+            revert_in_s=req.revert_after_s,
         )
         return "ok"
 
@@ -203,16 +208,17 @@ class PerceptionRuntime:
         if req.kind == "ha_service":
             domain, service = (req.service or "").split(".", 1)
             await self.ha_caller(
-                domain, service, entity_id=req.target, data=req.data,
+                domain,
+                service,
+                entity_id=req.target,
+                data=req.data,
             )
         elif req.kind == "camera_api":
             if self.camera_tune is None:
                 raise RuntimeError("camera_tune backend not wired")
             await self.camera_tune(req.camera_id, req.op, req.data)
 
-    async def _schedule_revert(
-        self, req: PerceptionRequest, key: tuple[str, str]
-    ) -> None:
+    async def _schedule_revert(self, req: PerceptionRequest, key: tuple[str, str]) -> None:
         try:
             await asyncio.sleep(req.revert_after_s)
         except asyncio.CancelledError:
@@ -220,12 +226,13 @@ class PerceptionRuntime:
             return
         try:
             await self._revert(req)
-            logger.info("perception.reverted",
-                        kind=req.kind, target=req.target or req.op)
+            logger.info("perception.reverted", kind=req.kind, target=req.target or req.op)
         except Exception as e:
             logger.warning(
                 "perception.revert_failed",
-                kind=req.kind, target=req.target or req.op, error=str(e),
+                kind=req.kind,
+                target=req.target or req.op,
+                error=str(e),
             )
         finally:
             # Clean up the tracking record.
@@ -251,7 +258,9 @@ class PerceptionRuntime:
             if self.camera_tune is None:
                 return
             await self.camera_tune(
-                req.camera_id, req.op, {**req.data, "_revert": True},
+                req.camera_id,
+                req.op,
+                {**req.data, "_revert": True},
             )
 
     def pending_count(self) -> int:
@@ -275,14 +284,14 @@ class ProtectiveRuntime:
     """
 
     def __init__(
-        self, store: ActionStore, ha_caller: HACallerProto,
+        self,
+        store: ActionStore,
+        ha_caller: HACallerProto,
     ) -> None:
         self.store = store
         self.ha_caller = ha_caller
         # (camera_id, action_class, service, target) → set of seen incident ids
-        self._redundancy: dict[tuple[str, str, str, str], set[str]] = (
-            defaultdict(set)
-        )
+        self._redundancy: dict[tuple[str, str, str, str], set[str]] = defaultdict(set)
 
     async def execute(
         self,
@@ -301,9 +310,13 @@ class ProtectiveRuntime:
         ts = now_ts or _now()
         decision: GateDecision = gate_recommendation(
             store=self.store,
-            camera_id=rec.camera_id, action_class=rec.action_class,
-            service=rec.service, target=rec.target,
-            severity=severity, confidence=rec.confidence, now_ts=ts,
+            camera_id=rec.camera_id,
+            action_class=rec.action_class,
+            service=rec.service,
+            target=rec.target,
+            severity=severity,
+            confidence=rec.confidence,
+            now_ts=ts,
         )
 
         # Redundancy: only enforced after the base gates pass.
@@ -321,31 +334,39 @@ class ProtectiveRuntime:
                     )
 
         if not decision.execute:
-            status = (
-                "whitelisted_rejected" if decision.reason == "no_authorization"
-                else "gated"
-            )
+            status = "whitelisted_rejected" if decision.reason == "no_authorization" else "gated"
             row = ProtectiveLogRow(
-                incident_id=incident_id, camera_id=rec.camera_id, ts=ts,
-                action_class=rec.action_class, service=rec.service,
+                incident_id=incident_id,
+                camera_id=rec.camera_id,
+                ts=ts,
+                action_class=rec.action_class,
+                service=rec.service,
                 target=rec.target,
                 data_json=json.dumps(rec.data) if rec.data else None,
-                status=status, gate_reason=decision.reason,
-                vlm_confidence=rec.confidence, vlm_rationale=rec.rationale,
+                status=status,
+                gate_reason=decision.reason,
+                vlm_confidence=rec.confidence,
+                vlm_rationale=rec.rationale,
             )
             row.id = self.store.log_protective(row)
             logger.info(
                 "protective.gated",
-                incident_id=incident_id, camera_id=rec.camera_id,
-                action_class=rec.action_class, service=rec.service,
-                target=rec.target, reason=decision.reason,
+                incident_id=incident_id,
+                camera_id=rec.camera_id,
+                action_class=rec.action_class,
+                service=rec.service,
+                target=rec.target,
+                reason=decision.reason,
             )
             return row
 
         try:
             domain, service = rec.service.split(".", 1)
             await self.ha_caller(
-                domain, service, entity_id=rec.target, data=rec.data,
+                domain,
+                service,
+                entity_id=rec.target,
+                data=rec.data,
             )
             status: Literal["ok", "failed"] = "ok"
             gate_reason = None
@@ -353,25 +374,35 @@ class ProtectiveRuntime:
             status = "failed"
             gate_reason = f"execution_error: {e}"
             logger.warning(
-                "protective.failed", incident_id=incident_id,
-                action_class=rec.action_class, service=rec.service,
-                target=rec.target, error=str(e),
+                "protective.failed",
+                incident_id=incident_id,
+                action_class=rec.action_class,
+                service=rec.service,
+                target=rec.target,
+                error=str(e),
             )
 
         row = ProtectiveLogRow(
-            incident_id=incident_id, camera_id=rec.camera_id, ts=ts,
-            action_class=rec.action_class, service=rec.service,
+            incident_id=incident_id,
+            camera_id=rec.camera_id,
+            ts=ts,
+            action_class=rec.action_class,
+            service=rec.service,
             target=rec.target,
             data_json=json.dumps(rec.data) if rec.data else None,
-            status=status, gate_reason=gate_reason,
-            vlm_confidence=rec.confidence, vlm_rationale=rec.rationale,
+            status=status,
+            gate_reason=gate_reason,
+            vlm_confidence=rec.confidence,
+            vlm_rationale=rec.rationale,
         )
         row.id = self.store.log_protective(row)
         if status == "ok":
             logger.info(
                 "protective.executed",
-                incident_id=incident_id, camera_id=rec.camera_id,
-                action_class=rec.action_class, service=rec.service,
+                incident_id=incident_id,
+                camera_id=rec.camera_id,
+                action_class=rec.action_class,
+                service=rec.service,
                 target=rec.target,
             )
         return row
@@ -392,16 +423,18 @@ def parse_perception_requests(
     for p in payload:
         if not isinstance(p, dict):
             continue
-        out.append(PerceptionRequest(
-            kind=p.get("kind") or "ha_service",
-            service=p.get("service"),
-            target=p.get("target"),
-            data=dict(p.get("data") or {}),
-            camera_id=p.get("camera_id"),
-            op=p.get("op"),
-            revert_after_s=float(p.get("revert_after_s", 45.0)),
-            rationale=p.get("rationale"),
-        ))
+        out.append(
+            PerceptionRequest(
+                kind=p.get("kind") or "ha_service",
+                service=p.get("service"),
+                target=p.get("target"),
+                data=dict(p.get("data") or {}),
+                camera_id=p.get("camera_id"),
+                op=p.get("op"),
+                revert_after_s=float(p.get("revert_after_s", 45.0)),
+                rationale=p.get("rationale"),
+            )
+        )
     return out
 
 
@@ -417,17 +450,16 @@ def parse_recommendations(
     for r in payload:
         if not isinstance(r, dict) or not r.get("action_class"):
             continue
-        out.append(ProtectiveRecommendation(
-            action_class=str(r["action_class"]),
-            service=str(r.get("service") or ""),
-            target=str(r.get("target") or ""),
-            data=dict(r.get("data") or {}),
-            confidence=(
-                float(r["confidence"]) if r.get("confidence") is not None
-                else None
-            ),
-            urgency=r.get("urgency"),
-            rationale=r.get("rationale"),
-            camera_id=r.get("camera_id"),
-        ))
+        out.append(
+            ProtectiveRecommendation(
+                action_class=str(r["action_class"]),
+                service=str(r.get("service") or ""),
+                target=str(r.get("target") or ""),
+                data=dict(r.get("data") or {}),
+                confidence=(float(r["confidence"]) if r.get("confidence") is not None else None),
+                urgency=r.get("urgency"),
+                rationale=r.get("rationale"),
+                camera_id=r.get("camera_id"),
+            )
+        )
     return out

@@ -40,8 +40,7 @@ def event_url_from_rtsp(rtsp_url: str) -> tuple[str, str, str]:
     password = unquote(parts.password or "")
     host = parts.hostname or ""
     url = (
-        f"http://{host}/cgi-bin/eventManager.cgi"
-        "?action=attach&codes=%5BVideoMotion%5D&heartbeat=5"
+        f"http://{host}/cgi-bin/eventManager.cgi?action=attach&codes=%5BVideoMotion%5D&heartbeat=5"
     )
     return url, user, password
 

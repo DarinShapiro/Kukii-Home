@@ -58,29 +58,46 @@ def test_update_policy_clamps_below_one(store):
 
 
 def test_record_audit_returns_rowid(store):
-    rid = store.record_audit(AdminAudit(
-        id=None, ts=NOW, actor="alice",
-        operation="erase_last_hour", scope="all", rows_removed=3,
-        bytes_removed=1024,
-    ))
+    rid = store.record_audit(
+        AdminAudit(
+            id=None,
+            ts=NOW,
+            actor="alice",
+            operation="erase_last_hour",
+            scope="all",
+            rows_removed=3,
+            bytes_removed=1024,
+        )
+    )
     assert rid > 0
 
 
 def test_recent_audits_returns_newest_first(store):
     for i in range(3):
-        store.record_audit(AdminAudit(
-            id=None, ts=NOW - i * 60, actor="alice",
-            operation=f"op{i}", scope="x",
-        ))
+        store.record_audit(
+            AdminAudit(
+                id=None,
+                ts=NOW - i * 60,
+                actor="alice",
+                operation=f"op{i}",
+                scope="x",
+            )
+        )
     audits = store.recent_audits(limit=10)
     assert [a.operation for a in audits] == ["op0", "op1", "op2"]
 
 
 def test_recent_audits_limit_enforced(store):
     for i in range(10):
-        store.record_audit(AdminAudit(
-            id=None, ts=NOW + i, actor="x", operation=f"op{i}", scope="x",
-        ))
+        store.record_audit(
+            AdminAudit(
+                id=None,
+                ts=NOW + i,
+                actor="x",
+                operation=f"op{i}",
+                scope="x",
+            )
+        )
     assert len(store.recent_audits(limit=5)) == 5
 
 
@@ -97,9 +114,15 @@ def test_persist_to_disk_survives_reopen(tmp_path):
     db = tmp_path / "ret.db"
     s1 = RetentionStore(path=str(db))
     s1.update_policy(events_days=42)
-    s1.record_audit(AdminAudit(
-        id=None, ts=NOW, actor="alice", operation="x", scope="x",
-    ))
+    s1.record_audit(
+        AdminAudit(
+            id=None,
+            ts=NOW,
+            actor="alice",
+            operation="x",
+            scope="x",
+        )
+    )
     s1.close()
     s2 = RetentionStore(path=str(db))
     assert s2.get_policy().events_days == 42
@@ -185,8 +208,7 @@ def _vm(**kw):
 
 def test_render_page_includes_all_sections():
     html = render_system_page(_vm())
-    for heading in ("Storage usage", "Retention policy",
-                    "Operations", "Admin audit log"):
+    for heading in ("Storage usage", "Retention policy", "Operations", "Admin audit log"):
         assert f"<h2>{heading}</h2>" in html
 
 
@@ -203,8 +225,7 @@ def test_render_page_no_storage_rows_shows_empty_marker():
 
 
 def test_render_page_retention_form_shows_current_values():
-    p = RetentionPolicy(events_days=30, frames_days=7,
-                         events_max_gb=5, audit_days=180)
+    p = RetentionPolicy(events_days=30, frames_days=7, events_max_gb=5, audit_days=180)
     html = render_system_page(_vm(policy=p))
     assert "value='30'" in html
     assert "value='7'" in html
@@ -238,12 +259,18 @@ def test_render_page_audit_log_empty_state():
 
 def test_render_page_audit_log_lists_recent_operations():
     audits = [
-        AdminAudit(id=1, ts=NOW - 600, actor="alice",
-                    operation="erase_last_hour", scope="all",
-                    rows_removed=5, bytes_removed=10_000),
-        AdminAudit(id=2, ts=NOW - 1200, actor="bob",
-                    operation="retention.policy.updated",
-                    scope="global"),
+        AdminAudit(
+            id=1,
+            ts=NOW - 600,
+            actor="alice",
+            operation="erase_last_hour",
+            scope="all",
+            rows_removed=5,
+            bytes_removed=10_000,
+        ),
+        AdminAudit(
+            id=2, ts=NOW - 1200, actor="bob", operation="retention.policy.updated", scope="global"
+        ),
     ]
     html = render_system_page(_vm(audit_log=audits))
     assert "erase_last_hour" in html
@@ -254,8 +281,7 @@ def test_render_page_audit_log_lists_recent_operations():
 
 
 def test_render_page_html_escapes_audit_fields():
-    a = AdminAudit(id=1, ts=NOW, actor="<bad>", operation="<op>",
-                    scope="<scope>")
+    a = AdminAudit(id=1, ts=NOW, actor="<bad>", operation="<op>", scope="<scope>")
     html = render_system_page(_vm(audit_log=[a]))
     assert "<bad>" not in html
     assert "&lt;bad&gt;" in html
@@ -263,7 +289,8 @@ def test_render_page_html_escapes_audit_fields():
 
 def test_render_page_byte_formatting_progresses_through_units():
     from kukiihome_ha_agent.web_ui.system import _format_bytes
+
     assert _format_bytes(500) == "500 B"
     assert "KB" in _format_bytes(2 * 1024)
-    assert "MB" in _format_bytes(5 * 1024 ** 2)
-    assert "GB" in _format_bytes(3 * 1024 ** 3)
+    assert "MB" in _format_bytes(5 * 1024**2)
+    assert "GB" in _format_bytes(3 * 1024**3)

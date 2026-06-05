@@ -53,7 +53,8 @@ def test_idle_session_auto_closes(store):
     store.append_turn(s.id, role="user", utterance="hi", now_ts=NOW)
     # Far future — well past the idle timeout
     fetched = store.active_session_for(
-        "alice", now_ts=NOW + SESSION_IDLE_TIMEOUT_S + 60,
+        "alice",
+        now_ts=NOW + SESSION_IDLE_TIMEOUT_S + 60,
     )
     assert fetched is None
 
@@ -62,7 +63,8 @@ def test_active_session_keeps_recent_active(store):
     s = store.open_session("alice", now_ts=NOW)
     store.append_turn(s.id, role="user", utterance="hi", now_ts=NOW)
     fetched = store.active_session_for(
-        "alice", now_ts=NOW + SESSION_IDLE_TIMEOUT_S - 60,
+        "alice",
+        now_ts=NOW + SESSION_IDLE_TIMEOUT_S - 60,
     )
     assert fetched is not None
 
@@ -77,7 +79,8 @@ def test_get_or_open_opens_new_when_idle(store):
     s1 = store.open_session("alice", now_ts=NOW)
     store.append_turn(s1.id, role="user", utterance="hi", now_ts=NOW)
     s2 = store.get_or_open_session(
-        "alice", now_ts=NOW + SESSION_IDLE_TIMEOUT_S + 60,
+        "alice",
+        now_ts=NOW + SESSION_IDLE_TIMEOUT_S + 60,
     )
     assert s2.id != s1.id
 
@@ -95,8 +98,11 @@ def test_append_turn_assigns_monotonic_indices(store):
     s = store.open_session("alice", now_ts=NOW)
     t1 = store.append_turn(s.id, role="user", utterance="hi", now_ts=NOW)
     t2 = store.append_turn(
-        s.id, role="system", utterance="proposal",
-        proposal_json='{"a":1}', now_ts=NOW + 1,
+        s.id,
+        role="system",
+        utterance="proposal",
+        proposal_json='{"a":1}',
+        now_ts=NOW + 1,
     )
     assert t1.turn_index == 0
     assert t2.turn_index == 1
@@ -113,8 +119,12 @@ def test_turns_for_session_in_order(store):
 def test_get_turn_returns_full_row(store):
     s = store.open_session("alice", now_ts=NOW)
     t = store.append_turn(
-        s.id, role="system", utterance="ok",
-        proposal_json='{"x":1}', committed_to="rule_abc", now_ts=NOW,
+        s.id,
+        role="system",
+        utterance="ok",
+        proposal_json='{"x":1}',
+        committed_to="rule_abc",
+        now_ts=NOW,
     )
     fetched = store.get_turn(t.id)
     assert fetched is not None
@@ -127,7 +137,8 @@ def test_get_turn_returns_full_row(store):
 
 def test_record_and_get_provenance_roundtrip(store):
     prov = Provenance(
-        guidance_id="rule_abc", origin="conversation",
+        guidance_id="rule_abc",
+        origin="conversation",
         transcript_id="trn_xyz",
         user_utterance="I want to know when Bob arrives",
         placement_reasoning="explicit fire + persistent → Rule",
@@ -142,10 +153,13 @@ def test_record_and_get_provenance_roundtrip(store):
 
 
 def test_append_refinement_extends_list(store):
-    store.record_provenance(Provenance(
-        guidance_id="rule_abc", origin="conversation",
-        transcript_id="trn_xyz",
-    ))
+    store.record_provenance(
+        Provenance(
+            guidance_id="rule_abc",
+            origin="conversation",
+            transcript_id="trn_xyz",
+        )
+    )
     store.append_refinement("rule_abc", "trn_ref1")
     store.append_refinement("rule_abc", "trn_ref2")
     out = store.get_provenance("rule_abc")
@@ -153,9 +167,13 @@ def test_append_refinement_extends_list(store):
 
 
 def test_append_refinement_dedupes(store):
-    store.record_provenance(Provenance(
-        guidance_id="rule_abc", origin="conversation", transcript_id="t0",
-    ))
+    store.record_provenance(
+        Provenance(
+            guidance_id="rule_abc",
+            origin="conversation",
+            transcript_id="t0",
+        )
+    )
     store.append_refinement("rule_abc", "trn_ref1")
     store.append_refinement("rule_abc", "trn_ref1")  # duplicate
     out = store.get_provenance("rule_abc")
@@ -176,9 +194,13 @@ def test_backfill_pre_provenance_marks_existing(store):
 
 
 def test_backfill_skips_already_provenant(store):
-    store.record_provenance(Provenance(
-        guidance_id="a", origin="conversation", transcript_id="t0",
-    ))
+    store.record_provenance(
+        Provenance(
+            guidance_id="a",
+            origin="conversation",
+            transcript_id="t0",
+        )
+    )
     n = store.backfill_pre_provenance(["a", "b"])
     assert n == 1  # only 'b' got backfilled
     assert store.get_provenance("a").origin == "conversation"
@@ -189,9 +211,13 @@ def test_persist_to_disk_survives_reopen(tmp_path):
     s1 = ProvenanceStore(path=str(db))
     sess = s1.open_session("alice", now_ts=NOW)
     s1.append_turn(sess.id, role="user", utterance="hi", now_ts=NOW)
-    s1.record_provenance(Provenance(
-        guidance_id="rule_1", origin="conversation", transcript_id="x",
-    ))
+    s1.record_provenance(
+        Provenance(
+            guidance_id="rule_1",
+            origin="conversation",
+            transcript_id="x",
+        )
+    )
     s1.close()
     s2 = ProvenanceStore(path=str(db))
     out = s2.get_provenance("rule_1")
@@ -279,7 +305,10 @@ def test_validate_proposal_strips_empty_scope_values():
     instead of failing the schema."""
     d = _good_proposal_dict()
     d["scope"] = {
-        "area": "front_yard", "actor": "", "camera": None, "kind": "person",
+        "area": "front_yard",
+        "actor": "",
+        "camera": None,
+        "kind": "person",
     }
     p = validate_proposal(d)
     assert p.scope == {"area": "front_yard", "kind": "person"}
@@ -309,10 +338,12 @@ def test_proposal_needs_disambiguation():
 
 
 def test_proposal_to_json_carries_clarifying_questions():
-    p = validate_proposal({
-        **_good_proposal_dict(),
-        "clarifying_questions": ["Just tonight, or always?"],
-        "confidence": 0.55,
-    })
+    p = validate_proposal(
+        {
+            **_good_proposal_dict(),
+            "clarifying_questions": ["Just tonight, or always?"],
+            "confidence": 0.55,
+        }
+    )
     blob = json.loads(p.to_json())
     assert blob["clarifying_questions"] == ["Just tonight, or always?"]

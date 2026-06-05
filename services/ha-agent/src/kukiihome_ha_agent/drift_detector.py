@@ -35,9 +35,9 @@ from dataclasses import dataclass
 from typing import Any
 
 # Threshold windows (in seconds).
-RULE_DRIFT_SECONDS = 30 * 86400.0         # 30 days
-DISMISSAL_DRIFT_SECONDS = 30 * 86400.0    # 30 days
-TI_STALE_SECONDS = 7 * 86400.0            # 7 days
+RULE_DRIFT_SECONDS = 30 * 86400.0  # 30 days
+DISMISSAL_DRIFT_SECONDS = 30 * 86400.0  # 30 days
+TI_STALE_SECONDS = 7 * 86400.0  # 7 days
 
 
 @dataclass
@@ -46,17 +46,19 @@ class DriftSuggestion:
     these as a banner at the top of the affected context group."""
 
     guidance_id: str
-    kind: str                 # 'rule' | 'dismissal' | 'transient_intent'
-    name: str                 # the entry's display name
-    summary: str              # one-sentence rationale shown to the user
-    recommended_action: str   # 'convert_to_preference' | 'revoke' | 'convert_to_rule'
+    kind: str  # 'rule' | 'dismissal' | 'transient_intent'
+    name: str  # the entry's display name
+    summary: str  # one-sentence rationale shown to the user
+    recommended_action: str  # 'convert_to_preference' | 'revoke' | 'convert_to_rule'
 
 
 # ─── Detectors ────────────────────────────────────────────────────
 
 
 def detect_stale_rules(
-    rules: list[Any], *, now_ts: float,
+    rules: list[Any],
+    *,
+    now_ts: float,
 ) -> list[DriftSuggestion]:
     """Rules created more than RULE_DRIFT_SECONDS ago that have never
     matched (or whose last match was more than the window ago)."""
@@ -68,21 +70,25 @@ def detect_stale_rules(
             continue  # too young to assess
         last = getattr(r, "last_matched_at", None)
         if last is None or float(last) < cutoff:
-            out.append(DriftSuggestion(
-                guidance_id=r.id,
-                kind="rule",
-                name=getattr(r, "name", r.id),
-                summary=(
-                    "This rule hasn't fired in 30+ days — it may have "
-                    "been meant as a Preference, not an alert."
-                ),
-                recommended_action="convert_to_preference",
-            ))
+            out.append(
+                DriftSuggestion(
+                    guidance_id=r.id,
+                    kind="rule",
+                    name=getattr(r, "name", r.id),
+                    summary=(
+                        "This rule hasn't fired in 30+ days — it may have "
+                        "been meant as a Preference, not an alert."
+                    ),
+                    recommended_action="convert_to_preference",
+                )
+            )
     return out
 
 
 def detect_stale_dismissals(
-    policies: list[Any], *, now_ts: float,
+    policies: list[Any],
+    *,
+    now_ts: float,
 ) -> list[DriftSuggestion]:
     """DismissalPolicies created more than DISMISSAL_DRIFT_SECONDS ago
     that have never applied (or last applied past the window)."""
@@ -96,21 +102,25 @@ def detect_stale_dismissals(
             continue
         last = getattr(p, "last_applied_at", None)
         if last is None or float(last) < cutoff:
-            out.append(DriftSuggestion(
-                guidance_id=p.id,
-                kind="dismissal",
-                name=getattr(p, "name", p.id),
-                summary=(
-                    "This dismissal hasn't applied in 30+ days — the "
-                    "pattern hasn't recurred. Consider revoking."
-                ),
-                recommended_action="revoke",
-            ))
+            out.append(
+                DriftSuggestion(
+                    guidance_id=p.id,
+                    kind="dismissal",
+                    name=getattr(p, "name", p.id),
+                    summary=(
+                        "This dismissal hasn't applied in 30+ days — the "
+                        "pattern hasn't recurred. Consider revoking."
+                    ),
+                    recommended_action="revoke",
+                )
+            )
     return out
 
 
 def detect_stale_transient_intents(
-    policies: list[Any], *, now_ts: float,
+    policies: list[Any],
+    *,
+    now_ts: float,
 ) -> list[DriftSuggestion]:
     """fire_once TransientIntents created more than TI_STALE_SECONDS ago
     that have never fired — the watched event didn't happen, suggest
@@ -128,21 +138,26 @@ def detect_stale_transient_intents(
             continue
         if getattr(p, "apply_count", 0) > 0:
             continue
-        out.append(DriftSuggestion(
-            guidance_id=p.id,
-            kind="transient_intent",
-            name=getattr(p, "name", p.id),
-            summary=(
-                "This one-shot watch was set 7+ days ago and never "
-                "fired. Consider converting to a persistent Rule."
-            ),
-            recommended_action="convert_to_rule",
-        ))
+        out.append(
+            DriftSuggestion(
+                guidance_id=p.id,
+                kind="transient_intent",
+                name=getattr(p, "name", p.id),
+                summary=(
+                    "This one-shot watch was set 7+ days ago and never "
+                    "fired. Consider converting to a persistent Rule."
+                ),
+                recommended_action="convert_to_rule",
+            )
+        )
     return out
 
 
 def detect_all_drift(
-    *, rules: list[Any], policies: list[Any], now_ts: float,
+    *,
+    rules: list[Any],
+    policies: list[Any],
+    now_ts: float,
 ) -> list[DriftSuggestion]:
     """Run all three detectors. Returns a single flat list — the route
     handler groups them by recommended_action for display."""

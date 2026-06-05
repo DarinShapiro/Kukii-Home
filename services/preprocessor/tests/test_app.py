@@ -43,13 +43,21 @@ def client(app_state: AppState) -> TestClient:
 
 def _client_with_cap(cap: int) -> TestClient:
     config = PreprocessorConfig(node_id="n", cameras=["c"], vlm_window_max_frames=cap)
-    return TestClient(create_app(AppState(
-        config=config, cache=ActorCache(), started_ts=time.time(),
-        frame_buffer=SyntheticFrameBuffer(
-            configured_cameras=["c"], node_id="n",
-            frames_per_second=4.0, buffer_horizon_seconds=300.0,
-        ),
-    )))
+    return TestClient(
+        create_app(
+            AppState(
+                config=config,
+                cache=ActorCache(),
+                started_ts=time.time(),
+                frame_buffer=SyntheticFrameBuffer(
+                    configured_cameras=["c"],
+                    node_id="n",
+                    frames_per_second=4.0,
+                    buffer_horizon_seconds=300.0,
+                ),
+            )
+        )
+    )
 
 
 def test_frame_window_downsamples_to_vlm_budget():
@@ -59,10 +67,10 @@ def test_frame_window_downsamples_to_vlm_budget():
     params = {"camera_id": "c", "ts_start": now - 20, "ts_end": now, "enrich": "false"}
     full = _client_with_cap(0).get("/frame_window", params=params).json()["frames"]
     capped = _client_with_cap(6).get("/frame_window", params=params).json()["frames"]
-    assert len(full) > 6           # dense without a cap
-    assert 0 < len(capped) <= 6    # thinned to the VLM budget
-    assert capped[0]["ts"] == full[0]["ts"]      # first frame preserved (full arc)
-    assert capped[-1]["ts"] == full[-1]["ts"]    # last frame preserved
+    assert len(full) > 6  # dense without a cap
+    assert 0 < len(capped) <= 6  # thinned to the VLM budget
+    assert capped[0]["ts"] == full[0]["ts"]  # first frame preserved (full arc)
+    assert capped[-1]["ts"] == full[-1]["ts"]  # last frame preserved
 
 
 # ─── /healthz ────────────────────────────────────────────────────────

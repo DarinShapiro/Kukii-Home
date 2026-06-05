@@ -33,14 +33,14 @@ class LabelRequest(BaseModel):
     event_id: str
     track_id: str
     name: str
-    kind: str | None = None          # person | pet; derived from the track if omitted
-    species: str | None = None       # pet only
-    owner_id: str | None = None      # pet only
+    kind: str | None = None  # person | pet; derived from the track if omitted
+    species: str | None = None  # pet only
+    owner_id: str | None = None  # pet only
     modalities: list[str] | None = None  # restrict which to enroll; default all on the track
 
 
 class ResolveRequest(BaseModel):
-    event_id: str | None = None      # None = re-resolve every embedded event
+    event_id: str | None = None  # None = re-resolve every embedded event
 
 
 class RejectRequest(BaseModel):
@@ -124,14 +124,22 @@ def register_identity_routes(app: FastAPI, state: AppState) -> None:
     @app.get("/identity/subjects")
     async def list_subjects() -> JSONResponse:
         subs = identity.list_subjects()
-        return JSONResponse({"subjects": [
+        return JSONResponse(
             {
-                "subject_id": s.subject_id, "kind": s.kind, "display_name": s.display_name,
-                "species": s.species, "owner_id": s.owner_id,
-                "modalities": s.modalities, "appearances": s.appearances,
+                "subjects": [
+                    {
+                        "subject_id": s.subject_id,
+                        "kind": s.kind,
+                        "display_name": s.display_name,
+                        "species": s.species,
+                        "owner_id": s.owner_id,
+                        "modalities": s.modalities,
+                        "appearances": s.appearances,
+                    }
+                    for s in subs
+                ]
             }
-            for s in subs
-        ]})
+        )
 
     @app.post("/identity/label")
     async def label_track(req: LabelRequest) -> JSONResponse:
@@ -143,11 +151,17 @@ def register_identity_routes(app: FastAPI, state: AppState) -> None:
             src = identity.crop_source(req.event_id, req.track_id)
             kind = src["kind"] if src else "person"
         subject_id = identity.upsert_subject(
-            display_name=req.name, kind=kind, species=req.species, owner_id=req.owner_id,
+            display_name=req.name,
+            kind=kind,
+            species=req.species,
+            owner_id=req.owner_id,
         )
         enrolled = identity.enroll_from_track(
-            detections, subject_id=subject_id, event_id=req.event_id,
-            track_id=req.track_id, modalities=req.modalities,
+            detections,
+            subject_id=subject_id,
+            event_id=req.event_id,
+            track_id=req.track_id,
+            modalities=req.modalities,
         )
         if not enrolled:
             raise HTTPException(status_code=400, detail="track has no embeddings to enroll")
@@ -157,11 +171,18 @@ def register_identity_routes(app: FastAPI, state: AppState) -> None:
         matched = identity.resolve_all(detections)
         await _refresh_live_cache(state, identity, subject_id)
         logger.info(
-            "identity.labelled", subject_id=subject_id, modalities=enrolled, matched=matched,
+            "identity.labelled",
+            subject_id=subject_id,
+            modalities=enrolled,
+            matched=matched,
         )
-        return JSONResponse({
-            "subject_id": subject_id, "enrolled_modalities": enrolled, "matched": matched,
-        })
+        return JSONResponse(
+            {
+                "subject_id": subject_id,
+                "enrolled_modalities": enrolled,
+                "matched": matched,
+            }
+        )
 
     @app.post("/identity/resolve")
     async def resolve(req: ResolveRequest) -> JSONResponse:
@@ -265,7 +286,7 @@ def _letterbox(img, canvas_w: int, canvas_h: int):
     resized = cv2.resize(img, (nw, nh))
     canvas = np.full((canvas_h, canvas_w, 3), (28, 32, 40), dtype=np.uint8)
     x, y = (canvas_w - nw) // 2, (canvas_h - nh) // 2
-    canvas[y:y + nh, x:x + nw] = resized
+    canvas[y : y + nh, x : x + nw] = resized
     return canvas
 
 
@@ -312,7 +333,13 @@ def _clip_gif(
         return None
     buf = io.BytesIO()
     pil_frames[0].save(
-        buf, format="GIF", save_all=True, append_images=pil_frames[1:],
-        duration=int(1000 / max(1, fps)), loop=0, disposal=2, optimize=True,
+        buf,
+        format="GIF",
+        save_all=True,
+        append_images=pil_frames[1:],
+        duration=int(1000 / max(1, fps)),
+        loop=0,
+        disposal=2,
+        optimize=True,
     )
     return buf.getvalue()

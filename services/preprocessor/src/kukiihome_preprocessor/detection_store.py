@@ -159,8 +159,16 @@ class DetectionStore:
                 window_end, frame_count, captured_ts, enriched_ts)
                VALUES (?,?,?,?,?,?,?,?, NULL)
                ON CONFLICT(event_id) DO NOTHING""",
-            (event_id, camera_id, node_id, trigger_ts, window_start,
-             window_end, frame_count, captured_ts),
+            (
+                event_id,
+                camera_id,
+                node_id,
+                trigger_ts,
+                window_start,
+                window_end,
+                frame_count,
+                captured_ts,
+            ),
         )
         self._conn.commit()
 
@@ -170,8 +178,16 @@ class DetectionStore:
                (event_id, camera_id, frame_ts, frame_name, kind, confidence, bbox, track_id)
                VALUES (?,?,?,?,?,?,?,?)""",
             [
-                (r.event_id, r.camera_id, r.frame_ts, r.frame_name, r.kind,
-                 r.confidence, json.dumps(r.bbox) if r.bbox is not None else None, r.track_id)
+                (
+                    r.event_id,
+                    r.camera_id,
+                    r.frame_ts,
+                    r.frame_name,
+                    r.kind,
+                    r.confidence,
+                    json.dumps(r.bbox) if r.bbox is not None else None,
+                    r.track_id,
+                )
                 for r in rows
             ],
         )
@@ -188,8 +204,13 @@ class DetectionStore:
                VALUES (?,?,?,?,?,?,?,?)""",
             [
                 (
-                    r.event_id, r.camera_id, r.track_id, r.frame_ts, r.modality,
-                    r.match_method, int(r.embedding.shape[0]),
+                    r.event_id,
+                    r.camera_id,
+                    r.track_id,
+                    r.frame_ts,
+                    r.modality,
+                    r.match_method,
+                    int(r.embedding.shape[0]),
                     np.ascontiguousarray(r.embedding, dtype="<f4").tobytes(),
                 )
                 for r in rows
@@ -204,9 +225,7 @@ class DetectionStore:
         self._conn.commit()
 
     def is_enriched(self, event_id: str) -> bool:
-        cur = self._conn.execute(
-            "SELECT enriched_ts FROM events WHERE event_id=?", (event_id,)
-        )
+        cur = self._conn.execute("SELECT enriched_ts FROM events WHERE event_id=?", (event_id,))
         row = cur.fetchone()
         return row is not None and row["enriched_ts"] is not None
 
@@ -257,8 +276,12 @@ class DetectionStore:
         for r in cur.fetchall():
             out.append(
                 DetectionRow(
-                    event_id=r["event_id"], camera_id=r["camera_id"], frame_ts=r["frame_ts"],
-                    frame_name=r["frame_name"], kind=r["kind"], confidence=r["confidence"],
+                    event_id=r["event_id"],
+                    camera_id=r["camera_id"],
+                    frame_ts=r["frame_ts"],
+                    frame_name=r["frame_name"],
+                    kind=r["kind"],
+                    confidence=r["confidence"],
                     bbox=tuple(json.loads(r["bbox"])) if r["bbox"] else None,
                     track_id=r["track_id"],
                 )
@@ -293,9 +316,13 @@ class DetectionStore:
                 continue
             out.append(
                 EmbeddingRow(
-                    event_id=r["event_id"], camera_id=r["camera_id"], track_id=r["track_id"],
-                    frame_ts=r["frame_ts"], modality=r["modality"],
-                    match_method=r["match_method"], embedding=emb,
+                    event_id=r["event_id"],
+                    camera_id=r["camera_id"],
+                    track_id=r["track_id"],
+                    frame_ts=r["frame_ts"],
+                    modality=r["modality"],
+                    match_method=r["match_method"],
+                    embedding=emb,
                 )
             )
         return out
@@ -315,6 +342,9 @@ class DetectionStore:
         elif newest_cap is not None and newest_enr is None:
             lag = None  # nothing enriched yet
         return LagReport(
-            camera_id=camera_id, pending_events=pending or 0,
-            newest_captured_ts=newest_cap, newest_enriched_ts=newest_enr, lag_seconds=lag,
+            camera_id=camera_id,
+            pending_events=pending or 0,
+            newest_captured_ts=newest_cap,
+            newest_enriched_ts=newest_enr,
+            lag_seconds=lag,
         )

@@ -92,12 +92,10 @@ def _filter_form(
         for k in kinds_present
     )
     cam_select = (
-        f"<select name='cam' multiple size='1'>{cam_opts}</select>"
-        if cameras_present else ""
+        f"<select name='cam' multiple size='1'>{cam_opts}</select>" if cameras_present else ""
     )
     kind_select = (
-        f"<select name='kind' multiple size='1'>{kind_opts}</select>"
-        if kinds_present else ""
+        f"<select name='kind' multiple size='1'>{kind_opts}</select>" if kinds_present else ""
     )
     return (
         "<form class='filters' method='get'>"
@@ -132,8 +130,10 @@ def render_activity_page(
     sorted_all = sorted(alerts_all, key=_alert_when_ts, reverse=True)
     filtered = _apply_filters(
         sorted_all,
-        show_passive=show_passive, show_actions=show_actions,
-        cameras=cameras, kinds=kinds,
+        show_passive=show_passive,
+        show_actions=show_actions,
+        cameras=cameras,
+        kinds=kinds,
     )
 
     total = len(filtered)
@@ -176,7 +176,8 @@ def render_activity_page(
         "<div class='sub'>Every reasoned incident the cameras produced — "
         "actions on top of passives in one stream, filter as needed.</div>"
         + _filter_form(
-            show_passive=show_passive, show_actions=show_actions,
+            show_passive=show_passive,
+            show_actions=show_actions,
             cameras_present=_cameras_present(sorted_all),
             kinds_present=_kinds_present(sorted_all),
             selected_cameras=cameras,
@@ -197,9 +198,7 @@ def parse_filters(query: dict) -> dict:
     checkboxes default ON when there are no query params at all (fresh
     visit), but when the user has explicitly submitted a filter form
     (any of the four query keys is present), only ticked boxes count as on."""
-    has_any_explicit = any(
-        k in query for k in ("passive", "actions", "cam", "kind", "page")
-    )
+    has_any_explicit = any(k in query for k in ("passive", "actions", "cam", "kind", "page"))
     if has_any_explicit:
         show_passive = "1" in _multi(query, "passive")
         show_actions = "1" in _multi(query, "actions")

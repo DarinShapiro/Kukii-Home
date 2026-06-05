@@ -59,7 +59,7 @@ class TriageGate:
     # work unchanged — when either is None, the gate skips rule evaluation
     # and the system behaves exactly as before.
     rules_runtime: object | None = None  # RulesRuntime — avoid hard import cycle
-    rules_store: object | None = None    # RulesStore — for audit-row writes
+    rules_store: object | None = None  # RulesStore — for audit-row writes
     ha_event_fire: object | None = None  # callable(event_type, data) -> awaitable
 
     window_before_s: float = 4.0
@@ -141,9 +141,7 @@ class TriageGate:
         # rules_runtime.build_nl_prompt_section).
         await self._maybe_evaluate_rules(alert, event_id=event_id, decision=decision)
 
-    async def _maybe_evaluate_rules(
-        self, alert: dict, *, event_id: str, decision
-    ) -> None:
+    async def _maybe_evaluate_rules(self, alert: dict, *, event_id: str, decision) -> None:
         """Fire kukiihome_alert per matched shortcut rule. No-op when the
         rules pipeline isn't wired (older boot path / tests)."""
         if self.rules_runtime is None or self.ha_event_fire is None:
@@ -153,7 +151,10 @@ class TriageGate:
             area_id = alert.get("area_id")
             ts = float(alert.get("trigger_ts") or 0.0) or None
             outcomes = self.rules_runtime.shortcuts_for(
-                alert=alert, camera_id=camera_id, area_id=area_id, ts=ts,
+                alert=alert,
+                camera_id=camera_id,
+                area_id=area_id,
+                ts=ts,
             )
         except Exception as e:
             logger.warning("triage.rules_eval_failed", error=str(e))
@@ -161,7 +162,10 @@ class TriageGate:
 
         for outcome in outcomes:
             payload = self._build_alert_event_payload(
-                alert, outcome=outcome, decision=decision, event_id=event_id,
+                alert,
+                outcome=outcome,
+                decision=decision,
+                event_id=event_id,
             )
             alert_emitted = True
             try:
@@ -175,7 +179,8 @@ class TriageGate:
             except Exception as e:
                 logger.warning(
                     "triage.kukiihome_alert_failed",
-                    rule_id=outcome.rule.id, error=str(e),
+                    rule_id=outcome.rule.id,
+                    error=str(e),
                 )
                 alert_emitted = False
             # Record the match for the per-rule audit page, whether or not
@@ -185,20 +190,24 @@ class TriageGate:
                     import time as _time
 
                     from .rules_store import RuleMatch
-                    self.rules_store.record_match(RuleMatch(
-                        rule_id=outcome.rule.id, incident_id=event_id,
-                        matched_at=_time.time(), severity=outcome.severity,
-                        confidence=None,
-                        reasoning="shortcut identity match",
-                        matched=True, alert_emitted=alert_emitted,
-                    ))
+
+                    self.rules_store.record_match(
+                        RuleMatch(
+                            rule_id=outcome.rule.id,
+                            incident_id=event_id,
+                            matched_at=_time.time(),
+                            severity=outcome.severity,
+                            confidence=None,
+                            reasoning="shortcut identity match",
+                            matched=True,
+                            alert_emitted=alert_emitted,
+                        )
+                    )
                 except Exception as e:
                     logger.warning("triage.match_record_failed", error=str(e))
 
     @staticmethod
-    def _build_alert_event_payload(
-        alert: dict, *, outcome, decision, event_id: str
-    ) -> dict:
+    def _build_alert_event_payload(alert: dict, *, outcome, decision, event_id: str) -> dict:
         """Build the kukiihome_alert event body per Task 9 §HA event payload.
 
         Kept conservative: include the fields HA automations will branch on
@@ -217,8 +226,7 @@ class TriageGate:
             "scene_description": getattr(decision, "explanation", "") or "",
             "reasoning": "shortcut identity match",
             "camera_id": alert.get("camera_id"),
-            "camera_name": alert.get("camera_friendly_name")
-                           or alert.get("camera_name"),
+            "camera_name": alert.get("camera_friendly_name") or alert.get("camera_name"),
             "area_id": alert.get("area_id"),
             "kind": alert.get("sensor_classification") or alert.get("kind"),
             "actors": [outcome.matched_subject_id] if outcome.matched_subject_id else [],

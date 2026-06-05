@@ -43,7 +43,9 @@ def test_drawer_close_returns_to_current_page_not_root():
     the current page's relative path so the close link is a no-op
     nav back to the same page (drawer query stripped)."""
     html = render_drawer(
-        session=None, turns=[], request_path="/cameras/pool",
+        session=None,
+        turns=[],
+        request_path="/cameras/pool",
     )
     assert "href='cameras/pool'" in html
     assert "href='?'" not in html
@@ -64,7 +66,9 @@ def test_drawer_close_handles_root_path():
 
 def test_drawer_close_handles_alert_detail_path():
     html = render_drawer(
-        session=None, turns=[], request_path="/alert/evt_42",
+        session=None,
+        turns=[],
+        request_path="/alert/evt_42",
     )
     assert "href='alert/evt_42'" in html
 
@@ -114,17 +118,21 @@ def stores():
         provenance=ProvenanceStore(path=None),
     )
     yield bundle
-    for s in (bundle.rules, bundle.preferences,
-              bundle.policies, bundle.provenance):
+    for s in (bundle.rules, bundle.preferences, bundle.policies, bundle.provenance):
         if s:
             s.close()
 
 
 def _rule_proposal(**kw):
     base = dict(  # noqa: C408
-        storage_class="rule", name="Test", scope={"area": "front_yard"},
-        lifecycle="persistent", fire_affordance="alert",
-        severity="normal", intent_text="x", reasoning="r",
+        storage_class="rule",
+        name="Test",
+        scope={"area": "front_yard"},
+        lifecycle="persistent",
+        fire_affordance="alert",
+        severity="normal",
+        intent_text="x",
+        reasoning="r",
         confidence=0.9,
     )
     base.update(kw)
@@ -133,16 +141,14 @@ def _rule_proposal(**kw):
 
 def test_refine_same_class_routes_to_update_in_place(stores):
     """Baseline: refining a rule with another rule works."""
-    gid = commit_guidance(_rule_proposal(), stores=stores,
-                           transcript_id="t0",
-                           user_utterance="initial")
+    gid = commit_guidance(
+        _rule_proposal(), stores=stores, transcript_id="t0", user_utterance="initial"
+    )
     refined = _rule_proposal(
         intent_text="UPDATED",
         scope={"area": "front_yard", "refines_guidance_id": gid},
     )
-    gid2 = commit_guidance(refined, stores=stores,
-                            transcript_id="t1",
-                            user_utterance="refinement")
+    gid2 = commit_guidance(refined, stores=stores, transcript_id="t1", user_utterance="refinement")
     assert gid2 == gid
     assert len(stores.rules.all_rules()) == 1
     assert "UPDATED" in stores.rules.get(gid).intent_text
@@ -154,9 +160,9 @@ def test_refine_across_classes_falls_through_to_fresh_create(stores):
     take a guidance_id — silently writing to the singleton preference and
     leaving the rule untouched. Fix: detect class mismatch and fall
     through to a fresh create."""
-    rule_id = commit_guidance(_rule_proposal(), stores=stores,
-                                transcript_id="t0",
-                                user_utterance="initial")
+    rule_id = commit_guidance(
+        _rule_proposal(), stores=stores, transcript_id="t0", user_utterance="initial"
+    )
 
     # Try to "refine" the rule with a preference proposal — should NOT
     # mutate either the rule OR the singleton preferences row in place;
@@ -165,13 +171,17 @@ def test_refine_across_classes_falls_through_to_fresh_create(stores):
         storage_class="preference",
         name="Pretending to refine",
         scope={"refines_guidance_id": rule_id},
-        lifecycle="persistent", fire_affordance="shift_prior",
+        lifecycle="persistent",
+        fire_affordance="shift_prior",
         intent_text="something about preferences",
-        reasoning="r", confidence=0.7,
+        reasoning="r",
+        confidence=0.7,
     )
     returned_gid = commit_guidance(
-        bad_refine, stores=stores,
-        transcript_id="t1", user_utterance="x",
+        bad_refine,
+        stores=stores,
+        transcript_id="t1",
+        user_utterance="x",
     )
     # Got a preferences id (fresh write to singleton), NOT the rule's id
     assert returned_gid != rule_id
@@ -190,27 +200,28 @@ def test_refine_policy_class_family_dismissal_and_transient_both_treat_as_policy
     one family — refining a dismissal proposal against a transient_intent
     id should work (same pol_ id space, same store)."""
     initial = PlacementProposal(
-        storage_class="transient_intent", name="Watch tonight",
-        scope={"actor": "bob"}, lifecycle="temporal",
+        storage_class="transient_intent",
+        name="Watch tonight",
+        scope={"actor": "bob"},
+        lifecycle="temporal",
         lifecycle_ttl_iso="2026-12-01T00:00:00+00:00",
-        fire_affordance="alert", intent_text="watch", reasoning="r",
+        fire_affordance="alert",
+        intent_text="watch",
+        reasoning="r",
         confidence=0.9,
     )
-    gid = commit_guidance(initial, stores=stores,
-                           transcript_id="t0",
-                           user_utterance="initial")
+    gid = commit_guidance(initial, stores=stores, transcript_id="t0", user_utterance="initial")
     refined = PlacementProposal(
         storage_class="dismissal_policy",
         name="Convert to dismiss",
         scope={"actor": "bob", "refines_guidance_id": gid},
         lifecycle="persistent",
         fire_affordance="dismiss",
-        intent_text="actually dismiss", reasoning="r2",
+        intent_text="actually dismiss",
+        reasoning="r2",
         confidence=0.8,
     )
-    gid2 = commit_guidance(refined, stores=stores,
-                            transcript_id="t1",
-                            user_utterance="refine")
+    gid2 = commit_guidance(refined, stores=stores, transcript_id="t1", user_utterance="refine")
     # Same family (both pol_ ids) → refinement allowed
     assert gid2 == gid
 
@@ -244,11 +255,18 @@ def test_diagnostics_hoists_camera_summary_calls():
 
     with patch.object(camera_data, "build_camera_summaries", side_effect=counting):
         diag.build_diagnostics_vm(
-            version="0.x", preprocessor_ok=None, preprocessor_url=None,
-            ha_connected=False, ha_entities=0,
-            rules_store=None, action_store=_FakeActions(),
-            area_store=None, policy_store=None,
-            registry_statuses=[], ha_loops=[], alerts=[],
+            version="0.x",
+            preprocessor_ok=None,
+            preprocessor_url=None,
+            ha_connected=False,
+            ha_entities=0,
+            rules_store=None,
+            action_store=_FakeActions(),
+            area_store=None,
+            policy_store=None,
+            registry_statuses=[],
+            ha_loops=[],
+            alerts=[],
             now_ts=NOW,
         )
     assert len(calls) == 2

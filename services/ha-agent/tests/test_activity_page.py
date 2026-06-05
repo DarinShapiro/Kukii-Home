@@ -11,8 +11,16 @@ from kukiihome_ha_agent.web_ui.activity import (
 NOW = 1_700_000_000.0
 
 
-def _alert(*, eid, kind="person", cam="pool", cam_friendly="Pool Camera Fluent",
-           status="alerted", ts_delta=600, ack=False):
+def _alert(
+    *,
+    eid,
+    kind="person",
+    cam="pool",
+    cam_friendly="Pool Camera Fluent",
+    status="alerted",
+    ts_delta=600,
+    ack=False,
+):
     return {
         "event_id": eid,
         "camera_id": cam,
@@ -27,9 +35,12 @@ def _alert(*, eid, kind="person", cam="pool", cam_friendly="Pool Camera Fluent",
 def _kw(**kw):
     """Defaults the renderer expects when called outside the route."""
     base = {
-        "show_passive": True, "show_actions": True,
-        "cameras": set(), "kinds": set(),
-        "now_ts": NOW, "page": 0,
+        "show_passive": True,
+        "show_actions": True,
+        "cameras": set(),
+        "kinds": set(),
+        "now_ts": NOW,
+        "page": 0,
     }
     base.update(kw)
     return base
@@ -40,16 +51,18 @@ def _kw(**kw):
 
 def test_action_passive_lane_toggles():
     alerts = [
-        _alert(eid="a1", status="alerted"),       # action
-        _alert(eid="a2", status="alerted"),       # action
-        _alert(eid="p1", status="dismissed"),     # passive
-        _alert(eid="p2", status="dismissed"),     # passive
+        _alert(eid="a1", status="alerted"),  # action
+        _alert(eid="a2", status="alerted"),  # action
+        _alert(eid="p1", status="dismissed"),  # passive
+        _alert(eid="p2", status="dismissed"),  # passive
     ]
     actions_only = render_activity_page(
-        alerts_all=alerts, **_kw(show_passive=False, show_actions=True),
+        alerts_all=alerts,
+        **_kw(show_passive=False, show_actions=True),
     )
     passives_only = render_activity_page(
-        alerts_all=alerts, **_kw(show_passive=True, show_actions=False),
+        alerts_all=alerts,
+        **_kw(show_passive=True, show_actions=False),
     )
     assert "Showing 2 of 2" in actions_only and "0 passive" in actions_only
     assert "Showing 2 of 2" in passives_only and "0 action" in passives_only
@@ -62,7 +75,8 @@ def test_camera_filter_narrows_set():
         _alert(eid="a3", cam="front_door", cam_friendly="Front Door Camera"),
     ]
     only_pool = render_activity_page(
-        alerts_all=alerts, **_kw(cameras={"pool"}),
+        alerts_all=alerts,
+        **_kw(cameras={"pool"}),
     )
     assert "Showing 2 of 2" in only_pool
 
@@ -74,7 +88,8 @@ def test_kind_filter_narrows_set():
         _alert(eid="a3", kind="dog"),
     ]
     only_dogs = render_activity_page(
-        alerts_all=alerts, **_kw(kinds={"dog"}),
+        alerts_all=alerts,
+        **_kw(kinds={"dog"}),
     )
     assert "Showing 2 of 2" in only_dogs
 
@@ -101,7 +116,8 @@ def test_filter_strip_lists_kinds_present():
 def test_empty_filtered_set_shows_helpful_copy():
     alerts = [_alert(eid="a1", kind="person")]
     html = render_activity_page(
-        alerts_all=alerts, **_kw(kinds={"vehicle"}),
+        alerts_all=alerts,
+        **_kw(kinds={"vehicle"}),
     )
     assert "No activity matches the current filters" in html
 
@@ -124,12 +140,12 @@ def test_pagination_load_earlier_link():
 
 def test_pagination_preserves_filters_in_load_link():
     alerts = [
-        _alert(eid=f"a{i}", kind="dog", cam="pool",
-               cam_friendly="Pool Camera", ts_delta=600 + i)
+        _alert(eid=f"a{i}", kind="dog", cam="pool", cam_friendly="Pool Camera", ts_delta=600 + i)
         for i in range(50)
     ]
     html = render_activity_page(
-        alerts_all=alerts, **_kw(kinds={"dog"}, cameras={"pool"}),
+        alerts_all=alerts,
+        **_kw(kinds={"dog"}, cameras={"pool"}),
     )
     assert "page=1" in html and "kind=dog" in html and "cam=pool" in html
 
@@ -170,8 +186,13 @@ def test_parse_filters_bad_page_falls_back_to_zero():
 def test_uses_same_row_schema_as_home():
     """Single _render_activity_row source — same markup wherever it appears."""
     alerts = [
-        _alert(eid="e1", status="alerted", ack=True, kind="person",
-               cam_friendly="Front South Camera Fluent"),
+        _alert(
+            eid="e1",
+            status="alerted",
+            ack=True,
+            kind="person",
+            cam_friendly="Front South Camera Fluent",
+        ),
     ]
     html = render_activity_page(alerts_all=alerts, **_kw())
     assert "activity-row" in html

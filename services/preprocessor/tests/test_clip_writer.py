@@ -40,13 +40,22 @@ def _make_event(tmp_path, *, n_frames=6, fps=4.0, manifest=True):
     for i in range(n_frames):
         name = f"frame_{i:05d}.jpg"
         _write_jpeg(event_dir / name, color=(20 * i, 50, 200 - 20 * i))
-        frame_index.append({
-            "name": name, "ts": ts_base + i / fps, "has_motion": True,
-        })
+        frame_index.append(
+            {
+                "name": name,
+                "ts": ts_base + i / fps,
+                "has_motion": True,
+            }
+        )
     if manifest:
-        (event_dir / "event.json").write_text(json.dumps({
-            "camera_id": "cam1", "frame_index": frame_index,
-        }))
+        (event_dir / "event.json").write_text(
+            json.dumps(
+                {
+                    "camera_id": "cam1",
+                    "frame_index": frame_index,
+                }
+            )
+        )
     return event_dir
 
 

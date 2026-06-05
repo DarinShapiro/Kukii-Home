@@ -120,9 +120,9 @@ def resolve_event(
         }
         if not enrolled:
             continue
-        threshold = thresholds.get(modality, DEFAULT_RESOLVE_THRESHOLDS.get(
-            modality, _FALLBACK_THRESHOLD
-        ))
+        threshold = thresholds.get(
+            modality, DEFAULT_RESOLVE_THRESHOLDS.get(modality, _FALLBACK_THRESHOLD)
+        )
         for r in mod_rows:
             actor_id, sim = _best_match(r.embedding, enrolled, threshold)
             if actor_id is None:

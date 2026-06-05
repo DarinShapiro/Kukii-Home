@@ -36,11 +36,15 @@ _STORAGE_LABEL = {
 
 
 def _render_proposal_card(
-    proposal: PlacementProposal, *, turn_id: str, session_id: str,
+    proposal: PlacementProposal,
+    *,
+    turn_id: str,
+    session_id: str,
 ) -> str:
     """The placement preview card the user confirms or refines."""
     storage_label = _STORAGE_LABEL.get(
-        proposal.storage_class, proposal.storage_class,
+        proposal.storage_class,
+        proposal.storage_class,
     )
     chip = (
         f"<span class='chip cap-src ok'>{_e(storage_label)}</span> · "
@@ -48,24 +52,18 @@ def _render_proposal_card(
         f"<span class='muted'>{_e(proposal.fire_affordance)}</span>"
     )
     scope_lines = "".join(
-        f"<div><b>{_e(k)}:</b> {_e(str(v))}</div>"
-        for k, v in (proposal.scope or {}).items()
-        if v
+        f"<div><b>{_e(k)}:</b> {_e(str(v))}</div>" for k, v in (proposal.scope or {}).items() if v
     )
     severity_line = (
-        f"<div><b>severity:</b> {_e(proposal.severity)}</div>"
-        if proposal.severity else ""
+        f"<div><b>severity:</b> {_e(proposal.severity)}</div>" if proposal.severity else ""
     )
 
     if proposal.clarifying_questions:
         # Disambiguation state — render the questions, no confirm button
         q_html = "".join(
-            f"<div class='clarify-q'>{_e(q)}</div>"
-            for q in proposal.clarifying_questions
+            f"<div class='clarify-q'>{_e(q)}</div>" for q in proposal.clarifying_questions
         )
-        confirm_html = (
-            "<div class='hint'>Reply above to answer; I'll re-propose.</div>"
-        )
+        confirm_html = "<div class='hint'>Reply above to answer; I'll re-propose.</div>"
     else:
         q_html = ""
         confirm_html = (
@@ -115,7 +113,10 @@ def _render_user_turn(turn: TranscriptTurn, *, now_ts: float | None) -> str:
 
 
 def _render_system_turn(
-    turn: TranscriptTurn, *, session_id: str, now_ts: float | None,
+    turn: TranscriptTurn,
+    *,
+    session_id: str,
+    now_ts: float | None,
 ) -> str:
     ts_html = friendly_time_html(turn.ts, now=now_ts) if now_ts else ""
     body: str
@@ -125,7 +126,9 @@ def _render_system_turn(
         try:
             proposal = PlacementProposal.from_json(turn.proposal_json)
             body = _render_proposal_card(
-                proposal, turn_id=turn.id, session_id=session_id,
+                proposal,
+                turn_id=turn.id,
+                session_id=session_id,
             )
         except Exception:
             body = (
@@ -134,9 +137,7 @@ def _render_system_turn(
                 "</div></div>"
             )
     else:
-        body = (
-            f"<div class='turn-body'>{_e(turn.utterance)}</div>"
-        )
+        body = f"<div class='turn-body'>{_e(turn.utterance)}</div>"
     return (
         "<div class='drawer-turn system'>"
         f"<div class='turn-meta'>Kukii · {ts_html}</div>"
@@ -196,14 +197,11 @@ def render_drawer(
             "</div>"
         )
     elif not turns:
-        thread_html = (
-            "<div class='drawer-empty'>"
-            "Fresh session. What's on your mind?"
-            "</div>"
-        )
+        thread_html = "<div class='drawer-empty'>Fresh session. What's on your mind?</div>"
     else:
         thread_html = "".join(
-            _render_user_turn(t, now_ts=now_ts) if t.role == "user"
+            _render_user_turn(t, now_ts=now_ts)
+            if t.role == "user"
             else _render_system_turn(t, session_id=session.id, now_ts=now_ts)
             for t in turns
         )
@@ -228,7 +226,9 @@ def render_drawer(
         "<aside class='drawer' role='complementary'>"
         + header
         + context_strip
-        + "<div class='drawer-thread'>" + thread_html + "</div>"
+        + "<div class='drawer-thread'>"
+        + thread_html
+        + "</div>"
         + composer
         + "</aside>"
     )

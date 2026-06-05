@@ -58,11 +58,11 @@ class Policy:
 
     id: str
     kind: PolicyKind
-    name: str                                # user-facing label
+    name: str  # user-facing label
     descriptor: dict[str, Any] = field(default_factory=dict)
-    rationale: str = ""                      # human-readable why created
+    rationale: str = ""  # human-readable why created
     created_at: float = 0.0
-    expires_at: float | None = None          # None = no TTL
+    expires_at: float | None = None  # None = no TTL
     last_applied_at: float | None = None
     apply_count: int = 0
     revoked_at: float | None = None
@@ -77,7 +77,7 @@ class PolicyHit:
     policy_id: str
     incident_id: str
     applied_at: float
-    outcome: str                             # 'dismissed' | 'boosted' | 'noop'
+    outcome: str  # 'dismissed' | 'boosted' | 'noop'
     id: int | None = None
 
 
@@ -134,22 +134,28 @@ class PolicyStore:
         except json.JSONDecodeError:
             desc = {}
         return Policy(
-            id=row["id"], kind=row["kind"], name=row["name"],
-            descriptor=desc, rationale=row["rationale"],
-            created_at=row["created_at"], expires_at=row["expires_at"],
+            id=row["id"],
+            kind=row["kind"],
+            name=row["name"],
+            descriptor=desc,
+            rationale=row["rationale"],
+            created_at=row["created_at"],
+            expires_at=row["expires_at"],
             last_applied_at=row["last_applied_at"],
-            apply_count=row["apply_count"], revoked_at=row["revoked_at"],
+            apply_count=row["apply_count"],
+            revoked_at=row["revoked_at"],
         )
 
     def get(self, policy_id: str) -> Policy | None:
-        row = self._conn.execute(
-            "SELECT * FROM policies WHERE id = ?", (policy_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM policies WHERE id = ?", (policy_id,)).fetchone()
         return self._row_to_policy(row) if row else None
 
     def all_policies(
-        self, *, kind: PolicyKind | None = None,
-        include_revoked: bool = False, now_ts: float | None = None,
+        self,
+        *,
+        kind: PolicyKind | None = None,
+        include_revoked: bool = False,
+        now_ts: float | None = None,
     ) -> list[Policy]:
         """Returns active (non-revoked, non-expired) policies by default.
         Expired TTL → treated as revoked even without a ``revoked_at``."""
@@ -167,23 +173,26 @@ class PolicyStore:
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY created_at DESC"
-        return [
-            self._row_to_policy(r) for r in
-            self._conn.execute(sql, params).fetchall()
-        ]
+        return [self._row_to_policy(r) for r in self._conn.execute(sql, params).fetchall()]
 
     def hits_for_policy(
-        self, policy_id: str, *, limit: int = 50,
+        self,
+        policy_id: str,
+        *,
+        limit: int = 50,
     ) -> list[PolicyHit]:
         rows = self._conn.execute(
-            "SELECT * FROM policy_hits WHERE policy_id = ? "
-            "ORDER BY applied_at DESC LIMIT ?",
+            "SELECT * FROM policy_hits WHERE policy_id = ? ORDER BY applied_at DESC LIMIT ?",
             (policy_id, limit),
         ).fetchall()
         return [
-            PolicyHit(id=r["id"], policy_id=r["policy_id"],
-                      incident_id=r["incident_id"], applied_at=r["applied_at"],
-                      outcome=r["outcome"])
+            PolicyHit(
+                id=r["id"],
+                policy_id=r["policy_id"],
+                incident_id=r["incident_id"],
+                applied_at=r["applied_at"],
+                outcome=r["outcome"],
+            )
             for r in rows
         ]
 
@@ -194,9 +203,13 @@ class PolicyStore:
             (incident_id,),
         ).fetchall()
         return [
-            PolicyHit(id=r["id"], policy_id=r["policy_id"],
-                      incident_id=r["incident_id"], applied_at=r["applied_at"],
-                      outcome=r["outcome"])
+            PolicyHit(
+                id=r["id"],
+                policy_id=r["policy_id"],
+                incident_id=r["incident_id"],
+                applied_at=r["applied_at"],
+                outcome=r["outcome"],
+            )
             for r in rows
         ]
 
@@ -211,10 +224,16 @@ class PolicyStore:
             "created_at, expires_at, last_applied_at, apply_count, revoked_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
-                policy.id, policy.kind, policy.name,
-                json.dumps(policy.descriptor), policy.rationale,
-                policy.created_at, policy.expires_at, policy.last_applied_at,
-                policy.apply_count, policy.revoked_at,
+                policy.id,
+                policy.kind,
+                policy.name,
+                json.dumps(policy.descriptor),
+                policy.rationale,
+                policy.created_at,
+                policy.expires_at,
+                policy.last_applied_at,
+                policy.apply_count,
+                policy.revoked_at,
             ),
         )
         self._conn.commit()

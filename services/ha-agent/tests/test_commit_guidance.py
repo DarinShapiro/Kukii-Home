@@ -34,8 +34,12 @@ def stores():
     )
     yield bundle
     for s in (
-        bundle.rules, bundle.preferences, bundle.policies,
-        bundle.actions, bundle.areas, bundle.provenance,
+        bundle.rules,
+        bundle.preferences,
+        bundle.policies,
+        bundle.actions,
+        bundle.areas,
+        bundle.provenance,
     ):
         if s:
             s.close()
@@ -63,8 +67,11 @@ def _rule_proposal(**overrides):
 def test_commit_rule_writes_to_rules_store_and_provenance(stores):
     p = _rule_proposal()
     gid = commit_guidance(
-        p, stores=stores, origin="conversation",
-        transcript_id="trn_xyz", user_utterance="alert me when winston…",
+        p,
+        stores=stores,
+        origin="conversation",
+        transcript_id="trn_xyz",
+        user_utterance="alert me when winston…",
         now_ts=NOW,
     )
     # The rule lands in RulesStore
@@ -91,7 +98,10 @@ def test_commit_rule_no_severity_when_proposal_has_none(stores):
 
 def test_commit_rule_form_origin(stores):
     gid = commit_guidance(
-        _rule_proposal(), stores=stores, origin="form", now_ts=NOW,
+        _rule_proposal(),
+        stores=stores,
+        origin="form",
+        now_ts=NOW,
     )
     prov = stores.provenance.get_provenance(gid)
     assert prov.origin == "form"
@@ -214,9 +224,13 @@ def test_commit_area_posture_updates_existing_area(stores):
 def test_commit_area_posture_requires_area_in_scope(stores):
     p = PlacementProposal(
         storage_class="area_posture",
-        name="x", scope={"attention_mode": "attention"},
-        lifecycle="persistent", fire_affordance="metadata",
-        intent_text="", reasoning="r", confidence=1.0,
+        name="x",
+        scope={"attention_mode": "attention"},
+        lifecycle="persistent",
+        fire_affordance="metadata",
+        intent_text="",
+        reasoning="r",
+        confidence=1.0,
     )
     with pytest.raises(ValueError, match="must scope to an area"):
         commit_guidance(p, stores=stores, now_ts=NOW)
@@ -227,16 +241,23 @@ def test_commit_area_posture_requires_area_in_scope(stores):
 
 def test_refine_rule_updates_in_place_and_appends_transcript(stores):
     gid = commit_guidance(
-        _rule_proposal(), stores=stores, transcript_id="trn0",
-        user_utterance="initial", now_ts=NOW,
+        _rule_proposal(),
+        stores=stores,
+        transcript_id="trn0",
+        user_utterance="initial",
+        now_ts=NOW,
     )
     refined = _rule_proposal(
         intent_text="UPDATED — unless my brother is with him",
         severity="normal",
     )
     refine_guidance(
-        gid, refined, stores=stores, transcript_id="trn1",
-        user_utterance="refinement", now_ts=NOW + 60,
+        gid,
+        refined,
+        stores=stores,
+        transcript_id="trn1",
+        user_utterance="refinement",
+        now_ts=NOW + 60,
     )
     rule = stores.rules.get(gid)
     assert "UPDATED" in rule.intent_text
@@ -247,30 +268,39 @@ def test_refine_rule_updates_in_place_and_appends_transcript(stores):
 
 def test_refine_unknown_guidance_raises(stores):
     with pytest.raises(ValueError):
-        refine_guidance("ghost", _rule_proposal(), stores=stores,
-                         transcript_id="t", now_ts=NOW)
+        refine_guidance("ghost", _rule_proposal(), stores=stores, transcript_id="t", now_ts=NOW)
 
 
 def test_refine_policy_updates_descriptor(stores):
     gid = commit_guidance(
         PlacementProposal(
             storage_class="dismissal_policy",
-            name="Wind tree", scope={"camera": "front"},
-            lifecycle="persistent", fire_affordance="dismiss",
-            intent_text="suppress wind", reasoning="r", confidence=0.9,
+            name="Wind tree",
+            scope={"camera": "front"},
+            lifecycle="persistent",
+            fire_affordance="dismiss",
+            intent_text="suppress wind",
+            reasoning="r",
+            confidence=0.9,
         ),
-        stores=stores, now_ts=NOW,
+        stores=stores,
+        now_ts=NOW,
     )
     refine_guidance(
-        gid, PlacementProposal(
+        gid,
+        PlacementProposal(
             storage_class="dismissal_policy",
             name="Wind tree (updated)",
             scope={"camera": "back"},
-            lifecycle="persistent", fire_affordance="dismiss",
-            intent_text="suppress wind on back too", reasoning="r2",
+            lifecycle="persistent",
+            fire_affordance="dismiss",
+            intent_text="suppress wind on back too",
+            reasoning="r2",
             confidence=0.9,
         ),
-        stores=stores, transcript_id="trn1", now_ts=NOW + 60,
+        stores=stores,
+        transcript_id="trn1",
+        now_ts=NOW + 60,
     )
     pol = stores.policies.get(gid)
     assert pol.name == "Wind tree (updated)"

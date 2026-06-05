@@ -56,27 +56,41 @@ def test_build_vm_stores_counts_rules_areas_policies():
     actions = ActionStore(path=None)
     pols = PolicyStore(path=None)
     rules.create(Rule(id="", name="active", mode="nl", intent_text=""))
-    rules.create(Rule(id="", name="disabled", mode="nl",
-                       intent_text="", enabled=False))
+    rules.create(Rule(id="", name="disabled", mode="nl", intent_text="", enabled=False))
     areas.create(Area(id="", name="Pool"))
     areas.create(Area(id="", name="Yard"))
-    actions.upsert_perception(PerceptionEntry(
-        camera_id="pool", target_kind="ha_service", target="x",
-    ))
-    actions.upsert_protective(ProtectiveEntry(
-        camera_id="pool", action_class="lock", service="lock.lock",
-        target="lock.x",
-    ))
+    actions.upsert_perception(
+        PerceptionEntry(
+            camera_id="pool",
+            target_kind="ha_service",
+            target="x",
+        )
+    )
+    actions.upsert_protective(
+        ProtectiveEntry(
+            camera_id="pool",
+            action_class="lock",
+            service="lock.lock",
+            target="lock.x",
+        )
+    )
     pols.create(Policy(id="", kind="dismissal", name="d"))
     pols.create(Policy(id="", kind="transient_intent", name="t"))
 
     vm = build_diagnostics_vm(
-        version="0.16.0", preprocessor_ok=True, preprocessor_url="http://prep",
-        ha_connected=True, ha_entities=10,
-        rules_store=rules, action_store=actions, area_store=areas,
+        version="0.16.0",
+        preprocessor_ok=True,
+        preprocessor_url="http://prep",
+        ha_connected=True,
+        ha_entities=10,
+        rules_store=rules,
+        action_store=actions,
+        area_store=areas,
         policy_store=pols,
-        registry_statuses=[_FakeStatus("pool")], ha_loops=[],
-        alerts=[], now_ts=NOW,
+        registry_statuses=[_FakeStatus("pool")],
+        ha_loops=[],
+        alerts=[],
+        now_ts=NOW,
     )
     s = vm.stores
     assert s.rules_active == 1
@@ -95,36 +109,49 @@ def test_build_vm_stores_counts_rules_areas_policies():
 
 def test_build_vm_cameras_pulls_health_from_registry():
     vm = build_diagnostics_vm(
-        version="0.x", preprocessor_ok=True, preprocessor_url="http://x",
-        ha_connected=True, ha_entities=0,
-        rules_store=None, action_store=None, area_store=None,
+        version="0.x",
+        preprocessor_ok=True,
+        preprocessor_url="http://x",
+        ha_connected=True,
+        ha_entities=0,
+        rules_store=None,
+        action_store=None,
+        area_store=None,
         policy_store=None,
         registry_statuses=[
             _FakeStatus("pool", state="running", frames=1234, motions=8),
         ],
         ha_loops=[_FakeHALoop("pool", "Pool Camera Fluent")],
-        alerts=[], now_ts=NOW,
+        alerts=[],
+        now_ts=NOW,
     )
     assert len(vm.cameras) == 1
     c = vm.cameras[0]
     assert c.frames_read == 1234
     assert c.motion_events == 8
-    assert c.name == "Pool Camera"   # suffix-stripped via shell helper
+    assert c.name == "Pool Camera"  # suffix-stripped via shell helper
 
 
 def test_build_vm_reasoner_counts_24h_alerts_and_dismissals():
     alerts = [
-        _alert(status="alerted", ts_offset=600),       # 24h, alerted
-        _alert(status="dismissed", ts_offset=3600),    # 24h, dismissed
-        _alert(status="alerted", ts_offset=30 * 3600), # outside 24h
+        _alert(status="alerted", ts_offset=600),  # 24h, alerted
+        _alert(status="dismissed", ts_offset=3600),  # 24h, dismissed
+        _alert(status="alerted", ts_offset=30 * 3600),  # outside 24h
     ]
     vm = build_diagnostics_vm(
-        version="0.x", preprocessor_ok=True, preprocessor_url=None,
-        ha_connected=True, ha_entities=0,
-        rules_store=None, action_store=None, area_store=None,
+        version="0.x",
+        preprocessor_ok=True,
+        preprocessor_url=None,
+        ha_connected=True,
+        ha_entities=0,
+        rules_store=None,
+        action_store=None,
+        area_store=None,
         policy_store=None,
-        registry_statuses=[_FakeStatus("pool")], ha_loops=[],
-        alerts=alerts, now_ts=NOW,
+        registry_statuses=[_FakeStatus("pool")],
+        ha_loops=[],
+        alerts=alerts,
+        now_ts=NOW,
     )
     assert vm.reasoner.decisions_24h == 2
     assert vm.reasoner.alerts_24h == 1
@@ -134,25 +161,45 @@ def test_build_vm_reasoner_counts_24h_alerts_and_dismissals():
 def test_build_vm_action_runtime_counts_protective_status():
     actions = ActionStore(path=None)
     base = ProtectiveLogRow(
-        incident_id="i", camera_id="pool", ts=NOW - 600,
-        action_class="lock", service="lock.lock", target="lock.x",
-        data_json=None, status="ok",
+        incident_id="i",
+        camera_id="pool",
+        ts=NOW - 600,
+        action_class="lock",
+        service="lock.lock",
+        target="lock.x",
+        data_json=None,
+        status="ok",
     )
     actions.log_protective(base)
-    actions.log_protective(ProtectiveLogRow(
-        **{**base.__dict__, "id": None, "ts": NOW - 700, "status": "gated"},
-    ))
-    actions.log_protective(ProtectiveLogRow(
-        **{**base.__dict__, "id": None, "ts": NOW - 200_000,  # outside 24h
-           "status": "ok"},
-    ))
+    actions.log_protective(
+        ProtectiveLogRow(
+            **{**base.__dict__, "id": None, "ts": NOW - 700, "status": "gated"},
+        )
+    )
+    actions.log_protective(
+        ProtectiveLogRow(
+            **{
+                **base.__dict__,
+                "id": None,
+                "ts": NOW - 200_000,  # outside 24h
+                "status": "ok",
+            },
+        )
+    )
     vm = build_diagnostics_vm(
-        version="0.x", preprocessor_ok=True, preprocessor_url=None,
-        ha_connected=True, ha_entities=0,
-        rules_store=None, action_store=actions, area_store=None,
+        version="0.x",
+        preprocessor_ok=True,
+        preprocessor_url=None,
+        ha_connected=True,
+        ha_entities=0,
+        rules_store=None,
+        action_store=actions,
+        area_store=None,
         policy_store=None,
-        registry_statuses=[_FakeStatus("pool")], ha_loops=[],
-        alerts=[], now_ts=NOW,
+        registry_statuses=[_FakeStatus("pool")],
+        ha_loops=[],
+        alerts=[],
+        now_ts=NOW,
     )
     assert vm.action_runtime.protective_recent_ok == 1
     assert vm.action_runtime.protective_recent_gated == 1
@@ -162,11 +209,19 @@ def test_build_vm_action_runtime_counts_protective_status():
 def test_build_vm_tolerates_all_stores_missing():
     # All stores None → no exceptions, defaults
     vm = build_diagnostics_vm(
-        version="0.x", preprocessor_ok=None, preprocessor_url=None,
-        ha_connected=False, ha_entities=0,
-        rules_store=None, action_store=None, area_store=None,
+        version="0.x",
+        preprocessor_ok=None,
+        preprocessor_url=None,
+        ha_connected=False,
+        ha_entities=0,
+        rules_store=None,
+        action_store=None,
+        area_store=None,
         policy_store=None,
-        registry_statuses=[], ha_loops=[], alerts=[], now_ts=NOW,
+        registry_statuses=[],
+        ha_loops=[],
+        alerts=[],
+        now_ts=NOW,
     )
     assert vm.stores.rules_active == 0
     assert vm.cameras == []
@@ -177,20 +232,26 @@ def test_build_vm_tolerates_all_stores_missing():
 
 def _vm(**kw):
     base: dict = dict(  # noqa: C408
-        version="0.16.0", preprocessor_ok=True,
+        version="0.16.0",
+        preprocessor_ok=True,
         preprocessor_url="http://prep:8080",
-        ha_connected=True, ha_entities=42,
+        ha_connected=True,
+        ha_entities=42,
         stores=StoresSnapshot(rules_active=3, rules_total=5, areas=4),
         cameras=[
-            CameraHealthRow(camera_id="pool", name="Pool", state="running",
-                            frames_read=1234, motion_events=5),
+            CameraHealthRow(
+                camera_id="pool", name="Pool", state="running", frames_read=1234, motion_events=5
+            ),
         ],
         action_runtime=ActionRuntimeStats(
-            perception_pending=2, protective_recent_ok=4,
-            protective_recent_gated=1, protective_recent_failed=0,
+            perception_pending=2,
+            protective_recent_ok=4,
+            protective_recent_gated=1,
+            protective_recent_failed=0,
         ),
-        reasoner=ReasonerStats(decisions_24h=12, alerts_24h=3,
-                                dismissed_24h=9, last_decision_ts=NOW - 600),
+        reasoner=ReasonerStats(
+            decisions_24h=12, alerts_24h=3, dismissed_24h=9, last_decision_ts=NOW - 600
+        ),
         now_ts=NOW,
     )
     base.update(kw)
@@ -199,16 +260,15 @@ def _vm(**kw):
 
 def test_render_diagnostics_page_includes_all_sections():
     html = render_diagnostics_page(_vm())
-    for h in ("System", "Stores", "Cameras", "Action runtime",
-              "Reasoner", "Legacy status"):
+    for h in ("System", "Stores", "Cameras", "Action runtime", "Reasoner", "Legacy status"):
         assert f"<h2>{h}</h2>" in html
 
 
 def test_render_diagnostics_page_shows_version_and_reachability():
     html = render_diagnostics_page(_vm(version="9.9.9"))
     assert "9.9.9" in html
-    assert "reachable" in html   # prep_ok=True → 'reachable'
-    assert "connected" in html   # ha_connected=True
+    assert "reachable" in html  # prep_ok=True → 'reachable'
+    assert "connected" in html  # ha_connected=True
     assert "42 entities" in html
 
 
@@ -223,11 +283,19 @@ def test_render_diagnostics_page_preprocessor_unknown_shows_muted():
 
 
 def test_render_diagnostics_page_stores_table_shows_counts():
-    html = render_diagnostics_page(_vm(stores=StoresSnapshot(
-        rules_active=3, rules_total=5, areas=4,
-        perception_entries=2, protective_entries=1,
-        policies_dismissals=7, policies_transient_intents=2,
-    )))
+    html = render_diagnostics_page(
+        _vm(
+            stores=StoresSnapshot(
+                rules_active=3,
+                rules_total=5,
+                areas=4,
+                perception_entries=2,
+                protective_entries=1,
+                policies_dismissals=7,
+                policies_transient_intents=2,
+            )
+        )
+    )
     assert "3</b> active" in html
     assert "5 total" in html
     assert "<b>4</b>" in html  # areas

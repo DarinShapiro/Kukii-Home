@@ -35,15 +35,15 @@ class GuidanceEntry:
 
     guidance_id: str
     name: str
-    storage_class: str                  # 'rule' | 'preference' | 'dismissal_policy' | ...
-    scope_summary: str                  # "Front yard · Winston"
+    storage_class: str  # 'rule' | 'preference' | 'dismissal_policy' | ...
+    scope_summary: str  # "Front yard · Winston"
     scope_fields: dict[str, Any] = field(default_factory=dict)
-    lifecycle: str = "persistent"       # 'persistent' | 'temporal' | 'fire_once'
+    lifecycle: str = "persistent"  # 'persistent' | 'temporal' | 'fire_once'
     expires_at: float | None = None
     last_applied_ts: float | None = None
     apply_count: int = 0
     provenance_origin: str = "pre_provenance"
-    detail_url: str = ""                # link target for the row (existing per-type form)
+    detail_url: str = ""  # link target for the row (existing per-type form)
     # Free-form context labels — populated by ``classify_to_contexts``.
     contexts: list[str] = field(default_factory=list)
 
@@ -98,7 +98,9 @@ def _origin_icon(origin: str) -> str:
 
 
 def classify_to_contexts(
-    entry: GuidanceEntry, *, known_actor_names: set[str] | None = None,
+    entry: GuidanceEntry,
+    *,
+    known_actor_names: set[str] | None = None,
 ) -> list[str]:
     """Assign one entry to one or more *"About X"* groups. An entry can
     surface under multiple contexts — a rule about Winston in the Pool
@@ -129,8 +131,7 @@ def classify_to_contexts(
         # Prefer canonical display name when known; otherwise fall back to id.
         if actor_name.lower() in {n.lower() for n in known_actor_names}:
             display = next(
-                (n for n in known_actor_names
-                 if n.lower() == actor_name.lower()),
+                (n for n in known_actor_names if n.lower() == actor_name.lower()),
                 actor_name,
             )
             out.append(f"About {display}")
@@ -159,7 +160,9 @@ def classify_to_contexts(
 
 
 def group_by_context(
-    entries: list[GuidanceEntry], *, known_actor_names: set[str] | None = None,
+    entries: list[GuidanceEntry],
+    *,
+    known_actor_names: set[str] | None = None,
 ) -> dict[str, list[GuidanceEntry]]:
     """Bucket entries by context label. Each entry may appear in
     multiple buckets — that's the point. Preserves entry order within
@@ -167,7 +170,8 @@ def group_by_context(
     out: dict[str, list[GuidanceEntry]] = {}
     for e in entries:
         contexts = e.contexts or classify_to_contexts(
-            e, known_actor_names=known_actor_names,
+            e,
+            known_actor_names=known_actor_names,
         )
         e.contexts = contexts
         for ctx in contexts:
@@ -199,11 +203,11 @@ def _row(entry: GuidanceEntry, *, now_ts: float | None) -> str:
     )
     name_html = (
         f"<a href='{_e(entry.detail_url)}'><b>{_e(entry.name)}</b></a>"
-        if entry.detail_url else f"<b>{_e(entry.name)}</b>"
+        if entry.detail_url
+        else f"<b>{_e(entry.name)}</b>"
     )
     scope_html = (
-        f"<span class='muted'>{_e(entry.scope_summary)}</span>"
-        if entry.scope_summary else ""
+        f"<span class='muted'>{_e(entry.scope_summary)}</span>" if entry.scope_summary else ""
     )
     return (
         "<div class='rule-row'>"
@@ -235,7 +239,8 @@ def _group_section(title: str, entries: list[GuidanceEntry], *, now_ts: float | 
 
 
 def render_memory_page(
-    entries: list[GuidanceEntry], *,
+    entries: list[GuidanceEntry],
+    *,
     cut: str = "by_context",
     known_actor_names: set[str] | None = None,
     drift_suggestions: list[Any] | None = None,
@@ -279,8 +284,7 @@ def render_memory_page(
     elif cut == "by_type":
         groups = group_by_type(entries)
         sections = "".join(
-            _group_section(label, items, now_ts=now_ts)
-            for label, items in groups.items()
+            _group_section(label, items, now_ts=now_ts) for label, items in groups.items()
         )
     else:
         groups = group_by_context(entries, known_actor_names=known_actor_names)
@@ -289,15 +293,13 @@ def render_memory_page(
         ordered_keys = sorted(
             groups.keys(),
             key=lambda k: (
-                k == "About my preferences",     # last
-                k == "Temporal watches",         # second-to-last
-                k == "Other",                    # near the end
-                k,                                # alphabetical within tiers
+                k == "About my preferences",  # last
+                k == "Temporal watches",  # second-to-last
+                k == "Other",  # near the end
+                k,  # alphabetical within tiers
             ),
         )
-        sections = "".join(
-            _group_section(k, groups[k], now_ts=now_ts) for k in ordered_keys
-        )
+        sections = "".join(_group_section(k, groups[k], now_ts=now_ts) for k in ordered_keys)
 
     drift_html = _render_drift_banner(drift_suggestions or [])
     llm_banner = _render_llm_health_banner(llm_health)
@@ -307,12 +309,7 @@ def render_memory_page(
         "<div class='sub'>Every rule, preference, policy, transient intent, "
         "and situational context the agent reads when reasoning. One list, "
         "two cuts — by what you're talking <i>about</i>, or by storage "
-        "<i>type</i>.</div>"
-        + llm_banner
-        + drift_html
-        + drawer_trigger
-        + toggle
-        + sections
+        "<i>type</i>.</div>" + llm_banner + drift_html + drawer_trigger + toggle + sections
     )
 
 
@@ -343,10 +340,7 @@ def _render_llm_health_banner(health: Any | None) -> str:
         "Placements still work — they're just less nuanced. Check "
         "<code>KUKIIHOME_LLM_URL</code> / <code>KUKIIHOME_LLM_API_KEY</code> "
         "or the network path to the endpoint.</div>"
-        + (
-            f"<div class='hint'>Last failure: {_e(reason)}</div>"
-            if reason else ""
-        )
+        + (f"<div class='hint'>Last failure: {_e(reason)}</div>" if reason else "")
         + "</section>"
     )
 

@@ -27,9 +27,9 @@ def test_downsamples_to_cap_with_endpoints_preserved():
     frames = [_f(i) for i in range(100)]
     out = select_keyframes(frames, 5)
     assert len(out) == 5
-    assert out[0].ts == 0.0 and out[-1].ts == 99.0   # full arc kept
+    assert out[0].ts == 0.0 and out[-1].ts == 99.0  # full arc kept
     ts = [o.ts for o in out]
-    assert ts == sorted(ts)                           # chronological
+    assert ts == sorted(ts)  # chronological
     # roughly even spacing
     gaps = [ts[i + 1] - ts[i] for i in range(len(ts) - 1)]
     assert max(gaps) - min(gaps) <= 1.0

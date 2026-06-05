@@ -68,7 +68,8 @@ class GuidanceStores:
 
 
 def commit_guidance(
-    proposal: PlacementProposal, *,
+    proposal: PlacementProposal,
+    *,
     stores: GuidanceStores,
     origin: Origin = "conversation",
     transcript_id: str = "",
@@ -103,10 +104,14 @@ def commit_guidance(
             # _update_* helper only knows its own class. Fall through to
             # a fresh create when classes don't match.
             from kukiihome_ha_agent.dispatcher import _classify_guidance_id
+
             existing_class = _classify_guidance_id(refines_id)
             proposal_class_family = (
-                "policy" if proposal.storage_class in (
-                    "transient_intent", "dismissal_policy",
+                "policy"
+                if proposal.storage_class
+                in (
+                    "transient_intent",
+                    "dismissal_policy",
                     "situational_context",
                 )
                 else (
@@ -117,7 +122,9 @@ def commit_guidance(
             )
             if existing_class == proposal_class_family:
                 refine_guidance(
-                    refines_id, proposal, stores=stores,
+                    refines_id,
+                    proposal,
+                    stores=stores,
                     transcript_id=transcript_id,
                     user_utterance=user_utterance,
                     now_ts=now_ts,
@@ -158,14 +165,16 @@ def commit_guidance(
     else:
         raise ValueError(f"unknown storage_class: {sc}")
 
-    stores.provenance.record_provenance(Provenance(
-        guidance_id=guidance_id,
-        origin=origin,
-        transcript_id=transcript_id,
-        user_utterance=user_utterance,
-        placement_reasoning=proposal.reasoning,
-        user_confirmed_at=now,
-    ))
+    stores.provenance.record_provenance(
+        Provenance(
+            guidance_id=guidance_id,
+            origin=origin,
+            transcript_id=transcript_id,
+            user_utterance=user_utterance,
+            placement_reasoning=proposal.reasoning,
+            user_confirmed_at=now,
+        )
+    )
     # Epic 10.2 Phase 1: mirror policy-family commits into the memory
     # graph as Policy nodes. Read the freshly-committed policy back from
     # the SQLite store (it now has its assigned id) and translate. The
@@ -177,16 +186,21 @@ def commit_guidance(
         and sc in ("transient_intent", "dismissal_policy", "situational_context")
     ):
         from kukiihome_ha_agent.graph_mirror import mirror_policy
+
         mirror_policy(stores.graph_client, stores.policies.get(guidance_id))
     logger.info(
         "guidance.committed",
-        storage_class=sc, guidance_id=guidance_id, origin=origin,
+        storage_class=sc,
+        guidance_id=guidance_id,
+        origin=origin,
     )
     return guidance_id
 
 
 def refine_guidance(
-    guidance_id: str, proposal: PlacementProposal, *,
+    guidance_id: str,
+    proposal: PlacementProposal,
+    *,
     stores: GuidanceStores,
     transcript_id: str,
     user_utterance: str = "",  # noqa: ARG001 — accepted for symmetry with commit_guidance; reserved for future denormalization
@@ -230,7 +244,9 @@ def refine_guidance(
 
     stores.provenance.append_refinement(guidance_id, transcript_id)
     logger.info(
-        "guidance.refined", guidance_id=guidance_id, transcript_id=transcript_id,
+        "guidance.refined",
+        guidance_id=guidance_id,
+        transcript_id=transcript_id,
     )
     return guidance_id
 
@@ -259,7 +275,10 @@ def _scope_from_proposal(p: PlacementProposal) -> RuleScope:
 def _commit_rule(p: PlacementProposal, *, stores: GuidanceStores) -> str:
     rs = _require(stores.rules, "rules")
     rule = Rule(
-        id="", name=p.name, mode="nl", intent_text=p.intent_text,
+        id="",
+        name=p.name,
+        mode="nl",
+        intent_text=p.intent_text,
         scope=_scope_from_proposal(p),
         severity_static=p.severity if p.severity else None,
         enabled=True,
@@ -271,7 +290,9 @@ def _commit_rule(p: PlacementProposal, *, stores: GuidanceStores) -> str:
 def _update_rule(rid: str, p: PlacementProposal, *, stores: GuidanceStores) -> None:
     rs = _require(stores.rules, "rules")
     rs.update(
-        rid, name=p.name, intent_text=p.intent_text,
+        rid,
+        name=p.name,
+        intent_text=p.intent_text,
         severity_static=p.severity if p.severity else None,
         scope=_scope_from_proposal(p),
     )
@@ -306,14 +327,21 @@ def _update_preference(p: PlacementProposal, *, stores: GuidanceStores) -> None:
 
 
 def _commit_transient_intent(
-    p: PlacementProposal, *, stores: GuidanceStores,
+    p: PlacementProposal,
+    *,
+    stores: GuidanceStores,
 ) -> str:
     pols = _require(stores.policies, "policies")
     expires_at = _parse_iso_to_epoch(p.lifecycle_ttl_iso)
     pol = Policy(
-        id="", kind="transient_intent", name=p.name,
-        descriptor={**p.scope, "intent_text": p.intent_text,
-                    "fire_once": p.lifecycle == "fire_once"},
+        id="",
+        kind="transient_intent",
+        name=p.name,
+        descriptor={
+            **p.scope,
+            "intent_text": p.intent_text,
+            "fire_once": p.lifecycle == "fire_once",
+        },
         rationale=p.reasoning,
         expires_at=expires_at,
     )
@@ -322,12 +350,16 @@ def _commit_transient_intent(
 
 
 def _commit_dismissal_policy(
-    p: PlacementProposal, *, stores: GuidanceStores,
+    p: PlacementProposal,
+    *,
+    stores: GuidanceStores,
 ) -> str:
     pols = _require(stores.policies, "policies")
     expires_at = _parse_iso_to_epoch(p.lifecycle_ttl_iso)
     pol = Policy(
-        id="", kind="dismissal", name=p.name,
+        id="",
+        kind="dismissal",
+        name=p.name,
         descriptor={**p.scope, "intent_text": p.intent_text},
         rationale=p.reasoning,
         expires_at=expires_at,
@@ -337,7 +369,9 @@ def _commit_dismissal_policy(
 
 
 def _commit_situational_context(
-    p: PlacementProposal, *, stores: GuidanceStores,
+    p: PlacementProposal,
+    *,
+    stores: GuidanceStores,
 ) -> str:
     """SituationalContexts ride on the policies table with kind='transient_intent'
     + a 'situational_context' marker in descriptor for v1. When/if they earn
@@ -345,9 +379,10 @@ def _commit_situational_context(
     pols = _require(stores.policies, "policies")
     expires_at = _parse_iso_to_epoch(p.lifecycle_ttl_iso)
     pol = Policy(
-        id="", kind="transient_intent", name=p.name,
-        descriptor={**p.scope, "intent_text": p.intent_text,
-                    "is_situational_context": True},
+        id="",
+        kind="transient_intent",
+        name=p.name,
+        descriptor={**p.scope, "intent_text": p.intent_text, "is_situational_context": True},
         rationale=p.reasoning,
         expires_at=expires_at,
     )
@@ -369,16 +404,22 @@ def _update_policy(pid: str, p: PlacementProposal, *, stores: GuidanceStores) ->
     # PolicyStore lacks an update() today — re-create via a delete+create
     # would lose hit history. For v1 we patch the row directly via SQL.
     pols._conn.execute(  # type: ignore[attr-defined]
-        "UPDATE policies SET name = ?, descriptor = ?, rationale = ?, "
-        "expires_at = ? WHERE id = ?",
-        (existing.name, _json_dumps(existing.descriptor), existing.rationale,
-         existing.expires_at, pid),
+        "UPDATE policies SET name = ?, descriptor = ?, rationale = ?, expires_at = ? WHERE id = ?",
+        (
+            existing.name,
+            _json_dumps(existing.descriptor),
+            existing.rationale,
+            existing.expires_at,
+            pid,
+        ),
     )
     pols._conn.commit()  # type: ignore[attr-defined]
 
 
 def _commit_area_posture(
-    p: PlacementProposal, *, stores: GuidanceStores,
+    p: PlacementProposal,
+    *,
+    stores: GuidanceStores,
 ) -> str:
     """Area posture (attention_mode + role) is an Area.update() call.
     The proposal's scope must include the area id."""
@@ -412,6 +453,7 @@ def _parse_iso_to_epoch(iso: str | None) -> float | None:
         return None
     try:
         from datetime import datetime
+
         return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
     except (ValueError, TypeError):
         return None
@@ -419,4 +461,5 @@ def _parse_iso_to_epoch(iso: str | None) -> float | None:
 
 def _json_dumps(d: Any) -> str:
     import json
+
     return json.dumps(d)

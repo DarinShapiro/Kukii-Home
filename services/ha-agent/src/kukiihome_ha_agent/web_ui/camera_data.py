@@ -50,8 +50,11 @@ def _last_motion_for(alerts: Iterable[dict], *, camera_id: str) -> float | None:
 
 
 def build_camera_summaries(
-    *, registry_statuses: list[Any], ha_loops: list[Any],
-    alerts: list[dict], now_ts: float | None = None,
+    *,
+    registry_statuses: list[Any],
+    ha_loops: list[Any],
+    alerts: list[dict],
+    now_ts: float | None = None,
 ) -> list[CameraSummary]:
     """Merge the RTSP-loop registry with the HA-loop list, dedup by
     camera_id, attach 24h event counts + last_motion_ts from the alert log."""
@@ -76,24 +79,29 @@ def build_camera_summaries(
         cid = getattr(loop, "camera_id", None) or getattr(loop, "id", "")
         if not cid:
             continue
-        slot = by_id.setdefault(cid, {
-            "camera_id": cid, "name": cid, "state": "unknown",
-        })
-        slot["name"] = (
-            getattr(loop, "friendly_name", "") or slot.get("name") or cid
+        slot = by_id.setdefault(
+            cid,
+            {
+                "camera_id": cid,
+                "name": cid,
+                "state": "unknown",
+            },
         )
+        slot["name"] = getattr(loop, "friendly_name", "") or slot.get("name") or cid
         # HA loop status doesn't currently expose state; left as is.
 
     out: list[CameraSummary] = []
     for cid, slot in by_id.items():
-        out.append(CameraSummary(
-            camera_id=cid,
-            name=camera_display_name(slot.get("name") or cid) or cid,
-            state=slot.get("state", "unknown"),
-            last_error=slot.get("last_error", ""),
-            events_24h=_events_within(alerts, camera_id=cid, since=since),
-            last_motion_ts=_last_motion_for(alerts, camera_id=cid),
-        ))
+        out.append(
+            CameraSummary(
+                camera_id=cid,
+                name=camera_display_name(slot.get("name") or cid) or cid,
+                state=slot.get("state", "unknown"),
+                last_error=slot.get("last_error", ""),
+                events_24h=_events_within(alerts, camera_id=cid, since=since),
+                last_motion_ts=_last_motion_for(alerts, camera_id=cid),
+            )
+        )
     out.sort(key=lambda c: c.name.lower())
     return out
 
@@ -102,7 +110,9 @@ def build_camera_summaries(
 
 
 def infer_capability_matrix(
-    alerts: list[dict], *, camera_id: str,
+    alerts: list[dict],
+    *,
+    camera_id: str,
 ) -> list[CapabilityRow]:
     """Best-effort matrix from observed alert classifications.
 
@@ -130,13 +140,15 @@ def infer_capability_matrix(
     rows: list[CapabilityRow] = []
     has_any = sum(seen_kinds.values()) > 0 or bool(seen_kinds)
 
-    rows.append(CapabilityRow(
-        signal="motion",
-        source="NATIVE" if has_any else "MISSING",
-        detail="HA motion sensor" if has_any else "no events recorded yet",
-        critical_if_missing=True,
-        needs_action=not has_any,
-    ))
+    rows.append(
+        CapabilityRow(
+            signal="motion",
+            source="NATIVE" if has_any else "MISSING",
+            detail="HA motion sensor" if has_any else "no events recorded yet",
+            critical_if_missing=True,
+            needs_action=not has_any,
+        )
+    )
 
     for label, kinds, critical in (
         ("person", ("person",), False),
@@ -145,30 +157,43 @@ def infer_capability_matrix(
         ("package", ("package",), False),
     ):
         if any(k in seen_kinds for k in kinds):
-            rows.append(CapabilityRow(
-                signal=label, source="AUGMENTED",
-                detail=f"HA classification ({', '.join(k for k in kinds if k in seen_kinds)})",
-            ))
+            rows.append(
+                CapabilityRow(
+                    signal=label,
+                    source="AUGMENTED",
+                    detail=f"HA classification ({', '.join(k for k in kinds if k in seen_kinds)})",
+                )
+            )
         else:
-            rows.append(CapabilityRow(
-                signal=label, source="MISSING",
-                detail="not produced by this camera or HA",
-                critical_if_missing=critical,
-                needs_action=False,
-            ))
+            rows.append(
+                CapabilityRow(
+                    signal=label,
+                    source="MISSING",
+                    detail="not produced by this camera or HA",
+                    critical_if_missing=critical,
+                    needs_action=False,
+                )
+            )
     return rows
 
 
 def build_camera_detail(
-    *, camera_id: str, registry_statuses: list[Any], ha_loops: list[Any],
-    alerts: list[dict], perception_entries: list[Any],
-    protective_entries: list[Any], now_ts: float | None = None,
+    *,
+    camera_id: str,
+    registry_statuses: list[Any],
+    ha_loops: list[Any],
+    alerts: list[dict],
+    perception_entries: list[Any],
+    protective_entries: list[Any],
+    now_ts: float | None = None,
 ) -> CameraDetailViewModel | None:
     """Compose the full detail view model. Returns None when the camera is
     completely unknown to the registry + ha_loops (404)."""
     summaries = build_camera_summaries(
-        registry_statuses=registry_statuses, ha_loops=ha_loops,
-        alerts=alerts, now_ts=now_ts,
+        registry_statuses=registry_statuses,
+        ha_loops=ha_loops,
+        alerts=alerts,
+        now_ts=now_ts,
     )
     summary = next((c for c in summaries if c.camera_id == camera_id), None)
     if summary is None:
@@ -193,15 +218,18 @@ def build_camera_detail(
         capabilities=infer_capability_matrix(alerts, camera_id=camera_id),
         perception_whitelist=[
             PerceptionEntryView(
-                target_kind=p.target_kind, target=p.target,
+                target_kind=p.target_kind,
+                target=p.target,
                 max_duration_s=p.max_duration_s,
             )
             for p in (perception_entries or [])
         ],
         protective_whitelist=[
             ProtectiveEntryView(
-                action_class=p.action_class, service=p.service,
-                target=p.target, min_severity=p.min_severity,
+                action_class=p.action_class,
+                service=p.service,
+                target=p.target,
+                min_severity=p.min_severity,
                 min_confidence=p.min_confidence,
             )
             for p in (protective_entries or [])

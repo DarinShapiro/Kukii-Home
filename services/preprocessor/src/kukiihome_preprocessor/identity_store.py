@@ -125,11 +125,11 @@ class TrackSummary:
     event_id: str
     camera_id: str
     track_id: str
-    kind: str                 # person | pet (mapped from the detection class)
+    kind: str  # person | pet (mapped from the detection class)
     n_frames: int
     t0: float
     t1: float
-    modalities: list[str]     # which embedding modalities this track carries
+    modalities: list[str]  # which embedding modalities this track carries
     best_frame_name: str | None
     best_bbox: tuple[float, float, float, float] | None
     # current resolution, if any
@@ -185,8 +185,8 @@ class IdentityStore:
     def track_summaries(
         self,
         *,
-        status: str | None = None,   # unresolved | resolved | None=all
-        kind: str | None = None,     # person | pet | None=all
+        status: str | None = None,  # unresolved | resolved | None=all
+        kind: str | None = None,  # person | pet | None=all
         limit: int = 200,
         include_fragments: bool = False,
         min_substantial_frames: int = 2,
@@ -225,8 +225,13 @@ class IdentityStore:
                 continue
             res = self._best_resolution(r["event_id"], r["track_id"])
             summary = TrackSummary(
-                event_id=r["event_id"], camera_id=r["camera_id"], track_id=r["track_id"],
-                kind=subject_kind, n_frames=r["n_frames"], t0=r["t0"], t1=r["t1"],
+                event_id=r["event_id"],
+                camera_id=r["camera_id"],
+                track_id=r["track_id"],
+                kind=subject_kind,
+                n_frames=r["n_frames"],
+                t0=r["t0"],
+                t1=r["t1"],
                 modalities=sorted((r["modalities"] or "").split(",")) if r["modalities"] else [],
                 best_frame_name=det["frame_name"] if det else None,
                 best_bbox=_json_bbox(det["bbox"]) if det else None,
@@ -356,8 +361,14 @@ class IdentityStore:
                    ON CONFLICT(subject_id, modality) DO UPDATE SET
                      dim=excluded.dim, embedding=excluded.embedding,
                      source_track_n=excluded.source_track_n, updated_ts=excluded.updated_ts""",
-                (subject_id, modality, int(template.shape[0]),
-                 np.ascontiguousarray(template, dtype="<f4").tobytes(), total_n, now),
+                (
+                    subject_id,
+                    modality,
+                    int(template.shape[0]),
+                    np.ascontiguousarray(template, dtype="<f4").tobytes(),
+                    total_n,
+                    now,
+                ),
             )
             self._conn.execute(
                 """INSERT INTO template_provenance
@@ -386,11 +397,17 @@ class IdentityStore:
                 "WHERE subject_id=? AND verdict != 'rejected'",
                 (s["subject_id"],),
             ).fetchone()
-            out.append(SubjectSummary(
-                subject_id=s["subject_id"], kind=s["kind"], display_name=s["display_name"],
-                species=s["species"], owner_id=s["owner_id"], modalities=mods,
-                appearances=appearances or 0,
-            ))
+            out.append(
+                SubjectSummary(
+                    subject_id=s["subject_id"],
+                    kind=s["kind"],
+                    display_name=s["display_name"],
+                    species=s["species"],
+                    owner_id=s["owner_id"],
+                    modalities=mods,
+                    appearances=appearances or 0,
+                )
+            )
         return out
 
     def build_corpus(self) -> EnrolledCorpus:
@@ -456,8 +473,12 @@ class IdentityStore:
             (event_id, track_id),
         ).fetchall()
         return [
-            {"camera_id": r["camera_id"], "frame_name": r["frame_name"],
-             "bbox": _json_bbox(r["bbox"]), "frame_ts": r["frame_ts"]}
+            {
+                "camera_id": r["camera_id"],
+                "frame_name": r["frame_name"],
+                "bbox": _json_bbox(r["bbox"]),
+                "frame_ts": r["frame_ts"],
+            }
             for r in rows
         ]
 
@@ -475,8 +496,7 @@ class IdentityStore:
         enrolled for the track's modalities (cross-kind never matches: a pet
         track shares no modality with a person subject)."""
         rows = self._conn.execute(
-            "SELECT modality, embedding, dim FROM track_embeddings "
-            "WHERE event_id=? AND track_id=?",
+            "SELECT modality, embedding, dim FROM track_embeddings WHERE event_id=? AND track_id=?",
             (event_id, track_id),
         ).fetchall()
         by_mod: dict[str, list[np.ndarray]] = {}
@@ -485,8 +505,7 @@ class IdentityStore:
             if emb.shape[0] == r["dim"]:
                 by_mod.setdefault(r["modality"], []).append(emb)
         track_means = {
-            m: _unit(np.mean(np.stack(v), axis=0).astype(np.float32))
-            for m, v in by_mod.items()
+            m: _unit(np.mean(np.stack(v), axis=0).astype(np.float32)) for m, v in by_mod.items()
         }
         if not track_means:
             return {"candidates": [], "margin": None}
@@ -513,8 +532,13 @@ class IdentityStore:
 
         ranked = sorted(best.items(), key=lambda kv: kv[1][0], reverse=True)[:top_k]
         cands = [
-            {"subject_id": sid, "name": names[sid], "kind": kinds[sid],
-             "score": round(min(1.0, sc), 4), "modality": mod}
+            {
+                "subject_id": sid,
+                "name": names[sid],
+                "kind": kinds[sid],
+                "score": round(min(1.0, sc), 4),
+                "modality": mod,
+            }
             for sid, (sc, mod) in ranked
         ]
         margin = round(cands[0]["score"] - cands[1]["score"], 4) if len(cands) >= 2 else None
@@ -632,8 +656,14 @@ class IdentityStore:
                    ON CONFLICT(subject_id, modality) DO UPDATE SET
                      dim=excluded.dim, embedding=excluded.embedding,
                      source_track_n=excluded.source_track_n, updated_ts=excluded.updated_ts""",
-                (into_id, r["modality"], int(merged.shape[0]),
-                 np.ascontiguousarray(merged, dtype="<f4").tobytes(), n, now),
+                (
+                    into_id,
+                    r["modality"],
+                    int(merged.shape[0]),
+                    np.ascontiguousarray(merged, dtype="<f4").tobytes(),
+                    n,
+                    now,
+                ),
             )
         self._conn.execute(
             "UPDATE OR IGNORE template_provenance SET subject_id=? WHERE subject_id=?",
@@ -669,8 +699,17 @@ class IdentityStore:
                      match_method=excluded.match_method, resolved_ts=excluded.resolved_ts,
                      verdict=CASE WHEN resolutions.verdict IN ('confirmed','rejected','reassigned')
                                   THEN resolutions.verdict ELSE 'auto' END""",
-                (event_id, camera_id, m.track_id, m.frame_ts, modality, m.match_method,
-                 m.actor_id, m.confidence, now),
+                (
+                    event_id,
+                    camera_id,
+                    m.track_id,
+                    m.frame_ts,
+                    modality,
+                    m.match_method,
+                    m.actor_id,
+                    m.confidence,
+                    now,
+                ),
             )
             n += 1
         self._conn.commit()

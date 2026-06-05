@@ -228,9 +228,7 @@ def create_app(state: AppState) -> FastAPI:
         if cap and len(result.frames) > cap:
             from kukiihome_preprocessor.keyframes import select_keyframes
 
-            result = result.model_copy(
-                update={"frames": select_keyframes(result.frames, cap)}
-            )
+            result = result.model_copy(update={"frames": select_keyframes(result.frames, cap)})
         state.frame_windows_served_total += 1
         return result
 
@@ -293,6 +291,7 @@ def create_app(state: AppState) -> FastAPI:
         # own manifest, but the dir layout is store_dir/<camera>/<event>).
         # First match wins — event_ids are unique within a deployment.
         root = Path(state.event_store_dir or "events")
+
         # Path.glob is synchronous I/O; offload to a thread so the event
         # loop isn't blocked on filesystem listing.
         def _find_event_dir():
@@ -302,24 +301,22 @@ def create_app(state: AppState) -> FastAPI:
             return None
 
         import asyncio as _asyncio  # local: keep top-level imports tidy
+
         event_dir = await _asyncio.to_thread(_find_event_dir)
         if event_dir is None:
             raise HTTPException(status_code=404, detail="event not found")
         if await _asyncio.to_thread(frame_count_in_event, event_dir) == 0:
-            raise HTTPException(
-                status_code=404, detail="event has no frames to mux"
-            )
+            raise HTTPException(status_code=404, detail="event has no frames to mux")
         try:
             clip_path = await get_or_build_clip(event_dir=event_dir)
         except Exception as e:
             logger.exception("clip_mux_failed", event_id=event_id, error=str(e))
-            raise HTTPException(
-                status_code=500, detail=f"clip mux failed: {e}"
-            ) from e
+            raise HTTPException(status_code=500, detail=f"clip mux failed: {e}") from e
         # Plain Response with the bytes — HTTP range support is what
         # browsers need for <video> seek. FastAPI's FileResponse handles
         # ranges automatically, so use that here.
         from fastapi.responses import FileResponse
+
         return FileResponse(
             path=str(clip_path),
             media_type="video/mp4",

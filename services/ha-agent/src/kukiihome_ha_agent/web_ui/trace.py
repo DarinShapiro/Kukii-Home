@@ -27,9 +27,7 @@ from kukiihome_ha_agent.web_ui.shell import _e, friendly_time_html
 
 
 def _severity_chip(sev: str | None) -> str:
-    css = {"critical": "bad", "normal": "ok", "low": "warn"}.get(
-        (sev or "").lower(), "muted"
-    )
+    css = {"critical": "bad", "normal": "ok", "low": "warn"}.get((sev or "").lower(), "muted")
     label = sev or "—"
     return f"<span class='chip cam-state {css}'>{_e(label)}</span>"
 
@@ -77,7 +75,9 @@ def render_matched_rules_section(matches: list[Any]) -> str:
 
 
 def render_protective_actions_section(
-    log_rows: list[Any], *, now_ts: float | None,
+    log_rows: list[Any],
+    *,
+    now_ts: float | None,
 ) -> str:
     """``log_rows`` is a list of ProtectiveLogRow for the incident."""
     if not log_rows:
@@ -107,8 +107,10 @@ def render_protective_actions_section(
 
 
 def render_policy_hits_section(
-    hits: list[Any], policies_by_id: dict[str, Any],
-    *, now_ts: float | None,
+    hits: list[Any],
+    policies_by_id: dict[str, Any],
+    *,
+    now_ts: float | None,
 ) -> str:
     """``hits`` is a list of PolicyHit; ``policies_by_id`` is a name lookup
     so the row can show the human-readable policy name + kind."""
@@ -139,7 +141,8 @@ def render_policy_hits_section(
 
 
 def build_audit_chain_html(
-    *, incident_id: str,
+    *,
+    incident_id: str,
     rules_store: Any | None = None,
     action_store: Any | None = None,
     policy_store: Any | None = None,
@@ -162,9 +165,12 @@ def build_audit_chain_html(
             log_rows = action_store.log_for_incident(incident_id)
         except Exception:
             log_rows = []
-        parts.append(render_protective_actions_section(
-            log_rows, now_ts=now_ts,
-        ))
+        parts.append(
+            render_protective_actions_section(
+                log_rows,
+                now_ts=now_ts,
+            )
+        )
 
     if policy_store is not None:
         try:
@@ -177,8 +183,12 @@ def build_audit_chain_html(
         except Exception:
             hits = []
             policies_by_id = {}
-        parts.append(render_policy_hits_section(
-            hits, policies_by_id, now_ts=now_ts,
-        ))
+        parts.append(
+            render_policy_hits_section(
+                hits,
+                policies_by_id,
+                now_ts=now_ts,
+            )
+        )
 
     return "".join(parts)

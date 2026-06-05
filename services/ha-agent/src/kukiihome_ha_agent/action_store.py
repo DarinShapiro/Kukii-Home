@@ -54,7 +54,7 @@ def _severity_meets(actual: str | None, threshold: str) -> bool:
 class PerceptionEntry:
     camera_id: str
     target_kind: Literal["ha_service", "camera_api"]
-    target: str   # "light.turn_on:light.front_porch" or "ptz_zoom"
+    target: str  # "light.turn_on:light.front_porch" or "ptz_zoom"
     enabled: bool = True
     max_duration_s: int | None = None
 
@@ -62,15 +62,15 @@ class PerceptionEntry:
 @dataclass
 class ProtectiveEntry:
     camera_id: str
-    action_class: str   # 'lock', 'siren', 'spotlight', 'announcement', ...
-    service: str        # 'lock.lock', 'switch.turn_on', ...
-    target: str         # entity_id
-    min_severity: str = "critical"   # 'critical' | 'normal' | 'low' | 'any'
+    action_class: str  # 'lock', 'siren', 'spotlight', 'announcement', ...
+    service: str  # 'lock.lock', 'switch.turn_on', ...
+    target: str  # entity_id
+    min_severity: str = "critical"  # 'critical' | 'normal' | 'low' | 'any'
     min_confidence: float = 0.7
     enabled: bool = True
     blackout_windows: list[dict[str, Any]] = field(default_factory=list)
     max_duration_s: int | None = None
-    redundancy_required: int = 0   # consecutive recommendations needed
+    redundancy_required: int = 0  # consecutive recommendations needed
 
 
 @dataclass
@@ -165,8 +165,7 @@ class ActionStore:
             "ON CONFLICT(camera_id, target_kind, target) DO UPDATE SET "
             "enabled = excluded.enabled, "
             "max_duration_s = excluded.max_duration_s",
-            (e.camera_id, e.target_kind, e.target,
-             int(e.enabled), e.max_duration_s),
+            (e.camera_id, e.target_kind, e.target, int(e.enabled), e.max_duration_s),
         )
         self._conn.commit()
 
@@ -177,8 +176,10 @@ class ActionStore:
         ).fetchall()
         return [
             PerceptionEntry(
-                camera_id=r["camera_id"], target_kind=r["target_kind"],
-                target=r["target"], enabled=bool(r["enabled"]),
+                camera_id=r["camera_id"],
+                target_kind=r["target_kind"],
+                target=r["target"],
+                enabled=bool(r["enabled"]),
                 max_duration_s=r["max_duration_s"],
             )
             for r in rows
@@ -186,8 +187,7 @@ class ActionStore:
 
     def delete_perception(self, camera_id: str, target_kind: str, target: str) -> None:
         self._conn.execute(
-            "DELETE FROM perception_whitelist WHERE camera_id=? "
-            "AND target_kind=? AND target=?",
+            "DELETE FROM perception_whitelist WHERE camera_id=? AND target_kind=? AND target=?",
             (camera_id, target_kind, target),
         )
         self._conn.commit()
@@ -207,9 +207,15 @@ class ActionStore:
             "max_duration_s=excluded.max_duration_s, "
             "redundancy_required=excluded.redundancy_required",
             (
-                e.camera_id, e.action_class, e.service, e.target,
-                int(e.enabled), e.min_severity, e.min_confidence,
-                json.dumps(e.blackout_windows), e.max_duration_s,
+                e.camera_id,
+                e.action_class,
+                e.service,
+                e.target,
+                int(e.enabled),
+                e.min_severity,
+                e.min_confidence,
+                json.dumps(e.blackout_windows),
+                e.max_duration_s,
                 e.redundancy_required,
             ),
         )
@@ -251,9 +257,17 @@ class ActionStore:
             "data_json, status, gate_reason, vlm_confidence, vlm_rationale) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
-                row.incident_id, row.camera_id, row.ts, row.action_class,
-                row.service, row.target, row.data_json, row.status,
-                row.gate_reason, row.vlm_confidence, row.vlm_rationale,
+                row.incident_id,
+                row.camera_id,
+                row.ts,
+                row.action_class,
+                row.service,
+                row.target,
+                row.data_json,
+                row.status,
+                row.gate_reason,
+                row.vlm_confidence,
+                row.vlm_rationale,
             ),
         )
         self._conn.commit()
@@ -261,8 +275,7 @@ class ActionStore:
 
     def log_for_incident(self, incident_id: str) -> list[ProtectiveLogRow]:
         rows = self._conn.execute(
-            "SELECT * FROM protective_actions_log WHERE incident_id = ? "
-            "ORDER BY ts",
+            "SELECT * FROM protective_actions_log WHERE incident_id = ? ORDER BY ts",
             (incident_id,),
         ).fetchall()
         return [self._row_to_log(r) for r in rows]
@@ -283,22 +296,31 @@ class ActionStore:
         except json.JSONDecodeError:
             blackouts = []
         return ProtectiveEntry(
-            camera_id=row["camera_id"], action_class=row["action_class"],
-            service=row["service"], target=row["target"],
+            camera_id=row["camera_id"],
+            action_class=row["action_class"],
+            service=row["service"],
+            target=row["target"],
             enabled=bool(row["enabled"]),
-            min_severity=row["min_severity"], min_confidence=row["min_confidence"],
-            blackout_windows=blackouts, max_duration_s=row["max_duration_s"],
+            min_severity=row["min_severity"],
+            min_confidence=row["min_confidence"],
+            blackout_windows=blackouts,
+            max_duration_s=row["max_duration_s"],
             redundancy_required=row["redundancy_required"],
         )
 
     @staticmethod
     def _row_to_log(row: sqlite3.Row) -> ProtectiveLogRow:
         return ProtectiveLogRow(
-            id=row["id"], incident_id=row["incident_id"],
-            camera_id=row["camera_id"], ts=row["ts"],
-            action_class=row["action_class"], service=row["service"],
-            target=row["target"], data_json=row["data_json"],
-            status=row["status"], gate_reason=row["gate_reason"],
+            id=row["id"],
+            incident_id=row["incident_id"],
+            camera_id=row["camera_id"],
+            ts=row["ts"],
+            action_class=row["action_class"],
+            service=row["service"],
+            target=row["target"],
+            data_json=row["data_json"],
+            status=row["status"],
+            gate_reason=row["gate_reason"],
             vlm_confidence=row["vlm_confidence"],
             vlm_rationale=row["vlm_rationale"],
         )
@@ -349,7 +371,9 @@ def gate_recommendation(
     if not camera_id:
         return GateDecision(False, "no_camera_scope")
     entry = store.find_protective(
-        camera_id=camera_id, service=service, target=target,
+        camera_id=camera_id,
+        service=service,
+        target=target,
         action_class=action_class,
     )
     if entry is None:

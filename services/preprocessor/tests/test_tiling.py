@@ -108,9 +108,7 @@ def test_tracker_assigns_new_id_to_new_object():
     tr = IoUTracker(iou_thresh=0.3)
     f1 = tr.update([Box(100, 100, 200, 200, 0.8, "dog")])
     # A second, disjoint object appears.
-    f2 = tr.update(
-        [Box(120, 100, 220, 200, 0.8, "dog"), Box(900, 900, 1000, 1000, 0.7, "dog")]
-    )
+    f2 = tr.update([Box(120, 100, 220, 200, 0.8, "dog"), Box(900, 900, 1000, 1000, 0.7, "dog")])
     ids = {b.track_id for b in f2}
     assert f1[0].track_id in ids  # original track continued
     assert len(ids) == 2  # plus a brand-new one
@@ -140,9 +138,7 @@ def test_tracker_one_to_one_under_contention():
     # Two close objects must not both bind to one track.
     tr = IoUTracker(iou_thresh=0.1)
     tr.update([Box(0, 0, 100, 100, 0.9, "person"), Box(60, 0, 160, 100, 0.8, "person")])
-    f2 = tr.update(
-        [Box(5, 0, 105, 100, 0.9, "person"), Box(65, 0, 165, 100, 0.8, "person")]
-    )
+    f2 = tr.update([Box(5, 0, 105, 100, 0.9, "person"), Box(65, 0, 165, 100, 0.8, "person")])
     assert len({b.track_id for b in f2}) == 2  # distinct ids preserved
 
 

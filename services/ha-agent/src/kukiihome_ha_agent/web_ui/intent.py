@@ -33,16 +33,11 @@ def _severity_label(rule: Rule) -> str:
 
 def _scope_summary(rule: Rule) -> str:
     """Compact WHEN line: ``Front Yard · any time`` shape."""
-    cam_part = (
-        "any camera" if not rule.scope.cameras
-        else ", ".join(rule.scope.cameras)
-    )
-    area_part = (
-        "any area" if not rule.scope.areas
-        else ", ".join(rule.scope.areas)
-    )
+    cam_part = "any camera" if not rule.scope.cameras else ", ".join(rule.scope.cameras)
+    area_part = "any area" if not rule.scope.areas else ", ".join(rule.scope.areas)
     time_part = (
-        "any time" if not rule.scope.time_windows
+        "any time"
+        if not rule.scope.time_windows
         else f"{len(rule.scope.time_windows)} window"
         + ("s" if len(rule.scope.time_windows) > 1 else "")
     )
@@ -62,11 +57,7 @@ def _intent_body(rule: Rule) -> str:
     if rule.mode == "shortcut":
         subj = rule.shortcut_subject or "(no subject)"
         return f"<i>{_e(subj)}</i> seen <span class='hint'>(identity shortcut)</span>"
-    return (
-        '"<span class="intent-text">'
-        + _e(rule.intent_text or "(no intent text)")
-        + '"</span>'
-    )
+    return '"<span class="intent-text">' + _e(rule.intent_text or "(no intent text)") + '"</span>'
 
 
 def _last_matched_line(rule: Rule, *, now_ts: float) -> str:
@@ -153,13 +144,14 @@ def _preferences_section(prefs) -> str:
     quiet_summary = (
         f"{quiet_count} quiet-hour window"
         f"{'s' if quiet_count != 1 else ''} (life-safety areas ignore these)"
-        if quiet_count else "No quiet hours — alerts fire any time."
+        if quiet_count
+        else "No quiet hours — alerts fire any time."
     )
     rel_summary = (
         f"{rel_count} actor relationship"
         f"{'s' if rel_count != 1 else ''} set — Identities → Review to edit."
-        if rel_count else "No actor relationships set yet — label "
-        "identities under Identities → Review."
+        if rel_count
+        else "No actor relationships set yet — label identities under Identities → Review."
     )
     return (
         "<section class='card'>"
@@ -173,10 +165,10 @@ def _preferences_section(prefs) -> str:
         f"{vigilance_radios}</div>"
         "<h3 style='margin-top:14px'>What I care about</h3>"
         "<textarea name='what_i_care_about' rows='4' "
-        "placeholder=\"Free-text guidance the VLM reads on every event. "
+        'placeholder="Free-text guidance the VLM reads on every event. '
         "E.g. 'Winston is our dog — don't alert on him in the backyard.'\">"
-        + _e(text) +
-        "</textarea>"
+        + _e(text)
+        + "</textarea>"
         "<div class='hint'>This text is folded into every VLM prompt as "
         "household baseline — concise, plain-language statements work best.</div>"
         "<div class='form-actions' style='justify-content:flex-start;margin-top:14px'>"
@@ -191,7 +183,10 @@ def _preferences_section(prefs) -> str:
 
 
 def render_intent_page(
-    rules: list[Rule], *, now_ts: float | None = None, preferences=None,
+    rules: list[Rule],
+    *,
+    now_ts: float | None = None,
+    preferences=None,
 ) -> str:
     """Full /intent page. ``rules`` should be the non-retired set (from
     ``store.all_rules()``); disabled rules still render so they're toggleable
@@ -214,7 +209,7 @@ def render_intent_page(
         body += (
             "<div class='empty'>No rules yet. The first rule is the "
             "fastest way to teach the system one thing you care about — "
-            "*\"alert me when Bob arrives\"* takes 10 seconds.</div>"
+            '*"alert me when Bob arrives"* takes 10 seconds.</div>'
         )
     else:
         body += "".join(_rule_row(r, now_ts=now_ts) for r in rules)
@@ -277,15 +272,21 @@ def render_rule_form(
         for sid, label in (available_subjects or [])
     )
 
-    cam_checks = "".join(
-        _checkbox("cameras", cid, label, checked=(cid in sel_cameras))
-        for cid, label in (available_cameras or [])
-    ) or "<div class='hint'>No cameras configured yet — leave blank for any.</div>"
+    cam_checks = (
+        "".join(
+            _checkbox("cameras", cid, label, checked=(cid in sel_cameras))
+            for cid, label in (available_cameras or [])
+        )
+        or "<div class='hint'>No cameras configured yet — leave blank for any.</div>"
+    )
 
-    area_checks = "".join(
-        _checkbox("areas", aid, label, checked=(aid in sel_areas))
-        for aid, label in (available_areas or [])
-    ) or "<div class='hint'>No areas defined yet — leave blank for any.</div>"
+    area_checks = (
+        "".join(
+            _checkbox("areas", aid, label, checked=(aid in sel_areas))
+            for aid, label in (available_areas or [])
+        )
+        or "<div class='hint'>No areas defined yet — leave blank for any.</div>"
+    )
 
     severity_radios = "".join(
         _radio("severity_static", v, v.capitalize(), checked=(v == severity_static))
@@ -301,11 +302,13 @@ def render_rule_form(
         + (f"<input type='hidden' name='rule_id' value='{_e(rid)}'>" if rid else "")
         + "<section class='card'><h3>Mode</h3>"
         + "<div class='mode-radios'>"
-        + _radio("mode", "nl",
-                 "Natural-language intent (VLM-evaluated)", checked=(mode == "nl"))
-        + _radio("mode", "shortcut",
-                 "Identity shortcut (subject seen → alert)",
-                 checked=(mode == "shortcut"))
+        + _radio("mode", "nl", "Natural-language intent (VLM-evaluated)", checked=(mode == "nl"))
+        + _radio(
+            "mode",
+            "shortcut",
+            "Identity shortcut (subject seen → alert)",
+            checked=(mode == "shortcut"),
+        )
         + "</div></section>"
         + "<section class='card'><h3>Name</h3>"
         + f"<input type='text' name='name' value='{_e(name)}' "
@@ -324,8 +327,8 @@ def render_rule_form(
         + f"<section class='card mode-pane {nl_active}' data-mode='nl'>"
         + "<h3>ALERT IF</h3>"
         + "<textarea name='intent_text' rows='4' "
-        + "placeholder=\"Winston seems to have gotten outside "
-        + "without someone watching him.\">"
+        + 'placeholder="Winston seems to have gotten outside '
+        + 'without someone watching him.">'
         + _e(intent_text)
         + "</textarea>"
         + "<div class='sub'>The VLM reads this and judges match + severity "

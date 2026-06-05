@@ -19,7 +19,7 @@ from typing import Any
 
 # Nav order matches the ratified TOC. Each entry: (path, label).
 NAV_ITEMS: list[tuple[str, str]] = [
-    ("home",        "Home"),
+    ("home", "Home"),
     # User-review fixup: Activity dropped from the primary nav since it's
     # reachable via the "See all activity" link on the Home page and the
     # standalone tab was redundant. The /activity route + page itself
@@ -27,15 +27,15 @@ NAV_ITEMS: list[tuple[str, str]] = [
     # Iter 3 (Parts IX+X): Intent + Policies collapse into Memory. The
     # /intent and /policies URLs 301-redirect for backward-compat with
     # bookmarks + HA Lovelace card links.
-    ("memory",      "Memory"),
-    ("areas",       "Areas"),
+    ("memory", "Memory"),
+    ("areas", "Areas"),
     # Iter 3 / Part IX §29: /identities is now the unified Review+Enrolled
     # surface; the existing /review URL is preserved as a tab within it.
-    ("identities",  "Identities"),
-    ("cameras",     "Cameras"),
+    ("identities", "Identities"),
+    ("cameras", "Cameras"),
     # Iter 3 / Part IX §30: storage + privacy. Diagnostics stays separate;
     # this surface is "what's it holding + privacy ops".
-    ("system",      "System"),
+    ("system", "System"),
     ("diagnostics", "Diagnostics"),
 ]
 
@@ -407,7 +407,7 @@ def camera_display_name(raw_name: str | None) -> str:
         stripped = False
         for suffix in _STREAM_QUALITY_SUFFIXES:
             # case-insensitive whole-word match at end
-            if len(name) > len(suffix) and name[-len(suffix):].lower() == suffix.lower():
+            if len(name) > len(suffix) and name[-len(suffix) :].lower() == suffix.lower():
                 # require whitespace boundary so we don't eat parts of words
                 if name[-len(suffix) - 1] in " -_":
                     name = name[: -len(suffix) - 1].rstrip()
@@ -448,9 +448,15 @@ def base_href_for_path(request_path: str) -> str:
     return "../" * (depth - 1)
 
 
-def render_shell(active: str, content_html: str, *, version: str = "",
-                 flash: str | None = None, drawer_html: str = "",
-                 request_path: str = "") -> str:
+def render_shell(
+    active: str,
+    content_html: str,
+    *,
+    version: str = "",
+    flash: str | None = None,
+    drawer_html: str = "",
+    request_path: str = "",
+) -> str:
     """Wrap ``content_html`` in the shared shell. ``active`` is the path of
     the current page (one of :data:`NAV_ITEMS` paths) so its nav link is
     highlighted. ``flash`` is an optional one-line notice rendered above the
@@ -477,8 +483,7 @@ def render_shell(active: str, content_html: str, *, version: str = "",
     drawer_open = bool(drawer_html)
     drawer_q = "?drawer=1" if drawer_open else ""
     nav = "".join(
-        f"<a class='{'active' if path == active else ''}' "
-        f"href='{path}{drawer_q}'>{_e(label)}</a>"
+        f"<a class='{'active' if path == active else ''}' href='{path}{drawer_q}'>{_e(label)}</a>"
         for path, label in NAV_ITEMS
     )
     flash_html = f"<div class='flash'>{_e(flash)}</div>" if flash else ""
@@ -529,8 +534,7 @@ def render_shell(active: str, content_html: str, *, version: str = "",
             f"{_e((request_path or '/memory').lstrip('/')) or 'memory'}"
             "?drawer=1' title='Tell me what to watch for'>✨</a>"
         )
-        +
-        f"<span class='version'>{_e(version)}</span>"
+        + f"<span class='version'>{_e(version)}</span>"
         "</header>"
         f"<main class='{main_class}'>{flash_html}{content_html}</main>"
         f"{drawer_html}"

@@ -81,9 +81,7 @@ def _alert_headline(alert: dict) -> str:
     if h:
         return str(h)
 
-    cam_name = camera_display_name(
-        alert.get("camera_friendly_name") or alert.get("camera_name")
-    )
+    cam_name = camera_display_name(alert.get("camera_friendly_name") or alert.get("camera_name"))
     kind = (alert.get("kind") or "").strip().lower()
     actor_name = alert.get("actor_name") or alert.get("actor_friendly_name")
     rule_name = alert.get("rule_name") or alert.get("rule")
@@ -133,20 +131,16 @@ def _render_activity_row(alert: dict, *, now_ts: float) -> str:
     is_action = _alert_is_action(alert)
     eid = alert.get("event_id") or alert.get("alert_id") or ""
     klass = "activity-row" if is_action else "activity-row passive"
-    trace_link = (
-        f"<a class='trace' href='alert/{_e(eid)}'>trace</a>" if eid else ""
-    )
+    trace_link = f"<a class='trace' href='alert/{_e(eid)}'>trace</a>" if eid else ""
     # Only show the slug as a separate where-line if the headline doesn't
     # already mention the camera (the friendly name normalizer in Task 3
     # usually means it does). Drops "Person detected at Front South · front_south"
     # to just "Person detected at Front South Camera."
-    cam_name = camera_display_name(
-        alert.get("camera_friendly_name") or alert.get("camera_name")
-    )
+    cam_name = camera_display_name(alert.get("camera_friendly_name") or alert.get("camera_name"))
     headline_lower = headline.lower()
-    camera_already_in_headline = bool(
-        cam_name and (cam_name.lower() in headline_lower)
-    ) or (cam_slug and cam_slug.lower() in headline_lower)
+    camera_already_in_headline = bool(cam_name and (cam_name.lower() in headline_lower)) or (
+        cam_slug and cam_slug.lower() in headline_lower
+    )
     where = (
         f"<span class='where'> · {_e(cam_slug)}</span>"
         if cam_slug and not camera_already_in_headline
@@ -160,10 +154,7 @@ def _render_activity_row(alert: dict, *, now_ts: float) -> str:
     # Direct-link to clip.mp4 dumped users on a bare "no clip for this
     # event" 404 page; trace page degrades gracefully. Hidden when no
     # event_id (notification-only alerts can't replay).
-    play_link = (
-        f"<a class='play' href='alert/{_e(eid)}' "
-        f"title='Open replay'>▶</a>" if eid else ""
-    )
+    play_link = f"<a class='play' href='alert/{_e(eid)}' title='Open replay'>▶</a>" if eid else ""
     # when_html is already HTML-safe (escaped + wrapped in <span title=...>)
     return (
         f"<div class='{klass}'>"
@@ -179,13 +170,12 @@ def _render_activity_row(alert: dict, *, now_ts: float) -> str:
 # ─── Needs Attention rows ──────────────────────────────────────────
 
 
-def _attention_row(glyph: str, body: str, actions: list[tuple[str, str]],
-                   *, meta: str | None = None) -> str:
+def _attention_row(
+    glyph: str, body: str, actions: list[tuple[str, str]], *, meta: str | None = None
+) -> str:
     """One row in the Needs Attention zone. ``actions`` is a list of
     (label, href) buttons."""
-    btns = "".join(
-        f"<a href='{_e(href)}'>{_e(label)}</a>" for label, href in actions
-    )
+    btns = "".join(f"<a href='{_e(href)}'>{_e(label)}</a>" for label, href in actions)
     meta_html = f"<div class='meta'>{_e(meta)}</div>" if meta else ""
     return (
         "<div class='attention-row'>"
@@ -203,34 +193,41 @@ def _render_attention(unresolved_tracks: int) -> tuple[str, int]:
     rows: list[str] = []
 
     if unresolved_tracks > 0:
-        rows.append(_attention_row(
-            "👤",
-            f"<b>{unresolved_tracks}</b> unnamed track"
-            f"{'s' if unresolved_tracks != 1 else ''} to review",
-            [("Review", "review")],
-            meta="People + pets the cameras captured but couldn't name yet.",
-        ))
+        rows.append(
+            _attention_row(
+                "👤",
+                f"<b>{unresolved_tracks}</b> unnamed track"
+                f"{'s' if unresolved_tracks != 1 else ''} to review",
+                [("Review", "review")],
+                meta="People + pets the cameras captured but couldn't name yet.",
+            )
+        )
 
     # Stub rows — clearly marked, so the test harness can verify they DON'T
     # show up by default (and so we don't ship dead UI). Re-enable per row
     # once each backend lands (Part II §16).
 
     if not rows:
-        return ("<div class='empty'>Nothing needs you. "
-                "The system handled everything.</div>"), 0
+        return ("<div class='empty'>Nothing needs you. The system handled everything.</div>"), 0
     return "".join(rows), len(rows)
 
 
 # ─── System stripe ─────────────────────────────────────────────────
 
 
-def _render_system_stripe(*, cameras_total: int, cameras_active: int,
-                          preprocessor_ok: bool | None, ha_connected: bool,
-                          ha_entities: int) -> str:
+def _render_system_stripe(
+    *,
+    cameras_total: int,
+    cameras_active: int,
+    preprocessor_ok: bool | None,
+    ha_connected: bool,
+    ha_entities: int,
+) -> str:
     """Bottom zone — collapsed by default, summary line always visible."""
     cam_line = (
         f"● {cameras_active}/{cameras_total} cameras online"
-        if cameras_total else "● No cameras configured"
+        if cameras_total
+        else "● No cameras configured"
     )
     if preprocessor_ok is None:
         prep_line = "● Preprocessor not configured"
@@ -239,8 +236,7 @@ def _render_system_stripe(*, cameras_total: int, cameras_active: int,
     else:
         prep_line = "● Preprocessor unreachable"
     ha_line = (
-        f"● HA connected · {ha_entities} entities watched"
-        if ha_connected else "● HA disconnected"
+        f"● HA connected · {ha_entities} entities watched" if ha_connected else "● HA disconnected"
     )
     summary = " · ".join([cam_line, prep_line, ha_line])
     return (
@@ -280,15 +276,12 @@ def render_home_page(
     today_action = sum(1 for a in today_alerts if _alert_is_action(a))
     today_passive = today_total - today_action
     today_unhandled = sum(
-        1 for a in today_alerts
-        if _alert_is_action(a) and not a.get("acknowledged")
+        1 for a in today_alerts if _alert_is_action(a) and not a.get("acknowledged")
     )
 
     # ── Top-line state (plain English, not a dot) ──
     if today_total == 0:
-        status_line = (
-            "<div class='status-line'>🟢 All quiet — nothing yet today.</div>"
-        )
+        status_line = "<div class='status-line'>🟢 All quiet — nothing yet today.</div>"
     elif today_unhandled == 0:
         status_line = (
             f"<div class='status-line'>🟢 All quiet · {today_total} "
@@ -305,21 +298,19 @@ def render_home_page(
     attention_html, attention_count = _render_attention(unresolved_tracks)
     attention_heading = (
         f"<h2>Needs attention ({attention_count})</h2>"
-        if attention_count else "<h2>Needs attention</h2>"
+        if attention_count
+        else "<h2>Needs attention</h2>"
     )
 
     # ── Activity (N most recent) ──
     recent = sorted(alerts_recent, key=_alert_when_ts, reverse=True)[:show_recent]
     if not recent:
-        activity_html = (
-            "<div class='empty'>Nothing yet — the system is watching.</div>"
-        )
+        activity_html = "<div class='empty'>Nothing yet — the system is watching.</div>"
     else:
         activity_html = "".join(_render_activity_row(a, now_ts=now_ts) for a in recent)
         if len(alerts_recent) > show_recent:
             activity_html += (
-                "<div class='trust-line'>"
-                "<a href='activity'>↓ See all activity</a></div>"
+                "<div class='trust-line'><a href='activity'>↓ See all activity</a></div>"
             )
 
     trust_line = ""
@@ -332,8 +323,10 @@ def render_home_page(
 
     # ── System stripe ──
     system_html = _render_system_stripe(
-        cameras_total=cameras_total, cameras_active=cameras_active,
-        preprocessor_ok=preprocessor_ok, ha_connected=ha_connected,
+        cameras_total=cameras_total,
+        cameras_active=cameras_active,
+        preprocessor_ok=preprocessor_ok,
+        ha_connected=ha_connected,
         ha_entities=ha_entities,
     )
 

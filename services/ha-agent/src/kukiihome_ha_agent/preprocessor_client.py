@@ -218,7 +218,9 @@ class PreprocessorClient:
             if resp.status_code >= 400:
                 logger.warning(
                     "preprocessor_client.post_http_error",
-                    path=path, status=resp.status_code, body=resp.text[:200],
+                    path=path,
+                    status=resp.status_code,
+                    body=resp.text[:200],
                 )
                 return None
             try:

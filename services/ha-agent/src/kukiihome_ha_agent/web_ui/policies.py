@@ -18,15 +18,11 @@ from kukiihome_ha_agent.web_ui.shell import _e, friendly_time_html
 def _policy_row(p: Policy, *, now_ts: float) -> str:
     applied = (
         friendly_time_html(p.last_applied_at, now=now_ts)
-        if p.last_applied_at else "<span class='muted'>never applied</span>"
+        if p.last_applied_at
+        else "<span class='muted'>never applied</span>"
     )
-    expires = (
-        f" · expires {friendly_time_html(p.expires_at, now=now_ts)}"
-        if p.expires_at else ""
-    )
-    rationale = (
-        f"<div class='muted'>{_e(p.rationale)}</div>" if p.rationale else ""
-    )
+    expires = f" · expires {friendly_time_html(p.expires_at, now=now_ts)}" if p.expires_at else ""
+    rationale = f"<div class='muted'>{_e(p.rationale)}</div>" if p.rationale else ""
     return (
         f"<div class='rule-row'>"
         f"<div class='rule-head'><b>{_e(p.name)}</b>"
@@ -46,8 +42,12 @@ def _policy_row(p: Policy, *, now_ts: float) -> str:
 
 
 def _section(
-    title: str, blurb: str, policies: list[Policy], *,
-    now_ts: float, empty_copy: str,
+    title: str,
+    blurb: str,
+    policies: list[Policy],
+    *,
+    now_ts: float,
+    empty_copy: str,
 ) -> str:
     if not policies:
         body = f"<div class='empty'>{empty_copy}</div>"
@@ -56,14 +56,14 @@ def _section(
     return (
         "<section class='card'>"
         f"<h2>{_e(title)}</h2>"
-        f"<div class='sub'>{blurb}</div>"
-        + body
-        + "</section>"
+        f"<div class='sub'>{blurb}</div>" + body + "</section>"
     )
 
 
 def render_policies_page(
-    *, dismissals: list[Policy], transient_intents: list[Policy],
+    *,
+    dismissals: list[Policy],
+    transient_intents: list[Policy],
     now_ts: float | None = None,
 ) -> str:
     import time as _time
@@ -78,7 +78,8 @@ def render_policies_page(
             "Dismissals",
             "Patterns the system has learned to ignore — typically created "
             "by ✗ feedback on a passive event.",
-            dismissals, now_ts=now_ts,
+            dismissals,
+            now_ts=now_ts,
             empty_copy="No dismissals yet. Tap ✗ on an event that "
             "shouldn't have surfaced — the system will learn the pattern.",
         )
@@ -86,7 +87,8 @@ def render_policies_page(
             "Transient intents",
             "Conversational watches you've set: <i>“notify me when Bob "
             "arrives”</i>. Self-prune on TTL or fire_once.",
-            transient_intents, now_ts=now_ts,
+            transient_intents,
+            now_ts=now_ts,
             empty_copy="No transient intents active. These show up as the "
             "agent's heightened-attention list — added via the assistant.",
         )

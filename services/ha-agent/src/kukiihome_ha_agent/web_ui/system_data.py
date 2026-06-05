@@ -66,12 +66,13 @@ def _stores_row(root: Path) -> StorageClassRow:
             total += size
             detail_parts.append(f"{label}: {size // 1024} KB")
     detail = " · ".join(detail_parts[:5]) + (
-        f" · +{len(detail_parts) - 5} more"
-        if len(detail_parts) > 5 else ""
+        f" · +{len(detail_parts) - 5} more" if len(detail_parts) > 5 else ""
     )
     return StorageClassRow(
         label="Stores (SQLite)",
-        count=present, bytes_used=total, detail=detail,
+        count=present,
+        bytes_used=total,
+        detail=detail,
     )
 
 
@@ -79,7 +80,8 @@ def _events_row(root: Path) -> StorageClassRow:
     n, sz = _count_glob_bytes(root / "events", "**/event.json")
     return StorageClassRow(
         label="Episodic events",
-        count=n, bytes_used=sz,
+        count=n,
+        bytes_used=sz,
         detail=f"under {root / 'events'}" if n else "",
     )
 
@@ -88,7 +90,8 @@ def _frames_row(root: Path) -> StorageClassRow:
     n, sz = _count_glob_bytes(root / "events", "**/*.jpg")
     return StorageClassRow(
         label="Frame snapshots",
-        count=n, bytes_used=sz,
+        count=n,
+        bytes_used=sz,
         detail=f"under {root / 'events'}" if n else "",
     )
 
@@ -98,17 +101,19 @@ def _clips_row(root: Path) -> StorageClassRow:
     n_gif, sz_gif = _count_glob_bytes(root / "events", "**/clip.gif")
     return StorageClassRow(
         label="Clip files",
-        count=n_mp4 + n_gif, bytes_used=sz_mp4 + sz_gif,
+        count=n_mp4 + n_gif,
+        bytes_used=sz_mp4 + sz_gif,
         detail=(
-            f"{n_mp4} mp4 ({sz_mp4 // 1024 ** 2} MB) · "
-            f"{n_gif} gif ({sz_gif // 1024 ** 2} MB)"
-            if n_mp4 + n_gif else ""
+            f"{n_mp4} mp4 ({sz_mp4 // 1024**2} MB) · {n_gif} gif ({sz_gif // 1024**2} MB)"
+            if n_mp4 + n_gif
+            else ""
         ),
     )
 
 
 def build_system_vm(
-    *, data_root: str | None = None,
+    *,
+    data_root: str | None = None,
     policy: Any | None = None,
     audit_log: list[Any] | None = None,
     cameras: list[tuple[str, str]] | None = None,
@@ -123,8 +128,10 @@ def build_system_vm(
     ]
     total = sum(r.bytes_used for r in rows)
     return SystemViewModel(
-        storage_rows=rows, total_bytes=total,
-        policy=policy, audit_log=audit_log or [],
+        storage_rows=rows,
+        total_bytes=total,
+        policy=policy,
+        audit_log=audit_log or [],
         cameras=cameras or [],
         now_ts=now_ts if now_ts is not None else time.time(),
     )
