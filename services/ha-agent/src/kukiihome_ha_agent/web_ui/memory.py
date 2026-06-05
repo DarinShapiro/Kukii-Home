@@ -318,11 +318,21 @@ def render_memory_page(
 
 def _render_llm_health_banner(health: Any | None) -> str:
     """Surface LLM-down state so the user knows the dispatcher is on
-    heuristic fallback. Empty string when health is None (LLM not
-    configured) or ok (working as expected)."""
+    heuristic fallback. Empty string when:
+      - health is None (LLM not configured)
+      - ok (working as expected)
+      - no failure has been recorded yet (fresh restart, never tried)
+        — the tracker starts with ok=False as a defensive default;
+        showing the banner when no actual failure has been recorded
+        is misleading and worried users between restarts.
+    """
     if health is None:
         return ""
     if getattr(health, "ok", True):
+        return ""
+    # Only show the banner once a real failure has been recorded. Fresh
+    # restart / never-called state should be silent — not "unavailable".
+    if getattr(health, "last_failure_at", None) is None:
         return ""
     reason = getattr(health, "last_failure_reason", "")
     return (

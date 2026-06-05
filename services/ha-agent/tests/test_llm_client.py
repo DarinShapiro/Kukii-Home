@@ -249,7 +249,10 @@ async def test_composite_with_no_tracker_still_works():
 
 
 def test_memory_page_renders_llm_down_banner_when_unhealthy():
-    health = LLMHealth(ok=False, last_failure_reason="connection refused")
+    health = LLMHealth(
+        ok=False, last_failure_reason="connection refused",
+        last_failure_at=NOW,
+    )
     html = render_memory_page([], llm_health=health, now_ts=NOW)
     assert "llm-down-banner" in html
     assert "LLM unavailable" in html
@@ -258,6 +261,16 @@ def test_memory_page_renders_llm_down_banner_when_unhealthy():
 
 def test_memory_page_no_banner_when_healthy():
     health = LLMHealth(ok=True, last_success_at=NOW)
+    html = render_memory_page([], llm_health=health, now_ts=NOW)
+    assert "llm-down-banner" not in html
+
+
+def test_memory_page_no_banner_on_fresh_restart_with_no_calls():
+    """Tracker starts with ok=False as a defensive default. After a
+    clean restart with no utterances tried yet, the banner should be
+    silent — showing 'LLM unavailable' here would alarm users between
+    restarts when nothing has actually failed."""
+    health = LLMHealth(ok=False)  # last_failure_at=None by default
     html = render_memory_page([], llm_health=health, now_ts=NOW)
     assert "llm-down-banner" not in html
 
@@ -271,7 +284,10 @@ def test_memory_page_no_banner_when_health_none():
 
 
 def test_memory_page_llm_banner_escapes_failure_reason():
-    health = LLMHealth(ok=False, last_failure_reason="<script>bad</script>")
+    health = LLMHealth(
+        ok=False, last_failure_reason="<script>bad</script>",
+        last_failure_at=NOW,
+    )
     html = render_memory_page([], llm_health=health, now_ts=NOW)
     assert "<script>bad" not in html
     assert "&lt;script&gt;bad" in html
@@ -280,7 +296,9 @@ def test_memory_page_llm_banner_escapes_failure_reason():
 def test_memory_page_llm_banner_appears_above_drift_banner():
     """LLM failure is more urgent than drift — surface it first."""
     from kukiihome_ha_agent.drift_detector import DriftSuggestion
-    health = LLMHealth(ok=False, last_failure_reason="x")
+    health = LLMHealth(
+        ok=False, last_failure_reason="x", last_failure_at=NOW,
+    )
     drift = [DriftSuggestion(
         guidance_id="r1", kind="rule", name="Stale",
         summary="y", recommended_action="convert_to_preference",
