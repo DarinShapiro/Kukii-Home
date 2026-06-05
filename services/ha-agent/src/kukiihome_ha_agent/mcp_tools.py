@@ -104,6 +104,12 @@ _MOTION_KEYWORDS = (
     "pet",
     "occupancy",
     "intrusion",
+    # Ring (+ some other video doorbells) expose the button press as
+    # binary_sensor.<name>_ding — a high-value security trigger. Pairing it
+    # to the doorbell camera by token overlap means a press fires an event,
+    # same as motion. Ring also exposes <name>_motion, which "motion"
+    # already covers, so Ring cams auto-discover for both motion + press.
+    "ding",
 )
 
 # Tokens we strip when computing the "device tokens" of a camera entity.

@@ -2304,22 +2304,35 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
         return defaults
 
     def _intent_known_cameras(boot: BootState) -> list[tuple[str, str]]:
-        """Camera dropdown source for rule scopes. Uses the camera registry's
-        live entries, falling back to ``camera_id`` when there's no friendly
-        name to display."""
-        from kukiihome_ha_agent.web_ui.shell import camera_display_name
+        """Camera dropdown source for area + rule scopes — returns
+        ``(camera_id, friendly_label)`` pairs.
 
-        out: list[tuple[str, str]] = []
+        Uses the SAME merged source as the Cameras page
+        (``build_camera_summaries``): the live camera registry UNION the
+        topology-driven HA loops. The earlier version read only
+        ``boot.ha_camera_loops``, which is built from explicit topology
+        adapters — empty for the default ``auto_discover: true`` setup,
+        where cameras arrive via discovery into the registry instead. That
+        made the Areas "Cameras in this area" picker show "No cameras
+        configured yet" even though the Cameras page listed them. Sourcing
+        both keeps every camera picker consistent with the Cameras page."""
+        from kukiihome_ha_agent.web_ui.camera_data import build_camera_summaries
+
         try:
-            for loop in boot.ha_camera_loops or []:
-                cid = getattr(loop, "camera_id", None) or getattr(loop, "id", "")
-                friendly = getattr(loop, "friendly_name", "") or cid
-                if cid:
-                    out.append((str(cid), camera_display_name(str(friendly)) or str(cid)))
+            statuses = (
+                list(boot.camera_registry.all()) if getattr(boot, "camera_registry", None) else []
+            )
+            ha_loops = list(getattr(boot, "ha_camera_loops", []) or [])
+            summaries = build_camera_summaries(
+                registry_statuses=statuses,
+                ha_loops=ha_loops,
+                alerts=[],
+            )
+            return [(s.camera_id, s.name) for s in summaries]
         except Exception as e:
             # registry shape evolves; this read is best-effort
             logger.debug("intent.known_cameras_failed", error=str(e))
-        return out
+            return []
 
     # _v2_mock_response was a helper for the placeholder pages in Iter 2;
     # every v2_* nav target now has a real renderer so the helper has no

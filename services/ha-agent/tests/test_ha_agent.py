@@ -308,6 +308,61 @@ async def test_tools_discover_ha_cameras_handles_stream_suffix_mismatch():
     assert discovery.unmatched_motion_sensors == []
 
 
+async def test_tools_discover_ha_cameras_pairs_ring_doorbell():
+    """Ring cameras (now first-class once added to HA) must auto-discover:
+    the camera entity has no integration allowlist gating it, the
+    ``_motion`` sensor pairs by token overlap, and the doorbell button
+    press ``_ding`` is also captured as a trigger (added to the motion
+    keyword set). Mirrors a real Ring front-door doorbell + a Ring
+    stickup cam."""
+    routes = {
+        ("GET", "/api/states"): httpx.Response(
+            200,
+            json=[
+                {
+                    "entity_id": "camera.front_door",
+                    "state": "idle",
+                    "attributes": {"friendly_name": "Front Door"},
+                },
+                {
+                    "entity_id": "binary_sensor.front_door_motion",
+                    "state": "off",
+                    "attributes": {"device_class": "motion"},
+                },
+                {
+                    "entity_id": "binary_sensor.front_door_ding",
+                    "state": "off",
+                    "attributes": {"device_class": "occupancy"},
+                },
+                {
+                    "entity_id": "camera.backyard",
+                    "state": "idle",
+                    "attributes": {"friendly_name": "Backyard"},
+                },
+                {
+                    "entity_id": "binary_sensor.backyard_motion",
+                    "state": "off",
+                    "attributes": {"device_class": "motion"},
+                },
+            ],
+        )
+    }
+    client = _client_with_mocks(routes)
+    tools = HATools(client)
+    discovery = await tools.discover_ha_cameras()
+    by_entity = {c.camera_entity: c for c in discovery.cameras}
+    # Both Ring cameras discovered (no integration filter blocks them).
+    assert set(by_entity) == {"camera.front_door", "camera.backyard"}
+    # Doorbell pairs BOTH motion + the button press (ding).
+    assert set(by_entity["camera.front_door"].motion_candidates) == {
+        "binary_sensor.front_door_motion",
+        "binary_sensor.front_door_ding",
+    }
+    # Stickup cam pairs its motion; the door's sensors don't leak in.
+    assert by_entity["camera.backyard"].motion_candidates == ["binary_sensor.backyard_motion"]
+    assert discovery.unmatched_motion_sensors == []
+
+
 async def test_client_fetch_camera_snapshot_returns_bytes():
     """v0.3.3: HAClient.fetch_camera_snapshot hits /api/camera_proxy and
     returns the response bytes. Used instead of the camera.snapshot
