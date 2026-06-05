@@ -181,28 +181,50 @@ async def test_alert_page_includes_fp_form_when_no_feedback(setup):
 
 
 async def test_alert_page_relative_urls_resolve_correctly(setup):
-    """Regression test for the v0.3.20 'alert/' doubling bug.
+    """The alert page's own sub-resource URLs (hero img, dismiss + FP
+    form actions) must RESOLVE to /alert/<id>/<resource> from the
+    page at /alert/<id> — under whatever <base href> the shell emits.
 
-    From page URL /alert/evt1, the <img src='evt1/annotated.jpg'>
-    must resolve to /alert/evt1/annotated.jpg — NOT
-    /alert/alert/evt1/annotated.jpg (which was the bug).
+    History — two bugs this guards against simultaneously:
+      - v0.3.20 'alert/' DOUBLING: with base './', a prefixed
+        'alert/evt1/x' resolved to /alert/alert/evt1/x.
+      - depth-aware-base REGRESSION: once the shell emitted '../' for
+        depth-2 pages (to keep nav links app-root-relative), a BARE
+        'evt1/x' resolved to /evt1/x → 404, so no image/video appeared.
 
-    Verifies by checking the rendered HTML uses the unambiguous
-    {event_id}/<file> form, not the broken alert/{event_id}/<file>
-    form. The form action + img src all share the same rule.
+    The earlier version of this test only string-matched the bare form,
+    so it passed straight through the second regression. This version
+    instead extracts the actual <base href> and resolves each URL the
+    way a browser does (RFC 3986 §5) — it stays correct no matter which
+    base the shell chooses.
     """
+    import re
+    from urllib.parse import urljoin
+
     client, alert_log, _, _ = setup
     alert_log.record(_alert())
-    resp = await client.get("/alert/evt1")
+    page_url = "/alert/evt1"
+    resp = await client.get(page_url)
     text = await resp.text()
-    # Right form: evt1/<resource> (no alert/ prefix).
-    assert "src='evt1/annotated.jpg'" in text or 'src="evt1/annotated.jpg"' in text
-    assert "action='evt1/dismiss'" in text or 'action="evt1/dismiss"' in text
-    assert "action='evt1/feedback'" in text or 'action="evt1/feedback"' in text
-    # And no doubled-up form anywhere.
-    assert "alert/evt1/annotated.jpg" not in text
-    assert "alert/evt1/dismiss" not in text
-    assert "alert/evt1/feedback" not in text
+
+    base_m = re.search(r"<base href='([^']+)'>", text)
+    assert base_m, "shell must emit a <base href>"
+    base = base_m.group(1)
+
+    def resolve(link: str) -> str:
+        return urljoin(urljoin(page_url, base), link)
+
+    # The hero frame <img> (class='event-frame') must hit the real route.
+    hero = re.search(r"class='event-frame' src='([^']+)'", text)
+    assert hero, "expected the hero event-frame <img src>"
+    assert resolve(hero.group(1)) == "/alert/evt1/annotated.jpg"
+
+    # Both form actions (dismiss + FP feedback) must hit their routes.
+    resolved_actions = {resolve(a) for a in re.findall(r"action='([^']+)'", text)}
+    assert "/alert/evt1/dismiss" in resolved_actions
+    assert "/alert/evt1/feedback" in resolved_actions
+    # Never the doubled form (the v0.3.20 bug).
+    assert "/alert/alert/" not in text
 
 
 async def test_alert_page_hides_fp_form_after_feedback_submitted(setup):

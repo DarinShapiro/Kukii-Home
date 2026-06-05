@@ -673,9 +673,17 @@ def _render_alert_page(
         # The video player will return when the preprocessor exposes a
         # reliable per-event clip endpoint + we proxy with Range
         # support; until then, frame-only is the working UX.
-        f"<img class='event-frame' src='{safe_id}/annotated.jpg' "
+        # Self-referential URLs on this page MUST carry the `alert/` prefix.
+        # The page lives at /alert/{id} (depth 2), so the shell emits
+        # <base href='../'> (→ app root) to keep the nav links resolving to
+        # top-level pages. Consequently a current-dir-relative src like
+        # '{id}/annotated.jpg' resolves to /{id}/annotated.jpg (404) — it
+        # needs the full app-root-relative path 'alert/{id}/annotated.jpg'
+        # to hit the /alert/{id}/annotated.jpg route. Same for frame.jpg,
+        # dismiss, and the FP form action below.
+        f"<img class='event-frame' src='alert/{safe_id}/annotated.jpg' "
         f"alt='alert frame' "
-        f"onerror=\"this.src='{safe_id}/frame.jpg'\"/>"
+        f"onerror=\"this.src='alert/{safe_id}/frame.jpg'\"/>"
         f"<div class='hero-caption'>"
         f"<h1>{headline}</h1>"
         f"<div class='meta'>{camera_label} · {when} · "
@@ -703,7 +711,7 @@ def _render_alert_page(
             "<button disabled class='btn'>Dismissed</button>"
             if dismissed
             else (
-                f"<form method='post' action='{safe_id}/dismiss' "
+                f"<form method='post' action='alert/{safe_id}/dismiss' "
                 "style='display:inline'>"
                 "<button type='submit' class='btn btn-secondary'>"
                 "Dismiss</button></form>"
@@ -776,8 +784,11 @@ def _render_fp_form(event_id: str) -> str:
     at #fp). Five preset categories + free text + (eventually) an
     actor picker when reason=wrong_identity."""
     return (
+        # 'alert/' prefix required — the page is at /alert/{id} under a
+        # <base href='../'> (app root). See the hero-img comment in
+        # _render_alert_page for the full explanation.
         f"<form id='fp' class='fp-form' method='post' "
-        f"action='{event_id}/feedback'>"
+        f"action='alert/{event_id}/feedback'>"
         "<h2>Report false positive</h2>"
         "<p>What was wrong with this alert?</p>"
         "<label><input type='radio' name='reason' value='empty_frame' required> "
