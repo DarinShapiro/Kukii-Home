@@ -19,6 +19,12 @@ uv.lock
 # Documentation generated content
 docs/_build/
 
+# semantic-release regenerates this changelog on EVERY release (via
+# @semantic-release/changelog) without running Prettier, so format-checking
+# it is perpetual whack-a-mole — the next release re-dirties it. Generated
+# artifact → exempt from the format gate.
+ha-integration/addon/kukiihome/CHANGELOG.md
+
 # Vendored HA integration: shipped to /config/custom_components and
 # content-hashed by the add-on installer. Formatting is frozen on
 # purpose — churning these files triggers an integration re-install +
