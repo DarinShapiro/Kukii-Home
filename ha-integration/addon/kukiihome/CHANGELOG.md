@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.7](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.6...v0.26.7) (2026-06-05)
+
+
+### Bug Fixes
+
+* **memory:** four self-audit findings — drawer close, history class, refine guard, diag perf ([f82002f](https://github.com/DarinShapiro/Kukii-Home/commit/f82002f46689557e1bc94415ac93935b2e50974b))
+
 ## [0.26.6](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.5...v0.26.6) (2026-06-05)
 
 
