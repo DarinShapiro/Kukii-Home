@@ -17,19 +17,19 @@ later parts hang off the same principles. The cross-cutting principles
 (§7, §7.5, §7.6) and shared vocabulary (capability matrix, external-dependency
 triple) apply across all parts unless a part says otherwise.
 
-| Part | Surface | Status |
-|---|---|---|
-| **I** | Identity & Review (Inbox, track detail, candidate confirm, merge/split) | Ratified + built (§1–9) |
-| **II** | Per-camera detail + Authorized actions whitelist | Ratified + built (§10–16) |
-| **III** | Home page (Needs Attention + Activity + Trace + audit chain) | Ratified + built (§17–24) |
-| **IV** | Activity depth & filters | Ratified + built (placeholder §below) |
-| **V** | Areas | Ratified + built (Iter 2.C) |
-| **VI** | Intent — Preferences + Rules | Ratified + built (Iter 2.A + Task 9) |
-| **VII** | Policies (dismissals + transient intents) | Ratified + built (Iter 2.D) |
-| **VIII** | Diagnostics + dev loop | Ratified + built (Iter 2.E roll-up; audit-edge browser deferred) |
-| **IX** | **Memory architecture — guidance vs evidence, unified /memory + /identities + /system** | **Ratified, not built** (§25–32) |
-| **X** | **Conversational dispatcher — drawer + LLM placement + audit thread** | **Ratified, not built** (§33–41) |
-| n/a | HA Companion / Lovelace surfaces | partial (§6 below, push only) |
+| Part     | Surface                                                                                 | Status                                                           |
+| -------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **I**    | Identity & Review (Inbox, track detail, candidate confirm, merge/split)                 | Ratified + built (§1–9)                                          |
+| **II**   | Per-camera detail + Authorized actions whitelist                                        | Ratified + built (§10–16)                                        |
+| **III**  | Home page (Needs Attention + Activity + Trace + audit chain)                            | Ratified + built (§17–24)                                        |
+| **IV**   | Activity depth & filters                                                                | Ratified + built (placeholder §below)                            |
+| **V**    | Areas                                                                                   | Ratified + built (Iter 2.C)                                      |
+| **VI**   | Intent — Preferences + Rules                                                            | Ratified + built (Iter 2.A + Task 9)                             |
+| **VII**  | Policies (dismissals + transient intents)                                               | Ratified + built (Iter 2.D)                                      |
+| **VIII** | Diagnostics + dev loop                                                                  | Ratified + built (Iter 2.E roll-up; audit-edge browser deferred) |
+| **IX**   | **Memory architecture — guidance vs evidence, unified /memory + /identities + /system** | **Ratified, not built** (§25–32)                                 |
+| **X**    | **Conversational dispatcher — drawer + LLM placement + audit thread**                   | **Ratified, not built** (§33–41)                                 |
+| n/a      | HA Companion / Lovelace surfaces                                                        | partial (§6 below, push only)                                    |
 
 ---
 
@@ -46,7 +46,7 @@ across all her frames **with zero re-inference**.
 
 So the central user act is **not** "capture a new person" — it's **"label a
 track the system already stored,"** and the payoff (`resolve_event`) back-fills
-every past *and* future appearance automatically. The UI is, at its heart, a
+every past _and_ future appearance automatically. The UI is, at its heart, a
 humane front-end to `resolve_event`.
 
 Two consequences drive everything below:
@@ -54,27 +54,27 @@ Two consequences drive everything below:
 1. **The store is the enrollment substrate.** Enrollment = select stored
    track(s) → average their embeddings → template. No separate capture step.
 2. **Correction is first-class, not an edge case.** The same demo showed two
-   *different* people (tracks active simultaneously) scoring **0.96 cosine** —
-   single-modality body-ID over-merges. The UI must let users *split* and
-   *merge*, and must warn before a merge that would fuse two co-active tracks.
+   _different_ people (tracks active simultaneously) scoring **0.96 cosine** —
+   single-modality body-ID over-merges. The UI must let users _split_ and
+   _merge_, and must warn before a merge that would fuse two co-active tracks.
 
 ---
 
 ## 1.5 Modalities in MVP scope — **gait + pet are IN**
 
 Decision (2026-06-03): gait and pet are **MVP deliverables**, not later
-extensions. That decision reaches *below* the UI — into the always-embed layer.
+extensions. That decision reaches _below_ the UI — into the always-embed layer.
 The **pipeline embed capability for all three MVP modalities is now built**
 (M0); what remains is the gait Stage-2 worker (E4) and the UI. This section is
 the honest accounting.
 
-| modality | pipeline | embed built | embed shape | resolves to | MVP |
-|---|---|---|---|---|---|
-| body | BodyIdPipeline | ✅ | per-frame | person (`KnownActor`) | ✅ |
-| **pet** | PetPipeline | ✅ | **per-frame** (DINOv2 crop) | **pet (`KnownPet`)** | ✅ |
-| **gait** | GaitPipeline | ✅ | **per-track sequence** | person (`KnownActor`) | ✅ (worker E4 pending) |
-| **face** | FacePipeline | ✅ | **per-frame** (head-region SCRFD+ArcFace) | person (`KnownActor`) | ✅ |
-| body_shape | CCReIDPipeline | ❌ | per-frame | person | later |
+| modality   | pipeline       | embed built | embed shape                               | resolves to           | MVP                    |
+| ---------- | -------------- | ----------- | ----------------------------------------- | --------------------- | ---------------------- |
+| body       | BodyIdPipeline | ✅          | per-frame                                 | person (`KnownActor`) | ✅                     |
+| **pet**    | PetPipeline    | ✅          | **per-frame** (DINOv2 crop)               | **pet (`KnownPet`)**  | ✅                     |
+| **gait**   | GaitPipeline   | ✅          | **per-track sequence**                    | person (`KnownActor`) | ✅ (worker E4 pending) |
+| **face**   | FacePipeline   | ✅          | **per-frame** (head-region SCRFD+ArcFace) | person (`KnownActor`) | ✅                     |
+| body_shape | CCReIDPipeline | ❌          | per-frame                                 | person                | later                  |
 
 **Face embed (added 2026-06-03):** `FacePipeline.embed()` — the durable anchor.
 Detection scoped to the head region (top of the person box, native res, as in
@@ -89,23 +89,23 @@ Review UI is modality-agnostic.
 **Two wrinkles that aren't "copy body-ID":**
 
 - **Gait is temporal.** It produces **one descriptor per track**, from a frame
-  *sequence* (walking dynamics over ≥`min_frames`), not one vector per frame.
+  _sequence_ (walking dynamics over ≥`min_frames`), not one vector per frame.
   So: a new `embed_sequence()` (the no-match analogue of `run_sequence`), a
   `TemporalEmbeddingPipeline` protocol, and worker code that builds per-track
   sequences and calls it once per track. In the store a gait track is **one
   `track_embeddings` row**, not N — which `resolve_event` already handles. Gait
   only fires on tracks with enough frames, so many short tracks get no gait.
-- **Pets are a different subject type.** Body/face/gait name *people*; pet ID
-  names a *pet* (`KnownPet`: species, owner). PetPipeline triggers on
+- **Pets are a different subject type.** Body/face/gait name _people_; pet ID
+  names a _pet_ (`KnownPet`: species, owner). PetPipeline triggers on
   `{dog, cat}`, so the worker must embed animal tracks too (today it only
   collects person tracks), and the data model + UI need a **parallel pet lane**
   — a "This is Rex" flow distinct from "This is Alice."
 
 **Relative cost (set expectations):** pet embed was cheap — same per-frame
 pattern as body, just DINOv2 on dog/cat crops + a `KnownPet` target — and it's
-done. Gait's *embed capability* is also done (a thin empty-corpus reuse of
+done. Gait's _embed capability_ is also done (a thin empty-corpus reuse of
 `run_sequence`). **Gait's remaining cost is operational, not modelling:** the
-Stage-2 worker (sequence-building + `gait_pending` queue, §8) and the *runtime*
+Stage-2 worker (sequence-building + `gait_pending` queue, §8) and the _runtime_
 segmentation compute, which the deferred-cascade design keeps off the hot path
 and proportional to face/body failure. Sequencing in §8 front-loads pet and
 treats the gait worker as its own milestone.
@@ -145,7 +145,7 @@ treats the gait worker as its own milestone.
         corpus refresh ──► re-run resolve_event over affected scope ──► loop closes
 ```
 
-**Live arm (the always-embed payoff):** when a *new* event finishes
+**Live arm (the always-embed payoff):** when a _new_ event finishes
 enrichment, resolve it against the current corpus immediately → the alert push
 can carry a tentative identity ("Looks like Alice"). Same `resolve_event`, no
 new machinery.
@@ -155,9 +155,10 @@ new machinery.
 ## 3. Data layer
 
 ### 3.1 Already built
+
 - `events`, `detections` (carry `frame_name` + normalized `bbox` + `track_id`
   — enough to crop a thumbnail), `track_embeddings` (`event_id, camera_id,
-  track_id, frame_ts, modality, match_method, dim, embedding`).
+track_id, frame_ts, modality, match_method, dim, embedding`).
 - Frames on disk addressable; preprocessor already serves
   `GET /frames/{camera}/{ts}.jpg`.
 
@@ -210,28 +211,31 @@ per-frame rows for display (§9) — so body and gait already look the same to t
 timeline (an appearance with a confidence), the difference is only in storage.
 
 **Why persist resolutions (not just return them):** the timeline, the review
-queue, and corrections all need a stable, queryable, *correctable* record.
+queue, and corrections all need a stable, queryable, _correctable_ record.
 `resolve_event` stays pure; a thin `persist_resolutions()` writes its output.
 
 ### 3.3 Derived concepts (computed, not stored)
+
 - **Track summary** = group `track_embeddings`/`detections` by `(event_id,
-  track_id)`: frame count, time span, peak-confidence frame (→ thumbnail),
+track_id)`: frame count, time span, peak-confidence frame (→ thumbnail),
   modalities present, current resolution (if any).
 - **Unresolved track** = a track with embeddings but no `confirmed`/`auto`
   resolution above the unknown threshold.
 - **Co-active tracks** = tracks whose time spans overlap → merge-guard input.
 
 ### 3.4 Open decision — canonical home for actor state
+
 `ActorCache` is in-memory and rebuilds from NATS `ActorEnrollmentEvent`; the
 canonical owner per Epic 10 is the **memory service / Neo4j `KnownActor`** (and
 `KnownPet` for animals).
+
 - **MVP (recommended):** persist `subjects`/`subject_templates` in the
   preprocessor SQLite store (co-located with embeddings + frames + recognizer;
   local-first; zero new infra). Still publish `ActorEnrollmentEvent` so the rest
   of the system learns the subject. **`ActorEnrollmentEvent` already carries
-  `pet_dinov2_centroid` *and* `gait_embedding`, and the corpus already projects
+  `pet_dinov2_centroid` _and_ `gait_embedding`, and the corpus already projects
   `pet` + `gait` slices** — so the enrollment + resolve path for both modalities
-  needs *no new contract*; a pet is simply an `actor_id` whose only template is a
+  needs _no new contract_; a pet is simply an `actor_id` whose only template is a
   pet centroid. The one addition is the `kind` discriminator so the UI can route
   it to the pet lane.
 - **Promotion path:** make Neo4j `KnownActor`/`KnownPet` canonical once the
@@ -251,19 +255,19 @@ may call the resolve + feedback endpoints too.
 > by `test_no_ha_side_imports`). These are **HTTP** endpoints + shared Pydantic
 > contracts in `kukiihome_shared.preprocessor`, so the boundary holds.
 
-| Method & path | Purpose | Returns |
-|---|---|---|
-| `GET /identity/tracks` | Track queue. Filters: `status=unresolved\|review\|resolved`, **`kind=person\|pet`**, `camera`, `from`, `to`, `confidence_band`, `limit`. | `[TrackSummary]` |
-| `GET /identity/tracks/{event_id}/{track_id}` | Track detail: per-frame dets, **modalities present (body/gait for people; pet for animals)**, current resolution, **top-k candidate subjects by cosine**, co-active tracks. | `TrackDetail` |
-| `GET /identity/tracks/{event_id}/{track_id}/thumb.jpg` | Representative crop (peak-conf frame, cropped by bbox). `?frame=ts` for a specific one. | image/jpeg |
-| `GET /identity/subjects` | Enrolled people + pets + modality coverage + appearance counts. Filter `kind`. | `[SubjectSummary]` |
-| `POST /identity/subjects` | Create `{kind: person\|pet, display_name, species?, owner_id?}`. | `SubjectSummary` |
-| `POST /identity/subjects/{id}/enroll` | Build/extend a template: `{modality, sources:[{event_id, track_id, frames?}]}`. Averages selected embeddings, renormalizes, writes template + provenance, publishes enrollment event, kicks a resolve sweep. **Gait sources are whole tracks** (the descriptor is per-track; `frames` is ignored for `modality=gait`). | `{template, resolved_summary}` |
-| `POST /identity/resolve` | Run + persist resolve over `{scope: event_id \| {camera,from,to} \| "all"}`, optionally `{modalities}`. Idempotent. | `{matched, by_subject}` |
-| `GET /identity/subjects/{id}/timeline` | Appearances for the person/pet view: `from`,`to`,`camera?`. | `[Appearance]` |
-| `POST /identity/resolutions/{id}/feedback` | `{verdict: confirm\|reject\|reassign, subject_id?}`. Updates verdict, optionally re-curates template, writes feedback signal. | `Resolution` |
-| `POST /identity/subjects/merge` | `{from_id, into_id}` — merge two labels (recompute templates per modality, repoint resolutions). Rejects cross-kind merges (person↔pet). | `SubjectSummary` |
-| `POST /identity/tracks/{event_id}/{track_id}/reassign` | Split: move a track off a subject → new/other subject or back to unknown. | `TrackDetail` |
+| Method & path                                          | Purpose                                                                                                                                                                                                                                                                                                                | Returns                        |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `GET /identity/tracks`                                 | Track queue. Filters: `status=unresolved\|review\|resolved`, **`kind=person\|pet`**, `camera`, `from`, `to`, `confidence_band`, `limit`.                                                                                                                                                                               | `[TrackSummary]`               |
+| `GET /identity/tracks/{event_id}/{track_id}`           | Track detail: per-frame dets, **modalities present (body/gait for people; pet for animals)**, current resolution, **top-k candidate subjects by cosine**, co-active tracks.                                                                                                                                            | `TrackDetail`                  |
+| `GET /identity/tracks/{event_id}/{track_id}/thumb.jpg` | Representative crop (peak-conf frame, cropped by bbox). `?frame=ts` for a specific one.                                                                                                                                                                                                                                | image/jpeg                     |
+| `GET /identity/subjects`                               | Enrolled people + pets + modality coverage + appearance counts. Filter `kind`.                                                                                                                                                                                                                                         | `[SubjectSummary]`             |
+| `POST /identity/subjects`                              | Create `{kind: person\|pet, display_name, species?, owner_id?}`.                                                                                                                                                                                                                                                       | `SubjectSummary`               |
+| `POST /identity/subjects/{id}/enroll`                  | Build/extend a template: `{modality, sources:[{event_id, track_id, frames?}]}`. Averages selected embeddings, renormalizes, writes template + provenance, publishes enrollment event, kicks a resolve sweep. **Gait sources are whole tracks** (the descriptor is per-track; `frames` is ignored for `modality=gait`). | `{template, resolved_summary}` |
+| `POST /identity/resolve`                               | Run + persist resolve over `{scope: event_id \| {camera,from,to} \| "all"}`, optionally `{modalities}`. Idempotent.                                                                                                                                                                                                    | `{matched, by_subject}`        |
+| `GET /identity/subjects/{id}/timeline`                 | Appearances for the person/pet view: `from`,`to`,`camera?`.                                                                                                                                                                                                                                                            | `[Appearance]`                 |
+| `POST /identity/resolutions/{id}/feedback`             | `{verdict: confirm\|reject\|reassign, subject_id?}`. Updates verdict, optionally re-curates template, writes feedback signal.                                                                                                                                                                                          | `Resolution`                   |
+| `POST /identity/subjects/merge`                        | `{from_id, into_id}` — merge two labels (recompute templates per modality, repoint resolutions). Rejects cross-kind merges (person↔pet).                                                                                                                                                                               | `SubjectSummary`               |
+| `POST /identity/tracks/{event_id}/{track_id}/reassign` | Split: move a track off a subject → new/other subject or back to unknown.                                                                                                                                                                                                                                              | `TrackDetail`                  |
 
 **New shared contracts** (`kukiihome_shared.preprocessor`): `TrackSummary`
 (carries `kind` + per-modality embedding counts), `TrackDetail`,
@@ -273,6 +277,7 @@ to the store.
 
 **Confidence bands** (single source of truth, server-side, tunable per camera
 like other knobs):
+
 - `≥ 0.85` → **auto** (resolution written, still correctable)
 - `0.60–0.85` → **review** (lands in the Inbox for one-tap confirm)
 - `< 0.60` → **unresolved** (shows as Unknown; never a silent match)
@@ -281,7 +286,7 @@ like other knobs):
 
 ## 5. Screens (operator-dashboard, React — wireframe level)
 
-### 5.1 Review / Inbox  — *home; the labeling engine*
+### 5.1 Review / Inbox — _home; the labeling engine_
 
 The daily driver: unknown tracks to name + medium-confidence guesses to
 confirm. Card grid, newest first.
@@ -336,7 +341,7 @@ confirm. Card grid, newest first.
 
 Per-modality candidate columns make the multi-signal MVP concrete: when body
 is ambiguous (the pool 0.96 case), gait can be the tie-breaker — and the user
-sees *which* signal agreed. **Gait shows its gate** (`19f ≥ 15 min`); a short
+sees _which_ signal agreed. **Gait shows its gate** (`19f ≥ 15 min`); a short
 track reads `gait — (8f < 15 min)` so it's clear why gait is absent, not
 broken. A **pet** track detail is the same screen with `Modalities: pet ✓ (6f)`
 and a `Not an animal` action — same machinery, pet target.
@@ -363,7 +368,7 @@ The dialog **keys off the track's kind** — person and pet variants:
 ```
 
 - **Multi-modality enrol in one action:** a person track carrying both body
-  and gait enrolls *both* templates at once (checkboxes default to whatever the
+  and gait enrolls _both_ templates at once (checkboxes default to whatever the
   track has). Frame curation (optional, default all) guards against one bad crop
   poisoning the **per-frame** body average; it's greyed for **gait** (one
   per-track descriptor — nothing to curate).
@@ -389,7 +394,7 @@ People and pets in one directory, tab-split. **Modality coverage badges**
 legible per subject — and show at a glance who'd benefit from a face/gait
 enrol later. Pet cards carry **species + owner**.
 
-### 5.5 Subject timeline — the payoff (person *or* pet)
+### 5.5 Subject timeline — the payoff (person _or_ pet)
 
 ```
 ┌ Alice ──────────────────── body✓ gait✓ face— · 142 appearances ┐
@@ -405,9 +410,9 @@ enrol later. Pet cards carry **species + owner**.
 ```
 
 Marks carry a **modality superscript** (`ᵇ`body `ᵍ`gait `ᵖ`pet `ᶠ`face) so a
-gait-only night sighting (face/body failed in the dark) is visibly *why* Alice
+gait-only night sighting (face/body failed in the dark) is visibly _why_ Alice
 was placed there. Low-confidence appearances flagged; clicking a mark exposes
-the crop + `reassign` (split) — corrections happen *in context*. **Pets use the
+the crop + `reassign` (split) — corrections happen _in context_. **Pets use the
 identical screen** — "everywhere Rex has been," cross-camera — the only
 difference is `pet✓` coverage and a pet thumbnail.
 
@@ -428,7 +433,7 @@ The fast path — correction without opening the dashboard.
   actions: `[✓ Yes]` `[✗ No]` `[Someone else →]`. `✓/✗` hit
   `/identity/resolutions/{id}/feedback`; "Someone else" deep-links to the label
   dialog. Works the same for **pets** ("Rex in the backyard? ✓/✗") and for
-  **gait-only** IDs at night ("Looks like Alice *by gait* — face wasn't
+  **gait-only** IDs at night ("Looks like Alice _by gait_ — face wasn't
   visible"), where surfacing the modality sets honest confidence expectations.
   This is the one-tap FP/FN signal Epic 10.8 wants, sourced from the resolution
   instead of a bare alert.
@@ -444,12 +449,12 @@ curate, merge/split, investigate.**
 ## 7. Cross-cutting principles
 
 - **Modality-agnostic everywhere.** A track may resolve via body today, face or
-  gait tomorrow. Screens show *which* modality/method; the data model already
+  gait tomorrow. Screens show _which_ modality/method; the data model already
   carries it. Never hard-code "body" into UX or contracts.
 - **Confidence-band routing** (§4) keeps the worst case (the 0.6–0.85 zone where
   the false-merge lived) in a human review lane rather than auto-applied.
 - **Merge-guard.** Before any merge/confirm that would fuse tracks with
-  *overlapping time spans*, warn hard — two co-active tracks are two people.
+  _overlapping time spans_, warn hard — two co-active tracks are two people.
 - **Provenance + reversibility.** Every template records the tracks that built
   it; every enroll/confirm/merge/split is undo-able. No silent, unexplainable
   state.
@@ -465,49 +470,50 @@ curate, merge/split, investigate.**
 
 Captured 2026-06-03. The household changes the recognition math: the **known
 set is tiny** (≈5–10 residents + a few regulars), even though the set of people
-who *could* appear is open. Most recognition tuning targets open-world galleries
+who _could_ appear is open. Most recognition tuning targets open-world galleries
 (is this one of millions); ours should exploit the closed-ish gallery.
 
-**Principle: propose against the small known set *aggressively*, commit
-*conservatively*.**
+**Principle: propose against the small known set _aggressively_, commit
+_conservatively_.**
 
 - **Rank + margin, not an absolute threshold.** Against 5 candidates the useful
   question isn't "is cosine ≥ 0.5" but "is the top candidate clearly ahead of
   the second?" A soft, distant face scoring 0.45→Alice / 0.18→everyone-else is a
-  confident Alice by *margin*, though a fixed threshold would reject it. Resolve
+  confident Alice by _margin_, though a fixed threshold would reject it. Resolve
   should emit the **top-K of the known set with similarities + the margin**, and
-  decide on (floor × margin), with a *lower* floor than a big-gallery system
+  decide on (floor × margin), with a _lower_ floor than a big-gallery system
   could use.
 - **Compounds with fusion + context priors.** Three individually-weak signals
-  (body/face/gait) agreeing on the *same* one of five is strong — coincidental
+  (body/face/gait) agreeing on the _same_ one of five is strong — coincidental
   agreement on the wrong person out of five is unlikely. Time-of-day, camera,
-  access profiles, and co-occurrence shrink the *effective* gallery further:
+  access profiles, and co-occurrence shrink the _effective_ gallery further:
   P(identity | embedding, time, camera, recent), not P(identity | embedding).
 - **Open-set guardrail (the safety boundary).** The gallery is small but not
   closed — couriers, strangers, an actual intruder. "Nearest of five" would
   force a stranger into "Alice," and since this recognizer can **short-circuit
-  the VLM** for known-person-at-known-time, that means *auto-dismissing an
-  intruder as a resident* — the dangerous FP. So a lone weak embedding may
-  *propose* "tentatively Alice" (→ review band, VLM/human stays in the loop) but
+  the VLM** for known-person-at-known-time, that means _auto-dismissing an
+  intruder as a resident_ — the dangerous FP. So a lone weak embedding may
+  _propose_ "tentatively Alice" (→ review band, VLM/human stays in the loop) but
   must **never silently promote an unknown to a confident known**. Low floor to
   propose; margin + corroboration (fusion / context / human) to commit.
 
 **What it changes when built:**
+
 - `resolve` returns **ranked candidates + margin**, not a single thresholded
   match; verdict = f(floor, margin, fusion).
 - The **Review UI** shows ranked candidates even when auto-resolve abstains —
   "most likely Alice (0.45), then Bob (0.18) — confirm?" → one-tap labeling
   against a short list instead of typing. Pairs naturally with the track-detail
-  view (§5.2): *here's the track animated, and here's who we think it is.*
+  view (§5.2): _here's the track animated, and here's who we think it is._
 - **Per-gallery calibration:** tighten the margin when two enrolled subjects
   look alike (measure inter-subject similarity at enroll); loosen it for a
   visually distinct household.
 
-**Status:** the *ranking* half is **built (0.6.0)** — `IdentityStore.candidates`
+**Status:** the _ranking_ half is **built (0.6.0)** — `IdentityStore.candidates`
 ranks the enrolled set by best-across-modality cosine + margin, surfaced as
-one-tap "Confirm" on the track-detail page; enrollment now *accumulates*
+one-tap "Confirm" on the track-detail page; enrollment now _accumulates_
 (frame-count-weighted centroid) so each confirm strengthens the template. The
-*commit* half — open-set floor + margin gating in auto-resolve, per-gallery
+_commit_ half — open-set floor + margin gating in auto-resolve, per-gallery
 calibration — is still a direction (resolve still uses fixed per-modality
 thresholds).
 
@@ -521,21 +527,23 @@ tracker is not the bottleneck — detection density (frame rate) is.**
 
 Three tracker configs gave **byte-identical** track structure (5 tracks:
 19/8/1/1/1):
+
 1. **Motion-only** (Ultralytics BoT-SORT default).
 2. **ReID, `auto` features** (detector backbone — weak, untrained for ReID).
-3. **ReID, OSNet** (a *trained* person-ReID encoder, wired via
+3. **ReID, OSNet** (a _trained_ person-ReID encoder, wired via
    `pipelines/osnet_reid.py` so the tracker and identity layer share a model) —
    even with the proximity gate fully open and appearance permissive.
 
 Why nothing moved: the fragments are **isolated single-frame detections** at the
-event boundaries (subject entering/leaving), with a 2–3s gap of *no detection*
+event boundaries (subject entering/leaving), with a 2–3s gap of _no detection_
 before the main track forms. A tracker can only associate detections that
 exist; there's nothing temporally adjacent to link them to. (Opening the
 proximity gate to force appearance-only association also risks merging
-*co-present look-alikes* — t1/t2 sat at 0.96 OSNet cosine — so the gate is a
+_co-present look-alikes_ — t1/t2 sat at 0.96 OSNet cosine — so the gate is a
 feature, not a bug.)
 
 **Conclusion + actions:**
+
 - **Frame rate is the structural fix — and the decoupling is now built.**
   Tracking-fps and VLM-fps are separated: capture dense (lower
   `rtsp_capture_interval_seconds`, e.g. 0.2-0.5s) so detections are continuous
@@ -546,7 +554,7 @@ feature, not a bug.)
   off (1 fps, no cap) — the operator enables the pair. The offline event
   recordings are ~1 fps; the live continuous pipeline runs denser, so this
   fragmentation is largely an artifact of the offline low-fps path.
-- **Quality declutter** (§ in 0.6.x) is the right *current* defense — these
+- **Quality declutter** (§ in 0.6.x) is the right _current_ defense — these
   boundary singletons are low-value noise.
 - **OSNet ReID encoder is built + proven-to-engage** (`osnet_reid.py`,
   `--reid-model`, `botsort_osnet.yaml`) — opt-in, off by default. No payoff on
@@ -566,19 +574,20 @@ below the UI — without it the UI has nothing to show for those modalities) and
 the **UI layer**.
 
 **Embed layer (pipeline capability — now built):**
+
 - **E1 · pet embed** ✅ — `PetPipeline.embed()`, per-frame DINOv2 on dog/cat
-  crops with empty corpus (direct analogue of `BodyIdPipeline.embed`). *Built.*
+  crops with empty corpus (direct analogue of `BodyIdPipeline.embed`). _Built._
 - **E2 · worker collects animals** ✅ — worker now hands **all tracked dets**
   (person + dog + cat) to `collect_embeddings`; each pipeline self-filters by
-  `triggers_on`, so pet tracks embed + persist from the worker. *Built.*
+  `triggers_on`, so pet tracks embed + persist from the worker. _Built._
 - **E3 · gait temporal embed** ✅ — `TemporalEmbeddingPipeline` protocol +
   `GaitPipeline.embed_sequence()` (no-match analogue of `run_sequence`) +
-  `collect_track_embeddings()`. *Built* (the pipeline capability; the worker
-  that *drives* it is E4).
+  `collect_track_embeddings()`. _Built_ (the pipeline capability; the worker
+  that _drives_ it is E4).
 - **E4 · gait Stage-2 worker** ✅ — the worker now builds each person track's
   frame sequence across an event and runs the temporal pipeline(s) over it
   (`collect_track_embeddings`), persisting one gait row/track. Gated by config
-  (no gait pipeline → no-op) + the pipeline's min-frames floor. *Built.* The
+  (no gait pipeline → no-op) + the pipeline's min-frames floor. _Built._ The
   capture-quality `gait_pending` gate (only gait what face/body missed) remains
   a live-path optimization; the offline worker gaits every track clearing
   min-frames.
@@ -593,7 +602,7 @@ with per-frame enrichment. Instead:
 
 - **Stage 1 (cheap, every event):** detect + body + pet (+ face later), per
   frame. The existing `--embed` pass. For each **person** track it records
-  whether the cheaper modalities *captured cleanly* — i.e. was a usable face /
+  whether the cheaper modalities _captured cleanly_ — i.e. was a usable face /
   body embedding produced — and flags the track `gait_pending` if not.
 - **Stage 2 (expensive, deferred, conditional):** a separate worker drains the
   `gait_pending` queue — builds each flagged track's frame sequence, calls
@@ -602,14 +611,14 @@ with per-frame enrichment. Instead:
 
 Two properties make this safe and cheap:
 
-1. **The gate is on *capture*, not *match*.** "Inconclusive" = face/body
+1. **The gate is on _capture_, not _match_.** "Inconclusive" = face/body
    couldn't even produce a usable vector for this track (turned away, occluded,
    distant) — a **corpus-independent** signal, so it works with zero actors
    enrolled (the always-embed case). This keys gait spend to image conditions,
    exactly where gait earns its keep, and avoids running it on every track.
-2. **Defer the *compute*, never the *trace*.** Stage-2 may lag, but only within
+2. **Defer the _compute_, never the _trace_.** Stage-2 may lag, but only within
    the **durable event store's retention** (the frames the worker reads) — not
-   the 10-min live buffer. Once the gait embedding is persisted, *resolution*
+   the 10-min live buffer. Once the gait embedding is persisted, _resolution_
    against any future enrollment is free forever. The trap to avoid: "compute
    gait whenever we eventually need it" — if that arrives after frames age out,
    it's gone. Gate the spend; don't assume infinite time to spend it.
@@ -622,6 +631,7 @@ live path" and becomes "drain a background queue before frames expire" — a far
 more forgiving target.
 
 **UI layer (this spec's screens/data/API):**
+
 1. `persist_resolutions()` + `resolutions`/`subjects`/`subject_templates` tables.
 2. `/identity/*` API on the preprocessor app + shared contracts (subject `kind`).
 3. Track-thumbnail cropping endpoint (frame_name + bbox → JPEG).
@@ -631,18 +641,18 @@ more forgiving target.
 
 **Milestones (honest ordering — pet rides early, gait is its own milestone):**
 
-| # | Milestone | Contains |
-|---|---|---|
-| M0 | **Embed layer** ✅ | E1 pet embed, E2 worker collects animals, E3 gait temporal-embed capability — *built + tested* |
-| M1 | Foundation | UI-1, UI-2, UI-3 (persist + API + thumbnails), body+pet |
-| M2 | **Inbox, people + pets** | UI-4 Inbox + label dialog → the demo, clickable, for **body *and* pet** |
-| M3 | **Gait** | E4 Stage-2 worker + `gait_pending` queue + E5 tuning + gait in track-detail/timeline |
-| M4 | Subject timeline | person + pet payoff view |
-| M5 | Merge / split | correction + merge-guard |
-| M6 | HA push | one-tap confirm/deny (incl. pet + gait-only) |
-| M7 | Live-arm | auto-resolve new events + tentative-ID in alerts |
+| #   | Milestone                | Contains                                                                                       |
+| --- | ------------------------ | ---------------------------------------------------------------------------------------------- |
+| M0  | **Embed layer** ✅       | E1 pet embed, E2 worker collects animals, E3 gait temporal-embed capability — _built + tested_ |
+| M1  | Foundation               | UI-1, UI-2, UI-3 (persist + API + thumbnails), body+pet                                        |
+| M2  | **Inbox, people + pets** | UI-4 Inbox + label dialog → the demo, clickable, for **body _and_ pet**                        |
+| M3  | **Gait**                 | E4 Stage-2 worker + `gait_pending` queue + E5 tuning + gait in track-detail/timeline           |
+| M4  | Subject timeline         | person + pet payoff view                                                                       |
+| M5  | Merge / split            | correction + merge-guard                                                                       |
+| M6  | HA push                  | one-tap confirm/deny (incl. pet + gait-only)                                                   |
+| M7  | Live-arm                 | auto-resolve new events + tentative-ID in alerts                                               |
 
-**Reality check:** the *embed capability* for body, pet, and gait is now all
+**Reality check:** the _embed capability_ for body, pet, and gait is now all
 built (M0) — pet rides the body pattern exactly; gait's `embed_sequence` is a
 thin empty-corpus reuse. What's left for gait (M3) is the **Stage-2 worker**
 (sequence-building + `gait_pending` queue) and **runtime compute tuning**, not
@@ -653,6 +663,7 @@ on the hot path."
 ---
 
 ## 9. Open questions (carry into the next session)
+
 - **Subject home:** commit to SQLite-MVP now (`subjects`/`subject_templates`)
   and promote to Neo4j `KnownActor`/`KnownPet` later, or wait for the memory
   service and build straight onto the graph? (Recommend the former — keeps the
@@ -660,19 +671,19 @@ on the hot path."
 - **Track-level vs frame-level resolutions:** store per-frame (faithful, heavy)
   or collapse to one resolution per (event, track) with a frame count + conf
   distribution? (Lean: collapse for the UI, keep per-frame for debug. Note gait
-  is *already* one-per-track, so collapsing makes body/gait uniform.)
+  is _already_ one-per-track, so collapsing makes body/gait uniform.)
 - **Gait economics — RESOLVED (see §8 "Gait processing model"):** gait runs as
-  a **deferred, conditional Stage-2 worker**, gated on *capture* failure of the
+  a **deferred, conditional Stage-2 worker**, gated on _capture_ failure of the
   cheaper modalities, bounded by event-store retention. This is the answer to
   "is gait affordable" — its cost is now proportional to how often face/body
   fail, and it never touches the alert's critical path.
 - **Gait min-frames gate (remaining sub-knob):** what's the floor (the
-  pipeline's `min_frames`) and is it per-camera? Sets how *often* gait
+  pipeline's `min_frames`) and is it per-camera? Sets how _often_ gait
   contributes once Stage-2 picks a track — too high and gait rarely fires; too
   low and the descriptor is noise. Surface the gate in the UI (§5.2) either way.
 - **Stage-1 "capture-clean" predicate:** the exact rule that flags a person
-  track `gait_pending` — e.g. *no face embedding produced* AND *body crop quality
-  below X*. Needs pinning on real footage (and it's where a quick compute bench
+  track `gait_pending` — e.g. _no face embedding produced_ AND _body crop quality
+  below X_. Needs pinning on real footage (and it's where a quick compute bench
   feeds in: measure Stage-2 cost per flagged track to size the queue drain).
 - **Pet owner linkage:** is `owner_id` required at enrol or optional/after-the
   -fact? (Lean optional — naming the pet shouldn't block on knowing the owner.)
@@ -685,6 +696,7 @@ on the hot path."
   until those signals are tuned (E5) before trusting auto-clusters.
 - **Threshold ownership:** per-camera bands via the existing `/tune` knob path,
   or a dedicated identity-settings screen?
+
 ```
 
 ## 7.7 Action taxonomy — agent vs HA, four classes (design direction)
@@ -750,16 +762,18 @@ Classes 2 and 3 are constrained by a per-camera whitelist + policy block
 configured in the per-camera page (Part II §11 *Tuning* section, extended):
 
 ```
+
 Per-camera authorized actions (whitelist + policy):
-  Perception (class 2)
-    light.backyard_floods    [allow]  max-duration 60s
-    switch.backyard_ir_cut   [allow]
-    PTZ + zoom               [allow]  on this cam (capability)
-  Protective (class 3)
-    lock.back_door           [allow]  if severity≥critical AND confidence≥0.95
-                                       AND not (6am–10pm)
-    switch.yard_siren        [allow]  if severity=critical  max-duration 30s
-    light.backyard_floods    [allow]  if severity≥normal    max-duration 600s
+Perception (class 2)
+light.backyard_floods [allow] max-duration 60s
+switch.backyard_ir_cut [allow]
+PTZ + zoom [allow] on this cam (capability)
+Protective (class 3)
+lock.back_door [allow] if severity≥critical AND confidence≥0.95
+AND not (6am–10pm)
+switch.yard_siren [allow] if severity=critical max-duration 30s
+light.backyard_floods [allow] if severity≥normal max-duration 600s
+
 ```
 
 The VLM can *recommend* whatever it wants; the dispatcher silently no-ops
@@ -856,38 +870,40 @@ healthy."* It explicitly does **not** answer *"what happened on this camera"*
 | **Activity link out** | link | "N events today" → activity stream filtered to this camera |
 
 ```
+
 ┌ Pool cam ── [● connected · 12 events today] ──── [⋯] ┐
-│  [ current still + bbox of last detection ]            │
-│                                                        │
-│  Identity & role                                       │
-│    Area: Pool · Role: pool watch                       │
-│    Outdoor · faces public: no                          │
-│                                                        │
-│  Detection capabilities & sources                      │
-│    motion       NATIVE  (Dahua SMD)              ✓     │
-│    person       AUGMENTED  (Dahua trigger →      ✓     │
-│                  our YOLO classify)                    │
-│    vehicle      SUBSTITUTED  (our YOLO)          ✓     │
-│    dog/cat      SUBSTITUTED  (our YOLO)          ✓     │
-│    package      MISSING — no source              ⚠     │
-│      ↳ configured on the camera · [Open] [Re-scan]     │
-│                                                        │
-│  Privacy                                               │
-│    2 privacy zones (edit)                              │
-│                                                        │
-│  Tuning                                                │
-│    detection conf ≥ 0.45 · BoT-SORT @ 4fps · ReID off  │
-│                                                        │
-│  Health                                                │
-│    Stream 100% · 0 drops/24h                           │
-│    FP rate (7d): 2% ↓                                  │
-│    1 quality issue: low light @ 22:14 → CLAHE applied  │
-│                                                        │
-│  Active policies                                       │
-│    Dismiss {dog} on this cam · expires Wed 8pm [revoke]│
-│                                                        │
-│  Activity: 12 events today → see stream                │
+│ [ current still + bbox of last detection ] │
+│ │
+│ Identity & role │
+│ Area: Pool · Role: pool watch │
+│ Outdoor · faces public: no │
+│ │
+│ Detection capabilities & sources │
+│ motion NATIVE (Dahua SMD) ✓ │
+│ person AUGMENTED (Dahua trigger → ✓ │
+│ our YOLO classify) │
+│ vehicle SUBSTITUTED (our YOLO) ✓ │
+│ dog/cat SUBSTITUTED (our YOLO) ✓ │
+│ package MISSING — no source ⚠ │
+│ ↳ configured on the camera · [Open] [Re-scan] │
+│ │
+│ Privacy │
+│ 2 privacy zones (edit) │
+│ │
+│ Tuning │
+│ detection conf ≥ 0.45 · BoT-SORT @ 4fps · ReID off │
+│ │
+│ Health │
+│ Stream 100% · 0 drops/24h │
+│ FP rate (7d): 2% ↓ │
+│ 1 quality issue: low light @ 22:14 → CLAHE applied │
+│ │
+│ Active policies │
+│ Dismiss {dog} on this cam · expires Wed 8pm [revoke]│
+│ │
+│ Activity: 12 events today → see stream │
 └────────────────────────────────────────────────────────┘
+
 ```
 
 ## 12. Detection capability matrix — vocabulary
@@ -905,8 +921,10 @@ line-cross, tamper, …):
 Each row carries the **external-dependency triple** inline (P3):
 
 ```
-person   AUGMENTED  (Dahua trigger → our YOLO)         ✓
-         ↳ configured on the camera · [Open] [Re-scan]
+
+person AUGMENTED (Dahua trigger → our YOLO) ✓
+↳ configured on the camera · [Open] [Re-scan]
+
 ```
 
 **Criticality is narrow.** Motion is the only **mandatory** signal — without
@@ -1050,33 +1068,35 @@ an alert. The feed scope is *reasoned events*, not *escalated alerts*.
 Three zones, fixed order, top-to-bottom:
 
 ```
+
 ┌ Kukii-Home ──────────────────── [↻] [Settings] ─────────────────┐
-│  🟢 All quiet · 12 events today · 0 unhandled                   │ status line
-│                                                                  │
-│  ─── NEEDS ATTENTION (3) ────────────────────────────────────── │ Zone 1
-│  ⓘ  Pool cam: native person detection disappeared yesterday     │
-│     — substituted by preprocessor    [Open camera] [Accept]     │ drift (Part II §16)
-│  👤  5 unnamed tracks to review                  [Review →]     │ identity inbox (Part I)
-│  ⚠  Driveway: package detection MISSING            [Configure]  │ capability gap
-│                                                                  │
-│  ─── ACTIVITY ────────  passive ✓ · actions ✓ · [Cam ▾] [Who ▾] │ Zone 2
-│                                                                  │
-│  5m ago    👤 Unknown person walking yard at dusk ·             │
-│            pool · driveway · ✓ asked you  ⓘ trace               │ ACTION (foreground)
-│  2h ago    ✓ Alice arrived · front door · alerted you           │ ACTION
-│  3h ago    Bob left · driveway · passive                        │ passive (muted)
-│  yesterday Rex in backyard · ×4 today · auto-dismissed          │ passive, grouped
-│            (dog policy)                                          │
-│  Tuesday   Mail carrier · front door · auto-dismissed           │ passive
-│                                              ↓ See all          │
-│                                                                  │
-│  Today: 2 actions · 14 passive — system is reasoning             │ trust contract
-│                                                                  │
-│  ──────────────────────────────────────────────────────────────  │ Zone 3
-│  ● 4 cams OK · 1 dependent on preprocessor                       │ system stripe
-│  ● Preprocessor on inference-box · last contact 4s ago           │ (collapsed by default,
-│  ● HA connected · 18 entities watched                            │  expandable on tap)
+│ 🟢 All quiet · 12 events today · 0 unhandled │ status line
+│ │
+│ ─── NEEDS ATTENTION (3) ────────────────────────────────────── │ Zone 1
+│ ⓘ Pool cam: native person detection disappeared yesterday │
+│ — substituted by preprocessor [Open camera] [Accept] │ drift (Part II §16)
+│ 👤 5 unnamed tracks to review [Review →] │ identity inbox (Part I)
+│ ⚠ Driveway: package detection MISSING [Configure] │ capability gap
+│ │
+│ ─── ACTIVITY ──────── passive ✓ · actions ✓ · [Cam ▾] [Who ▾] │ Zone 2
+│ │
+│ 5m ago 👤 Unknown person walking yard at dusk · │
+│ pool · driveway · ✓ asked you ⓘ trace │ ACTION (foreground)
+│ 2h ago ✓ Alice arrived · front door · alerted you │ ACTION
+│ 3h ago Bob left · driveway · passive │ passive (muted)
+│ yesterday Rex in backyard · ×4 today · auto-dismissed │ passive, grouped
+│ (dog policy) │
+│ Tuesday Mail carrier · front door · auto-dismissed │ passive
+│ ↓ See all │
+│ │
+│ Today: 2 actions · 14 passive — system is reasoning │ trust contract
+│ │
+│ ────────────────────────────────────────────────────────────── │ Zone 3
+│ ● 4 cams OK · 1 dependent on preprocessor │ system stripe
+│ ● Preprocessor on inference-box · last contact 4s ago │ (collapsed by default,
+│ ● HA connected · 18 entities watched │ expandable on tap)
 └──────────────────────────────────────────────────────────────────┘
+
 ```
 
 **Top-line state in plain English, not a status indicator.** *"All quiet.
@@ -1123,8 +1143,10 @@ Every row is one shape regardless of where it appears (home, focused views,
 per-alert page sliver):
 
 ```
-{relative-time}  {kind-glyph} {VLM scene_description} · {camera(s) joined} ·
-                 {outcome-chip}  {trace-link}
+
+{relative-time} {kind-glyph} {VLM scene_description} · {camera(s) joined} ·
+{outcome-chip} {trace-link}
+
 ```
 
 - **Verb-phrased headline = the VLM's `findings.scene_description`.** It
@@ -1170,8 +1192,10 @@ trace shows the full mechanism:
 outcome flavor → collapses into a single row with a count:
 
 ```
-yesterday   Rex in backyard · ×4 today · auto-dismissed (dog policy)
-            ↳ tap to expand
+
+yesterday Rex in backyard · ×4 today · auto-dismissed (dog policy)
+↳ tap to expand
+
 ```
 
 Expand shows individual rows. Active grouping, not truncation — a real
@@ -1192,32 +1216,34 @@ through the system. This is the page that makes the agent *legible*; it
 operationalizes the architecture's no-silent-decisions principle as UI.
 
 ```
+
 ┌ Unknown person walking through yard at dusk ──── 17:10–17:14 ─┐
-│  Outcome: ✓ asked you (push, 17:11) — no response yet          │
-│  Cameras: pool, driveway                                       │
-│                                                                │
-│  ── Trace ───────────────────────────────────────────────────  │
-│                                                                │
-│  17:10:04   pool cam · motion (Dahua native) ────────┐         │
-│             1 person (preprocessor YOLO, 0.87)       │ Tier-1  │
-│  17:10:34   driveway cam · motion (Dahua native) ────┘ events  │
-│             1 person (preprocessor YOLO, 0.84)                 │
-│                                                                │
-│  17:10:36   Triage: no active dismissal policy matched         │
-│  17:10:36   Context: 3 similar past incidents retrieved (RAG)  │
-│                                                                │
-│  17:10:38   VLM (qwen2.5-vl-7b, tier_1, 1.4s)                  │
-│             Findings: "Unknown person walking yard at dusk;     │
-│                       not approaching house; possibly neighbor."│
-│             Confidence: 0.62                                   │
-│             Citations: evt_7f2c, evt_9a1d, cam_pool, area_yard │
-│             Recommendations: ask_user_confirm (medium)         │
-│             Authored policy: none (low-confidence assessment)  │
-│                                                                │
-│  17:11:02   Dispatcher → notify.darins_iphone — sent ✓         │
-│                                                                │
-│  Feedback: [✓ Good catch] [✗ False alarm] [Reassign…]          │
+│ Outcome: ✓ asked you (push, 17:11) — no response yet │
+│ Cameras: pool, driveway │
+│ │
+│ ── Trace ─────────────────────────────────────────────────── │
+│ │
+│ 17:10:04 pool cam · motion (Dahua native) ────────┐ │
+│ 1 person (preprocessor YOLO, 0.87) │ Tier-1 │
+│ 17:10:34 driveway cam · motion (Dahua native) ────┘ events │
+│ 1 person (preprocessor YOLO, 0.84) │
+│ │
+│ 17:10:36 Triage: no active dismissal policy matched │
+│ 17:10:36 Context: 3 similar past incidents retrieved (RAG) │
+│ │
+│ 17:10:38 VLM (qwen2.5-vl-7b, tier_1, 1.4s) │
+│ Findings: "Unknown person walking yard at dusk; │
+│ not approaching house; possibly neighbor."│
+│ Confidence: 0.62 │
+│ Citations: evt_7f2c, evt_9a1d, cam_pool, area_yard │
+│ Recommendations: ask_user_confirm (medium) │
+│ Authored policy: none (low-confidence assessment) │
+│ │
+│ 17:11:02 Dispatcher → notify.darins_iphone — sent ✓ │
+│ │
+│ Feedback: [✓ Good catch] [✗ False alarm] [Reassign…] │
 └────────────────────────────────────────────────────────────────┘
+
 ```
 
 Every line is something the system did and *why*. The trace IS the
@@ -1388,37 +1414,41 @@ filterable two ways.
 **Default cut — by context** (how humans think):
 
 ```
+
 ┌ Memory ─────────────────────────────────────────────────────────┐
-│  ✨ Tell me what to watch for…       [ by context ▾ ] [ by type ] │
-│                                                                  │
-│  About Winston                                          12 items │
-│    ▸ Rule: Winston unsupervised front yard  · critical · 3 hits  │
-│    ▸ DismissalPolicy: dog at front cam      · 7 hits             │
-│    ▸ KnownActor.access_profile: Backyard 4–7pm                   │
-│    ▸ … 9 more                                                    │
-│                                                                  │
-│  About the Pool                                          5 items │
-│    ▸ Area.attention_mode: attention (continuous monitoring)      │
-│    ▸ Rule: Person at pool after dusk        · critical           │
-│    ▸ … 3 more                                                    │
-│                                                                  │
-│  About tonight                                           2 items │
-│    ▸ TransientIntent: Watch for Bob's car   · expires 11pm       │
-│    ▸ SituationalContext: dinner party 6–11pm                     │
-│                                                                  │
-│  About my preferences                                    4 items │
-│    ▸ Preferences.vigilance: normal                               │
-│    ▸ Preferences.what_i_care_about: "Winston is our dog…"        │
-│    ▸ Preferences.quiet_hours: 11pm–6am                           │
-│    ▸ Preferences.relationships: 3 actors labeled                 │
+│ ✨ Tell me what to watch for… [ by context ▾ ] [ by type ] │
+│ │
+│ About Winston 12 items │
+│ ▸ Rule: Winston unsupervised front yard · critical · 3 hits │
+│ ▸ DismissalPolicy: dog at front cam · 7 hits │
+│ ▸ KnownActor.access_profile: Backyard 4–7pm │
+│ ▸ … 9 more │
+│ │
+│ About the Pool 5 items │
+│ ▸ Area.attention_mode: attention (continuous monitoring) │
+│ ▸ Rule: Person at pool after dusk · critical │
+│ ▸ … 3 more │
+│ │
+│ About tonight 2 items │
+│ ▸ TransientIntent: Watch for Bob's car · expires 11pm │
+│ ▸ SituationalContext: dinner party 6–11pm │
+│ │
+│ About my preferences 4 items │
+│ ▸ Preferences.vigilance: normal │
+│ ▸ Preferences.what_i_care_about: "Winston is our dog…" │
+│ ▸ Preferences.quiet_hours: 11pm–6am │
+│ ▸ Preferences.relationships: 3 actors labeled │
 └──────────────────────────────────────────────────────────────────┘
+
 ```
 
 **Toggle cut — by type** (for debugging + power users):
 
 ```
+
 Rules (3) · Preferences (1) · Policies (8) · Transient intents (2)
 · Situational contexts (1) · Access profiles (4) · Area postures (5)
+
 ```
 
 Same underlying list, two facets. Each entry renders the same row
@@ -1446,20 +1476,22 @@ record, one underlying list:
 - **Enrolled** — labeled actors with full lifecycle management
 
 ```
+
 ┌ Identities ─────────────────────────────────────────────────────┐
-│  [ Review (5) ] [ Enrolled (12) ]  filter: all ▾                 │
-│                                                                  │
-│  Enrolled                                                        │
-│    👤 Bob          household        face + body          ▸       │
-│    👤 Alice        guest            face                 ▸       │
-│    🐕 Winston      pet              pet + gait           ▸       │
-│    🚗 Bob's car    vehicle          vehicle + plate      ▸       │
-│    …                                                             │
-│                                                                  │
-│  Review (5 unresolved tracks)                                    │
-│    track 1248  ·  Pool cam  ·  3h ago         [ Label ]          │
-│    …                                                             │
+│ [ Review (5) ] [ Enrolled (12) ] filter: all ▾ │
+│ │
+│ Enrolled │
+│ 👤 Bob household face + body ▸ │
+│ 👤 Alice guest face ▸ │
+│ 🐕 Winston pet pet + gait ▸ │
+│ 🚗 Bob's car vehicle vehicle + plate ▸ │
+│ … │
+│ │
+│ Review (5 unresolved tracks) │
+│ track 1248 · Pool cam · 3h ago [ Label ] │
+│ … │
 └──────────────────────────────────────────────────────────────────┘
+
 ```
 
 **Per-identity detail page** — `/identities/{id}`:
@@ -1488,18 +1520,20 @@ see it."* Three cards, top-to-bottom:
 **Card 1 — Storage usage:**
 
 ```
+
 ┌ Storage usage ──────────────────────────────────────────────────┐
-│  Episodic events       12,483 events   ·  142 MB    [ details ▾ ]│
-│    by camera: Pool 4,201 (47 MB) · Front 3,189 (38 MB) · …       │
-│  Frame snapshots       9,840 frames    ·  3.8 GB    [ details ▾ ]│
-│    by age: <24h 612 (240 MB) · 1-7d 3,201 (1.2 GB) · …           │
-│  Identity embeddings   2,840 templates ·  68 MB                  │
-│    by modality: face 1,201 · body 940 · gait 412 · pet 287       │
-│  Audit logs            48,201 rows     ·  31 MB                  │
-│  Stores combined       7 SQLite DBs    ·  14 MB                  │
-│                                                                  │
-│  Total                                  ~4.1 GB used             │
+│ Episodic events 12,483 events · 142 MB [ details ▾ ]│
+│ by camera: Pool 4,201 (47 MB) · Front 3,189 (38 MB) · … │
+│ Frame snapshots 9,840 frames · 3.8 GB [ details ▾ ]│
+│ by age: <24h 612 (240 MB) · 1-7d 3,201 (1.2 GB) · … │
+│ Identity embeddings 2,840 templates · 68 MB │
+│ by modality: face 1,201 · body 940 · gait 412 · pet 287 │
+│ Audit logs 48,201 rows · 31 MB │
+│ Stores combined 7 SQLite DBs · 14 MB │
+│ │
+│ Total ~4.1 GB used │
 └──────────────────────────────────────────────────────────────────┘
+
 ```
 
 **Card 2 — Retention policy** (per-class editor):
@@ -1532,13 +1566,17 @@ the trust contract: anything destructive is recorded.
 Iteration 2's nav was:
 
 ```
+
 Home · Activity · Areas · Intent · Policies · Cameras · Identities · Diagnostics
+
 ```
 
 After Part IX:
 
 ```
+
 Home · Activity · Memory · Areas · Cameras · Identities · System · Diagnostics
+
 ```
 
 Changes:
@@ -1642,30 +1680,32 @@ separate mobile app or API surface).
   Companion's WebView. Touch-friendly sizing.
 
 ```
+
 ┌── /memory ─────────────────────────┬── ✨ Conversation ──────────┐
-│  Memory                            │  Authoring                  │
-│                                    │                             │
-│  About Winston            12 items │  > I want to know when      │
-│    ▸ Rule: Winston unsupervised…   │    Winston is out front     │
-│    …                               │    without anyone with him  │
-│                                    │                             │
-│  About Pool               5 items  │  ┌─ proposing ─────────────┐│
-│    …                               │  │ Rule · persistent · alert││
-│                                    │  │ Name: Winston            ││
-│                                    │  │   unsupervised front yard││
-│                                    │  │ Scope: front_yard area   ││
-│                                    │  │ Severity: critical       ││
-│                                    │  │                          ││
-│                                    │  │ Because: you said        ││
-│                                    │  │ 'when' + 'always' → Rule.││
-│                                    │  │ Scope inferred from      ││
-│                                    │  │ Winston's home areas.    ││
-│                                    │  │                          ││
-│                                    │  │ [ Confirm ] [ Refine ]   ││
-│                                    │  │ [ Open in editor ]       ││
-│                                    │  └──────────────────────────┘│
+│ Memory │ Authoring │
+│ │ │
+│ About Winston 12 items │ > I want to know when │
+│ ▸ Rule: Winston unsupervised… │ Winston is out front │
+│ … │ without anyone with him │
+│ │ │
+│ About Pool 5 items │ ┌─ proposing ─────────────┐│
+│ … │ │ Rule · persistent · alert││
+│ │ │ Name: Winston ││
+│ │ │ unsupervised front yard││
+│ │ │ Scope: front_yard area ││
+│ │ │ Severity: critical ││
+│ │ │ ││
+│ │ │ Because: you said ││
+│ │ │ 'when' + 'always' → Rule.││
+│ │ │ Scope inferred from ││
+│ │ │ Winston's home areas. ││
+│ │ │ ││
+│ │ │ [ Confirm ] [ Refine ] ││
+│ │ │ [ Open in editor ] ││
+│ │ └──────────────────────────┘│
 └────────────────────────────────────┴─────────────────────────────┘
-```
+
+````
 
 ## 35. The dispatcher — LLM-only, schema-validated
 
@@ -1689,7 +1729,7 @@ PlacementProposal = {
   confidence: number,                 // 0..1
   clarifying_questions: string[],     // empty when confidence high
 }
-```
+````
 
 **Schema-validated.** Malformed responses retry with the schema in the
 retry prompt. Same pattern as the workflow harness's structured-output
@@ -1697,15 +1737,15 @@ agents.
 
 **Two-axis disambiguation** when `confidence < 0.7`: the dispatcher
 returns clarifying questions targeting the two cube axes that matter
-most — **lifecycle** (*"just for tonight, or always?"*) and **fire
-affordance** (*"should it ping you, or just change how I judge things?"*).
+most — **lifecycle** (_"just for tonight, or always?"_) and **fire
+affordance** (_"should it ping you, or just change how I judge things?"_).
 Scope is usually inferred from the utterance + KnownActor data; when
 it's not, scope becomes a third clarifying question.
 
 **The `reasoning` field is the audit primitive.** Not chain-of-thought
-— a one-sentence human-readable justification: *"You said 'always' +
+— a one-sentence human-readable justification: _"You said 'always' +
 'tell me' → Rule. Scope inferred from Winston's home areas + 'out
-front' utterance."* This is what appears under the "How this was
+front' utterance."_ This is what appears under the "How this was
 authored" card on every entry's detail page.
 
 ## 36. The session model
@@ -1783,7 +1823,7 @@ The entry itself is updated, not duplicated.
 
 ## 38. Provenance + audit primitives
 
-On any guidance entry's detail view, a *"How this was authored"* card
+On any guidance entry's detail view, a _"How this was authored"_ card
 shows:
 
 ```
@@ -1811,8 +1851,8 @@ Three trust guarantees this enforces:
 1. **Preview before save.** The dispatcher NEVER silently writes. The
    preview card with the type chip, scope, lifecycle, and reasoning
    appears for confirmation on every commit.
-2. **Storage class is visible.** The user always sees *"this becomes
-   a Rule"* (or whichever class) before confirming. Misclassification
+2. **Storage class is visible.** The user always sees _"this becomes
+   a Rule"_ (or whichever class) before confirming. Misclassification
    gets caught at the preview step.
 3. **Round-trip from every entry.** Click any guidance row in
    `/memory` → see the originating conversation → re-enter that
@@ -1826,24 +1866,24 @@ wrong. Three backstops:
 
 1. **Preview-before-save** (§38) — primary line of defense.
 2. **Reversible by re-typing.** Every entry detail view has a
-   *"Convert to a different type"* action. The dispatcher takes the
+   _"Convert to a different type"_ action. The dispatcher takes the
    existing intent_text + a target class hint, re-runs placement, and
    moves the entry to the new store with a new provenance trail
    linked back.
 3. **Drift detection.** A nightly sweep flags:
-   - Rules with 0 fires in 30 days → suggest *"this rule hasn't
-     fired; maybe a Preference?"*
+   - Rules with 0 fires in 30 days → suggest _"this rule hasn't
+     fired; maybe a Preference?"_
    - TransientIntents that outlived their TTL via manual extension
-     twice → suggest *"convert to a Rule?"*
-   - DismissalPolicies with 0 hits in 30 days → suggest *"revoke?"*
+     twice → suggest _"convert to a Rule?"_
+   - DismissalPolicies with 0 hits in 30 days → suggest _"revoke?"_
 
    Drift suggestions surface in `/memory` as a small banner row at
    the top of the affected entry's context group. Never auto-applied.
 
 ## 40. Push-reply via fragment-load
 
-The highest-leverage authoring moment is *right after an alert
-fires*, when the user is looking at the push notification and
+The highest-leverage authoring moment is _right after an alert
+fires_, when the user is looking at the push notification and
 context is fresh. Kukii-Home reaches this without any special HA
 Companion protocol:
 
@@ -1851,7 +1891,7 @@ Companion protocol:
 2. User taps push → HA Companion opens add-on at `/alert/{event_id}#drawer`
 3. The `#drawer` fragment + `alert={id}` context auto-opens the
    drawer pre-loaded with that alert
-4. User types *"this is fine — Winston was with me"* → standard
+4. User types _"this is fine — Winston was with me"_ → standard
    utterance flow
 5. Dispatcher recognizes the context (alert_id + the rule that fired)
    → proposes a refinement of that rule
@@ -1886,28 +1926,28 @@ the URL fragment and prefills.
 
 Page-level surfaces:
 
-| Surface | State |
-|---|---|
-| `/home` | built (Task 7-era + audit chain) |
-| `/activity` | built |
-| `/intent`, `/policies` | built; collapse into `/memory` per Part IX |
-| `/areas`, `/cameras` | built (Iter 2.B / 2.C) |
-| `/identities` (Review only) | built; expand to Enrolled per Part IX §29 |
-| `/diagnostics` | built (Iter 2.E) |
-| `/memory` | unbuilt (Part IX §28) |
-| `/system` | unbuilt (Part IX §30) |
-| Drawer + dispatcher | unbuilt (Part X) |
-| `/identities/{id}` detail | unbuilt (Part IX §29) |
+| Surface                     | State                                      |
+| --------------------------- | ------------------------------------------ |
+| `/home`                     | built (Task 7-era + audit chain)           |
+| `/activity`                 | built                                      |
+| `/intent`, `/policies`      | built; collapse into `/memory` per Part IX |
+| `/areas`, `/cameras`        | built (Iter 2.B / 2.C)                     |
+| `/identities` (Review only) | built; expand to Enrolled per Part IX §29  |
+| `/diagnostics`              | built (Iter 2.E)                           |
+| `/memory`                   | unbuilt (Part IX §28)                      |
+| `/system`                   | unbuilt (Part IX §30)                      |
+| Drawer + dispatcher         | unbuilt (Part X)                           |
+| `/identities/{id}` detail   | unbuilt (Part IX §29)                      |
 
 Backend stores:
 
-| Store | State |
-|---|---|
-| RulesStore, ActionStore, AreaStore, PreferencesStore, PolicyStore | built |
-| `sessions.db` (transcripts + provenance) | unbuilt (Part X §36) |
-| Storage + retention enforcement | unbuilt (Part IX §30) |
-| Vehicle identity pipeline | unbuilt (Part IX §29 note) |
-| SituationalContexts store + reasoner integration | unbuilt (dispatched as guidance under Part X) |
+| Store                                                             | State                                         |
+| ----------------------------------------------------------------- | --------------------------------------------- |
+| RulesStore, ActionStore, AreaStore, PreferencesStore, PolicyStore | built                                         |
+| `sessions.db` (transcripts + provenance)                          | unbuilt (Part X §36)                          |
+| Storage + retention enforcement                                   | unbuilt (Part IX §30)                         |
+| Vehicle identity pipeline                                         | unbuilt (Part IX §29 note)                    |
+| SituationalContexts store + reasoner integration                  | unbuilt (dispatched as guidance under Part X) |
 
 Cross-cutting:
 
@@ -1917,4 +1957,3 @@ Cross-cutting:
 - Nav reorganization: redirects from old URLs.
 - Audit-chain extension on `/alert/{id}` to surface provenance one-line
   excerpts.
-

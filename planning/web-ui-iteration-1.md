@@ -6,6 +6,7 @@ from a cleared context**. Reference: `planning/web-ui-design.md` for the
 overall IA, principles, and ratified parts.
 
 Each task carries:
+
 - **Intent** — what the user actually wants
 - **Approach** — how to implement
 - **Touches** — concrete files/functions
@@ -23,7 +24,7 @@ task 5 is a diagnosis task that may surface its own follow-ups.
 
 **Intent.** Every event thumbnail in the UI should be **playable** —
 clicking opens the actual archived video clip of the event, not a GIF
-assembled from sparse keyframes. This is a *quality* issue, not a feature
+assembled from sparse keyframes. This is a _quality_ issue, not a feature
 issue: assembled-frame playback feels cheap and doesn't carry the natural
 motion / sound that makes an event recognizable.
 
@@ -33,15 +34,16 @@ refinements on top of what exists.
 ### Design (preprocessor-native path)
 
 Today the event recorder persists `frame_NNNNN.jpg` files + `event.json` per
-event. We need a *clip* artifact alongside.
+event. We need a _clip_ artifact alongside.
 
 Two viable production designs:
 
-**Design A — *recorder-mux* (re-encode at event close).** When the event
+**Design A — _recorder-mux_ (re-encode at event close).** When the event
 recorder closes an event, alongside writing JPEG frames + manifest, it muxes
 the buffered JPEGs into a `clip.mp4` (H.264, browser-playable). The frames
 remain on disk for the identity pipeline; the MP4 is the user-facing
 artifact.
+
 - Pros: single source of truth, deterministic, no second capture path.
 - Cons: re-encoding 60-180 s of JPEG frames is non-trivial CPU; the result
   isn't as good as a native H.264 stream because we lost B-frames at
@@ -49,18 +51,19 @@ artifact.
   ~1 fps after the §7.6 capture-fps decoupling — so the clip would be
   jumpy unless capture is raised).
 
-**Design B — *stream-tap* (parallel encode while live).** A separate capture
+**Design B — _stream-tap_ (parallel encode while live).** A separate capture
 sink consumes the H.264 sub-stream directly (PyAV passthrough, no decode)
 and writes a rolling MP4 segment per camera. On event close, the recorder
 locates the segment(s) overlapping the event window and saves them as
 `clip.mp4` alongside the JPEGs.
+
 - Pros: native H.264 quality, no re-encode CPU, full-rate motion.
 - Cons: doubles per-camera capture cost (one PyAV session for keyframes
   to the rolling buffer + one for continuous MP4 segments); more state to
   manage (segment rotation, alignment to event windows).
 
 **Recommendation:** start with **Design A** for the offline-enrich worker
-*and* the event recorder, raising the capture fps for the live path
+_and_ the event recorder, raising the capture fps for the live path
 (already wired via `KUKIIHOME_PREPROCESSOR_CAPTURE_INTERVAL_S`). Defer
 Design B to a later phase if quality is insufficient. The Design A clip
 at 4 fps capture is usually adequate for "what happened" review.
@@ -79,19 +82,20 @@ duplicate — instead:
   ha-agent to honor ingress auth — same pattern as `/alert/<id>/frame.jpg`).
 - The preprocessor never writes its own clip.
 
-This becomes the *delegated* state of the capability matrix (Part II §12):
+This becomes the _delegated_ state of the capability matrix (Part II §12):
 clip recording is DELEGATED to AD.
 
 ### Stop-gap (what to ship in the meantime)
 
 The assembled GIF I built for track-detail (Part I) is still useful — for a
-*single track* (one person, padded crop, ~28 frames) it's faster + smaller
+_single track_ (one person, padded crop, ~28 frames) it's faster + smaller
 than a real clip and answers a different question. **Keep the GIF for track
 detail; build real clips for event detail.**
 
 For the activity-row / trace page thumbnails, **stop-gap = the existing
 single representative frame**, with a small ▶ play indicator that, when
 clicked, falls back to:
+
 1. If `external_clip` is set → fetch from AD via proxy
 2. Else if `clip.mp4` exists in the event dir → serve it
 3. Else (legacy events) → assemble JPEG frames into MP4 on demand and cache
@@ -141,9 +145,9 @@ without rebuilding the recorder.
 
 ## Task 2 — Trace page timestamp ambiguity
 
-**Intent.** On the activity *detail* (trace) page, the listed time is
+**Intent.** On the activity _detail_ (trace) page, the listed time is
 ambiguous — e.g. `17:10:38` without context, or no date. Want a friendlier,
-graduated format consistent with the activity *list*:
+graduated format consistent with the activity _list_:
 
 ```
 20 minutes ago
@@ -163,15 +167,15 @@ Extend `relative_time()` in
 **relative bucket** + **clock time** when the bucket is "Yesterday" or
 older. The existing graduation stays:
 
-| Bucket | Output |
-|---|---|
-| < 60 s | `Just now` |
-| < 1 h | `12 minutes ago` (singular `1 minute ago`) |
-| < 2 h | `An hour ago` |
-| < 24 h | `3h ago` |
-| < 48 h | `Yesterday at 4:51 PM` |
-| < 7 d | `Last Saturday at 12:05 PM` |
-| else | `March 12 at 8:14 AM` |
+| Bucket | Output                                     |
+| ------ | ------------------------------------------ |
+| < 60 s | `Just now`                                 |
+| < 1 h  | `12 minutes ago` (singular `1 minute ago`) |
+| < 2 h  | `An hour ago`                              |
+| < 24 h | `3h ago`                                   |
+| < 48 h | `Yesterday at 4:51 PM`                     |
+| < 7 d  | `Last Saturday at 12:05 PM`                |
+| else   | `March 12 at 8:14 AM`                      |
 
 Use the user's local timezone (via `astimezone()`) for clock time. 12-hour
 format with AM/PM. Add an HTML `title` attribute with the absolute ISO
@@ -214,9 +218,9 @@ Also: rename the function to `friendly_time()` so it covers both the
 **Intent.** Current: `Person at Front South Camera Fluent · front_south`.
 Issues:
 
-- *"Fluent"* is the Reolink stream-quality name (the lower-resolution
+- _"Fluent"_ is the Reolink stream-quality name (the lower-resolution
   sub-stream). Not user-meaningful; should be stripped.
-- *"front_south"* is the entity-slug rendered alongside a friendly name
+- _"front_south"_ is the entity-slug rendered alongside a friendly name
   that already says "Front South Camera." Redundant.
 - The phrasing is robotic. Should read like a sentence.
 
@@ -248,7 +252,7 @@ Two pieces:
   - `Motion at Front South Camera` (when no kind classification)
 - Drop the camera slug from the where-line in `_render_activity_row()` once
   the headline already contains the camera name. (Only render `· <slug>` if
-  the headline *doesn't* contain it.)
+  the headline _doesn't_ contain it.)
 
 ### Touches
 
@@ -294,13 +298,13 @@ never has to use the browser back button.
 ### Diagnosis
 
 The shell CSS already declares `position: sticky; top: 0; z-index: 10` on
-the `<header>`. So the new pages built under the shell *should* be sticky
+the `<header>`. So the new pages built under the shell _should_ be sticky
 already. The issue is one of two things:
 
 1. **Some pages don't use the shell at all.** The legacy `/` status page,
    the per-alert page (`alert/<event_id>`), the Review page (`/review`),
    and the track-detail page (`/review-track`) have their own templates
-   and *don't* go through `render_shell()`. Those pages have their own
+   and _don't_ go through `render_shell()`. Those pages have their own
    non-sticky headers.
 2. **Layout interferes with sticky.** Some ancestor element may have
    `overflow: auto` or a height constraint that breaks sticky positioning.
@@ -325,7 +329,7 @@ Two-part:
 - Add an explicit `body { margin: 0 }` reset (already done in shell.py).
 - Confirm `main` doesn't constrain height; if it does, the sticky context
   is `main`, not the viewport. Should be `min-height: calc(100vh -
-  <header-height>)` or just left alone.
+<header-height>)` or just left alone.
 - Add a CI/test step that renders each page and asserts `position:sticky`
   is in the head (cheap regression).
 
@@ -365,18 +369,18 @@ under the shell) — they're the same refactor.
 
 **Intent.** Two related items in one user observation:
 
-- *"Why am I only seeing events from front_south and not pool cam?"* — pool
+- _"Why am I only seeing events from front_south and not pool cam?"_ — pool
   cam events should be in the activity stream if pool cam is generating
   events at all.
-- *"How does the UI handle different aspect ratios from these two
-  cameras?"* — 4K top-down pool vs side-view 1080p front-south. Thumbnails
+- _"How does the UI handle different aspect ratios from these two
+  cameras?"_ — 4K top-down pool vs side-view 1080p front-south. Thumbnails
   and clip players need to render both gracefully.
 
 ### Diagnosis (5a — pool cam missing)
 
 Likely causes, in decreasing probability:
 
-1. **Pool cam events are being *auto-dismissed* and the activity row code
+1. **Pool cam events are being _auto-dismissed_ and the activity row code
    isn't surfacing passive events**. Check `_alert_is_action()` in
    `web_ui/home.py` — passives should show but muted.
 2. **Pool cam motion isn't reaching the alert log.** The alert log is
@@ -388,10 +392,11 @@ Likely causes, in decreasing probability:
    feed (e.g. `pool` vs `pool_cam`).
 
 Investigation steps (do in order):
+
 1. `gh ssh <add-on host>` (or open the add-on logs) and confirm pool cam
    events are firing — look for `event_recorder.persisted cam=pool`.
 2. Query the alert log JSON file directly: `cat
-   /data/kukiihome/alerts.json | jq '.[].camera_id' | sort -u`.
+/data/kukiihome/alerts.json | jq '.[].camera_id' | sort -u`.
 3. Confirm filter on home page: passive ✓ is the default; pool cam
    passive should render.
 4. If passives are firing but not surfacing: trace whether they reach
@@ -402,10 +407,11 @@ Investigation steps (do in order):
 Today (in the v2 UI skeleton):
 
 - Activity rows: no thumbnails yet (just a verbal headline). When thumbnails
-  are added — *and they will be once Task 1's clip-player work lands* —
+  are added — _and they will be once Task 1's clip-player work lands_ —
   they need to handle varying source aspect ratios.
 
 Two cameras' likely native sizes:
+
 - Pool cam (top-down 4K Reolink): 3840×2160 = 16:9, but visually portrait
   due to top-down framing (a person looks tall + narrow within the frame).
 - Front-south (side-view 1080p): 1920×1080 = 16:9, with subjects roughly
@@ -437,15 +443,15 @@ in its native aspect.
 For trace-page snapshots and detail views: respect the source aspect ratio,
 constrain by `max-width: 480px` (or similar), let height adapt.
 
-For *track* crops (the existing GIF builder), keep the existing 240×320
+For _track_ crops (the existing GIF builder), keep the existing 240×320
 letterbox — it's per-track, not per-camera.
 
 ### Touches
 
 - Investigate alert_log feed scope (5a): `services/ha-agent/.../triage.py`,
   `event_recorder` → `alert_log.record()` plumbing.
-- New principle in `web-ui-design.md` §17: *"all reasoned events surface in
-  the activity stream, at minimum as passive."*
+- New principle in `web-ui-design.md` §17: _"all reasoned events surface in
+  the activity stream, at minimum as passive."_
 - CSS rules in `web_ui/shell.py::_STYLE` for thumbnail aspect-ratio
   containers — TBD with Task 1.
 
@@ -483,8 +489,8 @@ separately because it's the most visible inconsistency.
 
 Wrap `/review` and `/review-track` in the unified shell — same refactor
 described in Task 4. The Review page's existing styles (review-specific
-chrome like the merge form, label form, card grid) stay; only the *outer
-chrome* (header, nav, page background) gets replaced with the shell.
+chrome like the merge form, label form, card grid) stay; only the _outer
+chrome_ (header, nav, page background) gets replaced with the shell.
 
 The track-detail page becomes "Identities → Track (detail)" — the nav
 shows Identities highlighted; the page body shows the track-specific UI.
@@ -600,8 +606,8 @@ tasks land.
 
 ## Task 9 — Rules editor (Part VI: Intent · Rules)
 
-**Intent.** Build the Rules half of Part VI — *named, scoped,
-natural-language intents the VLM evaluates per-event.* The user writes
+**Intent.** Build the Rules half of Part VI — _named, scoped,
+natural-language intents the VLM evaluates per-event._ The user writes
 prose ("Alert me if Winston seems to have gotten outside without someone
 watching him"); the system gates the evaluation by scope (camera / area /
 time); the VLM judges whether the situation matches AND at what severity;
@@ -614,7 +620,7 @@ sirens, etc.).
 
 This is the single most novel surface in the product — the place where the
 agent stops feeling like a security alarm and starts feeling like an
-*agent you can talk to.* It's also the page that turns the "no manual
+_agent you can talk to._ It's also the page that turns the "no manual
 alert rules" architectural commitment from §1.5 of web-ui-design.md into a
 concrete user experience.
 
@@ -623,14 +629,14 @@ concrete user experience.
 A **rule** has three parts. **Severity is reasoned by the VLM** for natural-
 language rules (so a same-rule match can fire `critical` at midnight and
 `normal` at noon), and **statically set** for structured-shortcut rules
-(simple identity match — *"Bob seen → critical"* — no VLM call needed).
+(simple identity match — _"Bob seen → critical"_ — no VLM call needed).
 
-| Layer | Form | Deterministic? |
-|---|---|---|
-| **Scope** | camera / area / time-window picker | Yes — gates *when* the VLM evaluates this rule |
-| **Intent** | free-text user prose | No — the VLM reads it as guidance, decides match + severity per-incident |
-| **Severity mode** | "let the VLM decide" (NL rules) or static picker (shortcut rules) | Yes (in shortcut mode) / No (in NL mode) |
-| **Action** | none — outcome alert always fires via class-4 event | The agent owns alert emission; HA owns delivery; class-3 protective actions are configured per-camera, not per-rule (§7.7) |
+| Layer             | Form                                                              | Deterministic?                                                                                                             |
+| ----------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Scope**         | camera / area / time-window picker                                | Yes — gates _when_ the VLM evaluates this rule                                                                             |
+| **Intent**        | free-text user prose                                              | No — the VLM reads it as guidance, decides match + severity per-incident                                                   |
+| **Severity mode** | "let the VLM decide" (NL rules) or static picker (shortcut rules) | Yes (in shortcut mode) / No (in NL mode)                                                                                   |
+| **Action**        | none — outcome alert always fires via class-4 event               | The agent owns alert emission; HA owns delivery; class-3 protective actions are configured per-camera, not per-rule (§7.7) |
 
 Rules are evaluated as part of the existing VLM call on each incident.
 **No per-rule VLM calls** — the active rules in scope are folded into the
@@ -641,9 +647,10 @@ per the per-camera whitelist). One VLM call, many rules.
 
 ### Why rules don't carry their own action list anymore
 
-**Earlier draft of this task had each rule carry an `alert_enabled` flag
-+ a custom HA event name + a severity field.** That was wrong on three
-counts:
+\*\*Earlier draft of this task had each rule carry an `alert_enabled` flag
+
+- a custom HA event name + a severity field.\*\* That was wrong on three
+  counts:
 
 1. **The built-in alert path duplicated HA's notify ecosystem** — and HA's
    is unambiguously better (Companion, Sonos, Telegram, etc.).
@@ -651,7 +658,7 @@ counts:
    forces HA automations to fan out across many event types instead of
    routing one event by severity.
 3. **Severity-as-rule-property** was deterministic — but severity is
-   genuinely *reasoned* for natural-language rules. The same intent can
+   genuinely _reasoned_ for natural-language rules. The same intent can
    match at different severities depending on the situation.
 
 Corrected: one `kukiihome_alert` event per match, severity in the payload,
@@ -716,23 +723,23 @@ Notes on the field changes from the earlier draft:
 - **Added `protective_actions_taken`** to the match record — when a rule
   match triggers class-3 actions (dispatcher policy passes), we record
   exactly what fired so the trace shows the full chain and so audits can
-  answer *"did the door actually lock?"*
+  answer _"did the door actually lock?"_
 
 **`scope_json` shape:**
 
 ```json
 {
-  "cameras": ["front_south", "pool"],         // empty list = any camera
-  "areas":   ["front_yard"],                  // empty list = any area
+  "cameras": ["front_south", "pool"], // empty list = any camera
+  "areas": ["front_yard"], // empty list = any area
   "time_windows": [
-    {"days": ["mon","tue","wed","thu","fri"], "start": "09:00", "end": "17:00"},
-    {"days": ["sat","sun"], "start": "00:00", "end": "23:59"}
-  ]                                           // empty list = any time
+    { "days": ["mon", "tue", "wed", "thu", "fri"], "start": "09:00", "end": "17:00" },
+    { "days": ["sat", "sun"], "start": "00:00", "end": "23:59" }
+  ] // empty list = any time
 }
 ```
 
 All three scope fields are **AND-combined**; within each field the values
-are **OR-combined**. *"Any time"* / *"any camera"* / *"any area"* are
+are **OR-combined**. _"Any time"_ / _"any camera"_ / _"any area"_ are
 represented by an empty list. Time windows are in the user's local
 timezone (read from add-on options).
 
@@ -743,14 +750,15 @@ This is the load-bearing backend change. The triage layer
 
 **1. Rule activation per event.** When an event arrives, before calling the
 VLM, triage:
+
 - Loads enabled, non-retired rules from the rules table (cached, refreshed
   on rule create/update/delete via an in-memory copy + change pubsub).
 - Filters by scope: keeps rules whose camera/area/time-window matches the
   event's `(camera_id, area_id, ts)`.
 - The resulting active rule set is passed into VLM prompt assembly.
 
-**2. Prompt assembly.** A new section in the VLM prompt — *Named user
-intents* — lists each active NL rule, and the schema asks for both a
+**2. Prompt assembly.** A new section in the VLM prompt — _Named user
+intents_ — lists each active NL rule, and the schema asks for both a
 **match decision** and a **reasoned severity**:
 
 ```
@@ -808,9 +816,9 @@ A single VLM call can produce both. The dispatcher:
   comes from each rule's `matched_rules` entry).
 - Authorizes class-3 protective actions from `recommendations` against
   the per-camera whitelist + policy, **independent** of which (if any)
-  rule matched. So an unscoped *"this looks like an intrusion"* VLM
+  rule matched. So an unscoped _"this looks like an intrusion"_ VLM
   judgment can still result in `lock.back_door` firing even without an
-  explicit *"intruder rule"* on the user's part.
+  explicit _"intruder rule"_ on the user's part.
 
 The trace surfaces all of this side-by-side: matched rules (with
 severities), VLM recommendations, dispatcher policy gates, actions
@@ -825,41 +833,41 @@ and branch on `data.severity`:
 event_type: kukiihome_alert
 data:
   # === identity of the alert ===
-  alert_id: "alert_abc123"            # unique per emission; for de-dupe
-  incident_id: "inc_abc123"           # the incident, may produce N alerts
-  rule_id: "winston_unsupervised"     # which rule matched (NULL if VLM emergent)
-  rule_name: "Winston unsupervised in front"
+  alert_id: 'alert_abc123' # unique per emission; for de-dupe
+  incident_id: 'inc_abc123' # the incident, may produce N alerts
+  rule_id: 'winston_unsupervised' # which rule matched (NULL if VLM emergent)
+  rule_name: 'Winston unsupervised in front'
   ts: 1717512637.4
 
   # === reasoning summary (for the notification body) ===
-  scene_description: "Winston is in the front yard with no adult visible..."
-  severity: "critical"                # critical | normal | low
+  scene_description: 'Winston is in the front yard with no adult visible...'
+  severity: 'critical' # critical | normal | low
   confidence: 0.87
-  reasoning: "no adult human visible in scene; pet exited unattended."
+  reasoning: 'no adult human visible in scene; pet exited unattended.'
 
   # === context ===
-  camera_id: "front_south"
-  camera_name: "Front South Camera"   # friendly name, suffix-stripped (Task 3)
-  area_id: "front_yard"
-  area_name: "Front Yard"
-  kind: "person"                      # primary detection
-  actors: ["winston"]                 # resolved KnownActor/KnownPet ids
-  actor_names: ["Winston"]            # friendly names for the message body
+  camera_id: 'front_south'
+  camera_name: 'Front South Camera' # friendly name, suffix-stripped (Task 3)
+  area_id: 'front_yard'
+  area_name: 'Front Yard'
+  kind: 'person' # primary detection
+  actors: ['winston'] # resolved KnownActor/KnownPet ids
+  actor_names: ['Winston'] # friendly names for the message body
 
   # === what the agent already did (class 3) ===
   actions_taken:
-    - service: "lock.lock"
-      target: "lock.back_door"
-      result: "ok"
-    - service: "light.turn_on"
-      target: "light.backyard_floods"
-      result: "ok"
-      data: { color_name: "red" }
+    - service: 'lock.lock'
+      target: 'lock.back_door'
+      result: 'ok'
+    - service: 'light.turn_on'
+      target: 'light.backyard_floods'
+      result: 'ok'
+      data: { color_name: 'red' }
 
   # === references for the UI / Companion push ===
-  trace_url: "/api/kukiihome/alert/inc_abc123"     # HA-Core proxy, signed
-  thumbnail_url: "/api/kukiihome/alert/inc_abc123/frame.jpg"
-  clip_url: "/api/kukiihome/alert/inc_abc123/clip.mp4"   # when Task 1 lands
+  trace_url: '/api/kukiihome/alert/inc_abc123' # HA-Core proxy, signed
+  thumbnail_url: '/api/kukiihome/alert/inc_abc123/frame.jpg'
+  clip_url: '/api/kukiihome/alert/inc_abc123/clip.mp4' # when Task 1 lands
 ```
 
 HA automation pattern (severity-routed):
@@ -883,35 +891,35 @@ action:
                 {% endif %}
               data:
                 push: { interruption-level: critical }
-                url: "{{ trigger.event.data.trace_url }}"
-                image: "{{ trigger.event.data.thumbnail_url }}"
+                url: '{{ trigger.event.data.trace_url }}'
+                image: '{{ trigger.event.data.thumbnail_url }}'
           - service: media_player.play_media
             target: { entity_id: media_player.living_room_sonos }
-            data: { media_content_id: "/media/sounds/critical-alert.mp3" }
+            data: { media_content_id: '/media/sounds/critical-alert.mp3' }
       - conditions: "{{ trigger.event.data.severity == 'normal' }}"
         sequence:
           - service: notify.mobile_app_darins_iphone
             data:
               title: "{{ trigger.event.data.rule_name or 'Kukii-Home alert' }}"
-              message: "{{ trigger.event.data.scene_description }}"
+              message: '{{ trigger.event.data.scene_description }}'
               data:
-                url: "{{ trigger.event.data.trace_url }}"
+                url: '{{ trigger.event.data.trace_url }}'
       - conditions: "{{ trigger.event.data.severity == 'low' }}"
         sequence:
           - service: logbook.log
             data:
-              name: "Kukii-Home"
-              message: "{{ trigger.event.data.scene_description }}"
+              name: 'Kukii-Home'
+              message: '{{ trigger.event.data.scene_description }}'
 ```
 
 ### Status entities (small, for Lovelace; not the dispatch path)
 
-In addition to the event, the integration exposes a small set of *status*
+In addition to the event, the integration exposes a small set of _status_
 entities for dashboards. **These are NOT the primary alert dispatch
 surface** — they're for at-a-glance visibility:
 
 - `binary_sensor.kukiihome_alert_active` — `on` if any unacknowledged alert
-  in the last 5 minutes. Useful for a *"is anything happening?"* Lovelace
+  in the last 5 minutes. Useful for a _"is anything happening?"_ Lovelace
   tile.
 - `sensor.kukiihome_last_alert_severity` — value is `critical` / `normal`
   / `low` / `none`. For badge coloring.
@@ -945,9 +953,9 @@ blueprint:
     # severity-branched delivery as above
 ```
 
-The first-run wizard in the integration prompts: *"Pick a mobile notify
+The first-run wizard in the integration prompts: _"Pick a mobile notify
 service to receive Kukii-Home alerts on, and optionally a Sonos / lights
-for critical-severity alerts."* That installs the blueprint pointed at
+for critical-severity alerts."_ That installs the blueprint pointed at
 their picks. They can edit / extend it from there — wire a siren for
 critical, color the lights based on severity, add custom announcements,
 whatever.
@@ -956,16 +964,16 @@ whatever.
 
 New endpoints on the existing ha-agent HTTP API:
 
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/intent/rules` | List all rules (filter `?enabled=true/false&retired=true/false`) |
-| `POST` | `/api/intent/rules` | Create rule; body = full rule object minus id/timestamps; id derived from name |
-| `GET` | `/api/intent/rules/{id}` | Read rule (including recent matches summary) |
-| `PUT` | `/api/intent/rules/{id}` | Update rule (any field except id; updates `updated_at`) |
-| `DELETE` | `/api/intent/rules/{id}` | Soft-delete: sets `retired_at`; preserves audit history |
-| `POST` | `/api/intent/rules/{id}/enable` | Toggle `enabled` field |
-| `GET` | `/api/intent/rules/{id}/matches` | Paginated audit log of matches (newest first) |
-| `POST` | `/api/intent/rules/{id}/test` | Dry-run: replay the most recent eligible incident through the VLM with this rule's intent, return matched/confidence/reasoning *without* writing to the matches table or firing actions |
+| Method   | Path                             | Purpose                                                                                                                                                                                 |
+| -------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/intent/rules`              | List all rules (filter `?enabled=true/false&retired=true/false`)                                                                                                                        |
+| `POST`   | `/api/intent/rules`              | Create rule; body = full rule object minus id/timestamps; id derived from name                                                                                                          |
+| `GET`    | `/api/intent/rules/{id}`         | Read rule (including recent matches summary)                                                                                                                                            |
+| `PUT`    | `/api/intent/rules/{id}`         | Update rule (any field except id; updates `updated_at`)                                                                                                                                 |
+| `DELETE` | `/api/intent/rules/{id}`         | Soft-delete: sets `retired_at`; preserves audit history                                                                                                                                 |
+| `POST`   | `/api/intent/rules/{id}/enable`  | Toggle `enabled` field                                                                                                                                                                  |
+| `GET`    | `/api/intent/rules/{id}/matches` | Paginated audit log of matches (newest first)                                                                                                                                           |
+| `POST`   | `/api/intent/rules/{id}/test`    | Dry-run: replay the most recent eligible incident through the VLM with this rule's intent, return matched/confidence/reasoning _without_ writing to the matches table or firing actions |
 
 The `test` endpoint is the "preview before save" UX — lets the user paste
 intent text, see how the VLM evaluates it against a real recent incident,
@@ -1092,7 +1100,7 @@ the contract with HA is cleaner.
 
 Protective actions (class 3 — locks, sirens, floods on critical) are
 **not configured per-rule** either. They're configured per-camera in the
-camera detail page's *Authorized actions* block (web-ui-design.md §7.7)
+camera detail page's _Authorized actions_ block (web-ui-design.md §7.7)
 and triggered by the VLM's `recommendations` independent of which rule
 matched. A user who wants per-rule protective actions writes an HA
 automation keying on `data.rule_id` — that's HA's job.
@@ -1119,42 +1127,42 @@ automation keying on `data.rule_id` — that's HA's job.
 ```
 
 Both matches and a sample of non-matches surface — the non-matches are
-where the trust contract lives: *"the rule was evaluated, the VLM said
-no, here's why."*
+where the trust contract lives: _"the rule was evaluated, the VLM said
+no, here's why."_
 
 ### Loop 1 feedback on rules
 
-A ✗ on a rule-matched alert *also* surfaces a *"this rule matched but you
-said no. Want to refine the intent?"* prompt with an inline editor showing
-the current intent text and a one-tap *Refine* that opens the rule's edit
+A ✗ on a rule-matched alert _also_ surfaces a _"this rule matched but you
+said no. Want to refine the intent?"_ prompt with an inline editor showing
+the current intent text and a one-tap _Refine_ that opens the rule's edit
 form pre-focused on the intent textarea. The rule literally **learns its
 own wording** through user corrections — exactly the Loop 1 closure that
 makes Preferences and Rules architecturally distinct from policies.
 
 ### Touches
 
-| File | Change |
-|---|---|
-| `services/ha-agent/src/.../rules_store.py` | **NEW** — SQLite-backed rule + match storage; mirrors `alert_log` shape |
-| `services/ha-agent/src/.../rules_runtime.py` | **NEW** — in-memory rule cache, scope-filter helper, prompt-section builder, shortcut-rule deterministic matcher |
-| `services/ha-agent/src/.../triage.py` | extend: filter rules by scope; pass NL rules into VLM call; match shortcut rules deterministically; read `matched_rules` from response (with severity); record matches; **emit `kukiihome_alert` event** per match |
-| `services/ha-agent/src/.../reasoning.py` (or the VLM prompt builder) | add the *Named user intents* section + the per-rule severity-reasoning instruction to the prompt; update output schema for `matched_rules[*].severity` |
-| `services/ha-agent/src/.../http_api.py` | add the `/api/intent/rules/*` endpoints (CRUD + test + matches) |
-| `services/ha-agent/src/.../client.py` (HA client) | new `fire_event(name, data)` method calling HA's `/api/events/{name}`; new `call_service(domain, service, target, data)` if not present |
-| `ha-integration/custom_components/kukiihome/binary_sensor.py` | extend: add `kukiihome_alert_active` (5-min sliding window) |
-| `ha-integration/custom_components/kukiihome/sensor.py` | extend: add `kukiihome_last_alert_severity`, `kukiihome_alerts_today` |
-| `ha-integration/addon/kukiihome/blueprints/severity-routed-alert.yaml` | **NEW** — the default severity-routed blueprint shipped with the integration |
-| `ha-integration/custom_components/kukiihome/__init__.py` | extend: on first-run, install the default blueprint pointed at the user-picked notify target |
-| `services/ha-agent/src/.../web_ui/intent.py` | **NEW** — `/intent` page renderer (Rules section live, Preferences placeholder) |
-| `services/ha-agent/src/.../web_ui/intent_rule_form.py` | **NEW** — new + edit form rendering + parsing, with the NL/shortcut mode selector |
-| `services/ha-agent/src/.../web_ui/mocks.py` | remove the Intent mock |
-| `services/ha-agent/src/.../__main__.py` | wire routes for `/intent`, `/intent/rules/new`, `/intent/rules/{id}`, `/intent/rules/{id}/matches`, and the POST handlers |
-| `services/ha-agent/src/.../web_ui/shell.py` | add form CSS (textarea, multi-select chips, severity radio, mode selector) |
-| `planning/web-ui-design.md` | ratify Part VI Rules section based on the design decisions in this task |
-| `tests/test_rules_store.py` | **NEW** — store CRUD + scope-filter + audit log |
-| `tests/test_rules_runtime.py` | **NEW** — prompt-section building, response parsing (incl. reasoned severity), shortcut-rule matching |
-| `tests/test_intent_page.py` | **NEW** — page renderers + form parsing (both modes) |
-| `tests/test_triage_rules.py` | **NEW** — integration test: triage → rules → `kukiihome_alert` event emission with correct severity |
+| File                                                                   | Change                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `services/ha-agent/src/.../rules_store.py`                             | **NEW** — SQLite-backed rule + match storage; mirrors `alert_log` shape                                                                                                                                            |
+| `services/ha-agent/src/.../rules_runtime.py`                           | **NEW** — in-memory rule cache, scope-filter helper, prompt-section builder, shortcut-rule deterministic matcher                                                                                                   |
+| `services/ha-agent/src/.../triage.py`                                  | extend: filter rules by scope; pass NL rules into VLM call; match shortcut rules deterministically; read `matched_rules` from response (with severity); record matches; **emit `kukiihome_alert` event** per match |
+| `services/ha-agent/src/.../reasoning.py` (or the VLM prompt builder)   | add the _Named user intents_ section + the per-rule severity-reasoning instruction to the prompt; update output schema for `matched_rules[*].severity`                                                             |
+| `services/ha-agent/src/.../http_api.py`                                | add the `/api/intent/rules/*` endpoints (CRUD + test + matches)                                                                                                                                                    |
+| `services/ha-agent/src/.../client.py` (HA client)                      | new `fire_event(name, data)` method calling HA's `/api/events/{name}`; new `call_service(domain, service, target, data)` if not present                                                                            |
+| `ha-integration/custom_components/kukiihome/binary_sensor.py`          | extend: add `kukiihome_alert_active` (5-min sliding window)                                                                                                                                                        |
+| `ha-integration/custom_components/kukiihome/sensor.py`                 | extend: add `kukiihome_last_alert_severity`, `kukiihome_alerts_today`                                                                                                                                              |
+| `ha-integration/addon/kukiihome/blueprints/severity-routed-alert.yaml` | **NEW** — the default severity-routed blueprint shipped with the integration                                                                                                                                       |
+| `ha-integration/custom_components/kukiihome/__init__.py`               | extend: on first-run, install the default blueprint pointed at the user-picked notify target                                                                                                                       |
+| `services/ha-agent/src/.../web_ui/intent.py`                           | **NEW** — `/intent` page renderer (Rules section live, Preferences placeholder)                                                                                                                                    |
+| `services/ha-agent/src/.../web_ui/intent_rule_form.py`                 | **NEW** — new + edit form rendering + parsing, with the NL/shortcut mode selector                                                                                                                                  |
+| `services/ha-agent/src/.../web_ui/mocks.py`                            | remove the Intent mock                                                                                                                                                                                             |
+| `services/ha-agent/src/.../__main__.py`                                | wire routes for `/intent`, `/intent/rules/new`, `/intent/rules/{id}`, `/intent/rules/{id}/matches`, and the POST handlers                                                                                          |
+| `services/ha-agent/src/.../web_ui/shell.py`                            | add form CSS (textarea, multi-select chips, severity radio, mode selector)                                                                                                                                         |
+| `planning/web-ui-design.md`                                            | ratify Part VI Rules section based on the design decisions in this task                                                                                                                                            |
+| `tests/test_rules_store.py`                                            | **NEW** — store CRUD + scope-filter + audit log                                                                                                                                                                    |
+| `tests/test_rules_runtime.py`                                          | **NEW** — prompt-section building, response parsing (incl. reasoned severity), shortcut-rule matching                                                                                                              |
+| `tests/test_intent_page.py`                                            | **NEW** — page renderers + form parsing (both modes)                                                                                                                                                               |
+| `tests/test_triage_rules.py`                                           | **NEW** — integration test: triage → rules → `kukiihome_alert` event emission with correct severity                                                                                                                |
 
 Notably **NOT** in the touches list anymore:
 
@@ -1184,7 +1192,7 @@ fresh context knows what to ask.
   [Recommend: global default in config; per-rule override only when a
   rule consistently misfires — pair with Loop 1 feedback.]
 - **Structured shortcut for identity rules.** Stay within the same form
-  (radio at top: *"natural-language intent"* vs *"subject seen → alert"*)
+  (radio at top: _"natural-language intent"_ vs _"subject seen → alert"_)
   or a separate "Quick add" flow. [Recommend: same form with a top-of-
   form mode selector — fewer routes, less code, the simple case stays
   one-click.]
@@ -1192,7 +1200,7 @@ fresh context knows what to ask.
   automations subscribe to its fired event? [Recommend: nice-to-have, not
   required for v1. The "Open in HA" link is enough.]
 - **Rule retirement / soft-delete.** Deleted rules go to `retired_at` but
-  stay queryable for audit. UI shows them on a *Retired* tab. [Recommend:
+  stay queryable for audit. UI shows them on a _Retired_ tab. [Recommend:
   yes — audit-friendly, undoable.]
 - **Suggested rules from observed patterns.** "We notice you keep
   dismissing delivery events — want a rule for that?" [Defer to a later
@@ -1221,10 +1229,10 @@ fresh context knows what to ask.
 - Every rule evaluation (match or non-match) is recorded in `rule_matches`
   with reasoned severity; the per-rule matches page shows recent matches +
   the severity distribution.
-- The activity trace page (Part III §22) renders *"matched rule X
-  (severity: critical, conf 0.87): …"* lines in the audit chain alongside
+- The activity trace page (Part III §22) renders _"matched rule X
+  (severity: critical, conf 0.87): …"_ lines in the audit chain alongside
   the VLM call.
-- Loop 1: a ✗ on a rule-matched alert surfaces the *"refine intent"*
+- Loop 1: a ✗ on a rule-matched alert surfaces the _"refine intent"_
   prompt and lets the user edit the rule's text inline.
 - `planning/web-ui-design.md` §VI Rules section is updated to reflect the
   final design (especially: severity-as-VLM-output for NL rules, no
@@ -1234,7 +1242,7 @@ fresh context knows what to ask.
 
 ## Task 10 — Perception + protective action plumbing (action classes 2 & 3)
 
-**Intent.** Build the *dispatcher-side* mechanism for the agent's two
+**Intent.** Build the _dispatcher-side_ mechanism for the agent's two
 direct-action classes from web-ui-design.md §7.7: **class 2 (perception
 actions — transient, revertable, for the agent's own perception during
 reasoning)** and **class 3 (protective / responsive actions — persistent,
@@ -1242,7 +1250,7 @@ mitigation of the assessed situation)**. Both are direct HA service
 calls / camera API calls, gated by per-camera whitelist + policy, with a
 revert queue for class 2 and an audit log for class 3.
 
-Task 9 (Rules) emits the *class 4* outcome notification; Task 10 wires
+Task 9 (Rules) emits the _class 4_ outcome notification; Task 10 wires
 the rest of the action taxonomy. Together they cover the full agent →
 HA action surface.
 
@@ -1265,12 +1273,12 @@ Three pieces:
   table (audit log) with status (`ok` / `gated` / `failed`).
 
 **B. Per-camera whitelist + policy editor.** Extends the per-camera page
-(Part II §11 *Tuning* section). Two sub-blocks:
+(Part II §11 _Tuning_ section). Two sub-blocks:
 
 - **Perception (class 2)** — list of allowed target entities + camera ops
-  + a max-duration per row. Most users leave this at defaults; the agent
-  asks for very narrow things (lights adjacent to the camera, the
-  camera's own PTZ).
+  - a max-duration per row. Most users leave this at defaults; the agent
+    asks for very narrow things (lights adjacent to the camera, the
+    camera's own PTZ).
 - **Protective (class 3)** — list of authorized actions with policy
   conditions inline: severity gate, confidence gate, time-of-day rule,
   max-duration if applicable. The form sketched in web-ui-design.md §7.7.
@@ -1370,21 +1378,21 @@ CREATE TABLE protective_actions_log (
 
 ### Touches
 
-| File | Change |
-|---|---|
-| `services/ha-agent/src/.../action_runtime.py` | **NEW** — perception + protective action execution, revert queue |
-| `services/ha-agent/src/.../action_store.py` | **NEW** — SQLite-backed whitelist + audit log |
-| `services/ha-agent/src/.../triage.py` | wire `perception_requests` → action_runtime BEFORE re-invoking VLM; wire `recommendations` → action_runtime AFTER final assessment |
-| `services/ha-agent/src/.../reasoning.py` | VLMResponse schema extension; prompt includes per-camera authorized actions summary |
-| `services/ha-agent/src/.../client.py` | extend `call_service()` signature for richer target/data; add `fire_event()` (also used by Task 9) |
-| `services/preprocessor/src/.../app.py` | extend `/tune` to accept PTZ / IR-cut / stream-switch ops with revert hints |
-| `services/ha-agent/src/.../http_api.py` | new `/api/cameras/{id}/whitelist` GET/PUT endpoints |
-| `services/ha-agent/src/.../web_ui/camera_detail.py` (Part II builder, future) | render the whitelist + policy editor section |
-| `services/ha-agent/src/.../web_ui/home.py` & `trace.py` (future) | render perception cycles + protective actions in the trace audit chain |
-| `planning/web-ui-design.md` | ratify §7.7 details + Part II §11 *Tuning* extension |
-| `tests/test_action_runtime.py` | **NEW** — whitelist enforcement, policy gating, revert queue, idempotency |
-| `tests/test_action_store.py` | **NEW** — whitelist CRUD + audit log |
-| `tests/test_triage_actions.py` | **NEW** — integration: VLM emits perception+recommendations → dispatcher executes correctly |
+| File                                                                          | Change                                                                                                                             |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `services/ha-agent/src/.../action_runtime.py`                                 | **NEW** — perception + protective action execution, revert queue                                                                   |
+| `services/ha-agent/src/.../action_store.py`                                   | **NEW** — SQLite-backed whitelist + audit log                                                                                      |
+| `services/ha-agent/src/.../triage.py`                                         | wire `perception_requests` → action_runtime BEFORE re-invoking VLM; wire `recommendations` → action_runtime AFTER final assessment |
+| `services/ha-agent/src/.../reasoning.py`                                      | VLMResponse schema extension; prompt includes per-camera authorized actions summary                                                |
+| `services/ha-agent/src/.../client.py`                                         | extend `call_service()` signature for richer target/data; add `fire_event()` (also used by Task 9)                                 |
+| `services/preprocessor/src/.../app.py`                                        | extend `/tune` to accept PTZ / IR-cut / stream-switch ops with revert hints                                                        |
+| `services/ha-agent/src/.../http_api.py`                                       | new `/api/cameras/{id}/whitelist` GET/PUT endpoints                                                                                |
+| `services/ha-agent/src/.../web_ui/camera_detail.py` (Part II builder, future) | render the whitelist + policy editor section                                                                                       |
+| `services/ha-agent/src/.../web_ui/home.py` & `trace.py` (future)              | render perception cycles + protective actions in the trace audit chain                                                             |
+| `planning/web-ui-design.md`                                                   | ratify §7.7 details + Part II §11 _Tuning_ extension                                                                               |
+| `tests/test_action_runtime.py`                                                | **NEW** — whitelist enforcement, policy gating, revert queue, idempotency                                                          |
+| `tests/test_action_store.py`                                                  | **NEW** — whitelist CRUD + audit log                                                                                               |
+| `tests/test_triage_actions.py`                                                | **NEW** — integration: VLM emits perception+recommendations → dispatcher executes correctly                                        |
 
 ### Open
 
@@ -1399,8 +1407,8 @@ CREATE TABLE protective_actions_log (
   config, name-matching heuristic (camera_X → light_X). **Recommend
   HA Areas first**, with explicit override.]
 - **Redundancy / consensus across VLM calls.** Should some protective
-  actions require N consecutive recommendations? (e.g., *"lock the door
-  only if the next VLM call also says lock"*) [Recommend: yes — model it
+  actions require N consecutive recommendations? (e.g., _"lock the door
+  only if the next VLM call also says lock"_) [Recommend: yes — model it
   per-action as `redundancy_required`. Default 0 (single-call sufficient)
   for most; user can crank it to 2 for irreversible-ish actions.]
 - **Idempotency assumptions.** Lock-already-locked is a no-op; light-on-
@@ -1413,8 +1421,8 @@ CREATE TABLE protective_actions_log (
   request's apply time. Simple and audit-able.]
 - **Class 3 action lifecycle.** Persistent means "doesn't auto-revert" —
   but should there be a "revert when incident closes" option for the
-  specific case of sustained mitigations (e.g., *"keep floods on while
-  the unknown person is still in frame"*)? [Defer to a future iteration;
+  specific case of sustained mitigations (e.g., _"keep floods on while
+  the unknown person is still in frame"_)? [Defer to a future iteration;
   starts simple with no auto-revert. The user does the undo on the
   camera page or via HA.]
 
@@ -1427,7 +1435,7 @@ CREATE TABLE protective_actions_log (
   per-camera protective whitelist + policy (severity, confidence,
   time-of-day, redundancy); whitelisted+gated ones execute via direct HA
   service calls; everything is logged in `protective_actions_log`.
-- The per-camera page's *Authorized actions* block lets the user view +
+- The per-camera page's _Authorized actions_ block lets the user view +
   edit the perception and protective whitelists per camera.
 - The trace page renders perception cycles (with revert status) and
   protective actions (with policy gate decision + status) inline in the
@@ -1454,7 +1462,7 @@ non-architectural first, three big arcs (Tasks 1, 9, 10) at the end:
    open questions (storage location, prompt cost, dry-run rate-limit) with
    the user before code lands.
 7. **Task 10** (Perception + protective action plumbing) — pairs with Task 9
-   architecturally (the dispatcher's *other* lanes beyond the event emission
+   architecturally (the dispatcher's _other_ lanes beyond the event emission
    Task 9 owns); benefits from Task 9's prompt-extension work being live
    first. Per-camera page extension lands as a sub-task of Task 10 if Part II
    hasn't been built yet.
@@ -1472,44 +1480,44 @@ interleaving with other work.
 
 ## File-by-file change summary (for quick reference)
 
-| File | Tasks touching it |
-|---|---|
-| `services/ha-agent/src/.../web_ui/shell.py` | 2 (friendly_time), 3 (camera_display_name), 4 (sticky CSS), 7 (filter chip CSS), 9 (form CSS), 10 (whitelist editor CSS) |
-| `services/ha-agent/src/.../web_ui/home.py` | 2 (use friendly_time), 3 (headline + where line) |
-| `services/ha-agent/src/.../web_ui/activity.py` | 7 (new file) |
-| `services/ha-agent/src/.../web_ui/intent.py` | 9 (new file — Rules section + Preferences placeholder) |
-| `services/ha-agent/src/.../web_ui/intent_rule_form.py` | 9 (new file — new + edit form render + parse) |
-| `services/ha-agent/src/.../web_ui/mocks.py` | 7 (remove activity mock), 9 (remove intent mock) |
-| `services/ha-agent/src/.../review_page.py` | 4, 6 (body-only renderers) |
-| `services/ha-agent/src/.../__main__.py` | 4, 6, 7, 9 (wrap legacy routes; real activity + intent handlers + rule POSTs) |
-| `services/ha-agent/src/.../rules_store.py` | 9 (new file — SQLite-backed rules + matches) |
-| `services/ha-agent/src/.../rules_runtime.py` | 9 (new file — in-memory cache, scope filter, prompt builder) |
-| `services/ha-agent/src/.../triage.py` | 9 (rule filter + prompt extension + match recording + kukiihome_alert emission), 10 (perception_requests pre-VLM, recommendations post-VLM) |
-| `services/ha-agent/src/.../reasoning.py` | 9 (VLM prompt + matched_rules schema), 10 (perception_requests + recommendations schema, authorized-actions summary in prompt) |
-| `services/ha-agent/src/.../action_runtime.py` | 10 (new — perception + protective execution, revert queue) |
-| `services/ha-agent/src/.../action_store.py` | 10 (new — whitelist + audit log) |
-| `services/preprocessor/src/.../app.py` | 1 (clip serve endpoint), 10 (extend /tune for PTZ + IR-cut + stream-switch) |
-| `ha-integration/addon/kukiihome/blueprints/severity-routed-alert.yaml` | 9 (new — default blueprint) |
-| `ha-integration/custom_components/kukiihome/binary_sensor.py` | 9 (alert_active entity) |
-| `ha-integration/custom_components/kukiihome/sensor.py` | 9 (last_alert_severity, alerts_today) |
-| `ha-integration/custom_components/kukiihome/__init__.py` | 9 (first-run blueprint install) |
-| `services/ha-agent/src/.../http_api.py` | 9 (/api/intent/rules/* CRUD + test + matches) |
-| `services/ha-agent/src/.../notifier.py` | 9 (rule-matched alert path) |
-| `services/ha-agent/src/.../client.py` | 9 (HA fire_event method) |
-| `services/preprocessor/src/.../event_recorder.py` | 1 (clip writer integration) |
-| `services/preprocessor/src/.../clip_writer.py` | 1 (new file) |
-| `services/preprocessor/src/.../app.py` | 1 (clip serve endpoint) |
-| `services/ha-agent/.../preprocessor_client.py` | 1 (clip fetch method) |
-| `planning/web-ui-design.md` | 5 (new §17 principle), 7 (Part IV ratification), 9 (Part VI Rules ratification) |
-| `tests/test_web_ui.py` | 2, 3, 4, 7 |
-| `tests/test_review_page.py` | 4, 6 |
-| `tests/test_rules_store.py` | 9 (new file) |
-| `tests/test_rules_runtime.py` | 9 (new file) |
-| `tests/test_intent_page.py` | 9 (new file) |
-| `tests/test_triage_rules.py` | 9 (new file — integration) |
-| `tests/test_action_runtime.py` | 10 (new file — whitelist + policy + revert queue) |
-| `tests/test_action_store.py` | 10 (new file — whitelist CRUD + audit) |
-| `tests/test_triage_actions.py` | 10 (new file — integration) |
+| File                                                                   | Tasks touching it                                                                                                                           |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `services/ha-agent/src/.../web_ui/shell.py`                            | 2 (friendly_time), 3 (camera_display_name), 4 (sticky CSS), 7 (filter chip CSS), 9 (form CSS), 10 (whitelist editor CSS)                    |
+| `services/ha-agent/src/.../web_ui/home.py`                             | 2 (use friendly_time), 3 (headline + where line)                                                                                            |
+| `services/ha-agent/src/.../web_ui/activity.py`                         | 7 (new file)                                                                                                                                |
+| `services/ha-agent/src/.../web_ui/intent.py`                           | 9 (new file — Rules section + Preferences placeholder)                                                                                      |
+| `services/ha-agent/src/.../web_ui/intent_rule_form.py`                 | 9 (new file — new + edit form render + parse)                                                                                               |
+| `services/ha-agent/src/.../web_ui/mocks.py`                            | 7 (remove activity mock), 9 (remove intent mock)                                                                                            |
+| `services/ha-agent/src/.../review_page.py`                             | 4, 6 (body-only renderers)                                                                                                                  |
+| `services/ha-agent/src/.../__main__.py`                                | 4, 6, 7, 9 (wrap legacy routes; real activity + intent handlers + rule POSTs)                                                               |
+| `services/ha-agent/src/.../rules_store.py`                             | 9 (new file — SQLite-backed rules + matches)                                                                                                |
+| `services/ha-agent/src/.../rules_runtime.py`                           | 9 (new file — in-memory cache, scope filter, prompt builder)                                                                                |
+| `services/ha-agent/src/.../triage.py`                                  | 9 (rule filter + prompt extension + match recording + kukiihome_alert emission), 10 (perception_requests pre-VLM, recommendations post-VLM) |
+| `services/ha-agent/src/.../reasoning.py`                               | 9 (VLM prompt + matched_rules schema), 10 (perception_requests + recommendations schema, authorized-actions summary in prompt)              |
+| `services/ha-agent/src/.../action_runtime.py`                          | 10 (new — perception + protective execution, revert queue)                                                                                  |
+| `services/ha-agent/src/.../action_store.py`                            | 10 (new — whitelist + audit log)                                                                                                            |
+| `services/preprocessor/src/.../app.py`                                 | 1 (clip serve endpoint), 10 (extend /tune for PTZ + IR-cut + stream-switch)                                                                 |
+| `ha-integration/addon/kukiihome/blueprints/severity-routed-alert.yaml` | 9 (new — default blueprint)                                                                                                                 |
+| `ha-integration/custom_components/kukiihome/binary_sensor.py`          | 9 (alert_active entity)                                                                                                                     |
+| `ha-integration/custom_components/kukiihome/sensor.py`                 | 9 (last_alert_severity, alerts_today)                                                                                                       |
+| `ha-integration/custom_components/kukiihome/__init__.py`               | 9 (first-run blueprint install)                                                                                                             |
+| `services/ha-agent/src/.../http_api.py`                                | 9 (/api/intent/rules/\* CRUD + test + matches)                                                                                              |
+| `services/ha-agent/src/.../notifier.py`                                | 9 (rule-matched alert path)                                                                                                                 |
+| `services/ha-agent/src/.../client.py`                                  | 9 (HA fire_event method)                                                                                                                    |
+| `services/preprocessor/src/.../event_recorder.py`                      | 1 (clip writer integration)                                                                                                                 |
+| `services/preprocessor/src/.../clip_writer.py`                         | 1 (new file)                                                                                                                                |
+| `services/preprocessor/src/.../app.py`                                 | 1 (clip serve endpoint)                                                                                                                     |
+| `services/ha-agent/.../preprocessor_client.py`                         | 1 (clip fetch method)                                                                                                                       |
+| `planning/web-ui-design.md`                                            | 5 (new §17 principle), 7 (Part IV ratification), 9 (Part VI Rules ratification)                                                             |
+| `tests/test_web_ui.py`                                                 | 2, 3, 4, 7                                                                                                                                  |
+| `tests/test_review_page.py`                                            | 4, 6                                                                                                                                        |
+| `tests/test_rules_store.py`                                            | 9 (new file)                                                                                                                                |
+| `tests/test_rules_runtime.py`                                          | 9 (new file)                                                                                                                                |
+| `tests/test_intent_page.py`                                            | 9 (new file)                                                                                                                                |
+| `tests/test_triage_rules.py`                                           | 9 (new file — integration)                                                                                                                  |
+| `tests/test_action_runtime.py`                                         | 10 (new file — whitelist + policy + revert queue)                                                                                           |
+| `tests/test_action_store.py`                                           | 10 (new file — whitelist CRUD + audit)                                                                                                      |
+| `tests/test_triage_actions.py`                                         | 10 (new file — integration)                                                                                                                 |
 
 Conventional Commit prefixes (per the auto-release workflow):
 

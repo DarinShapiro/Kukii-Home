@@ -19,19 +19,19 @@ commit's prefix is **not** release-worthy (`chore:`, `docs:`, `refactor:`,
 
 ## Commit prefix → bump
 
-| Prefix | Bump | Example |
-|---|---|---|
-| `fix:` | patch (0.26.0 → 0.26.1) | `fix(ha-agent): stale keep-alive POST race` |
-| `perf:` | patch | `perf(preprocessor): cache encoded crops` |
-| `feat:` | **patch** (0.26.0 → 0.26.1) | `feat(identity): add gait Stage-2 worker` |
-| `feat!:` or any commit with `BREAKING CHANGE:` footer | **minor** (0.26.0 → 0.27.0) | `feat(api)!: rename /identity to /people` |
-| `docs:` | none | `docs(ui): ratify Part VI` |
-| `chore:` | none | `chore(deps): bump pytest` |
-| `refactor:` | none | `refactor(identity): extract corpus loader` |
-| `test:` | none | `test(home): cover empty-state copy` |
-| `style:` | none | `style: reformat config.yaml` |
-| `build:` | none | `build: drop amd64 from matrix` |
-| `ci:` | none | `ci: switch to release-on-merge` |
+| Prefix                                                | Bump                        | Example                                     |
+| ----------------------------------------------------- | --------------------------- | ------------------------------------------- |
+| `fix:`                                                | patch (0.26.0 → 0.26.1)     | `fix(ha-agent): stale keep-alive POST race` |
+| `perf:`                                               | patch                       | `perf(preprocessor): cache encoded crops`   |
+| `feat:`                                               | **patch** (0.26.0 → 0.26.1) | `feat(identity): add gait Stage-2 worker`   |
+| `feat!:` or any commit with `BREAKING CHANGE:` footer | **minor** (0.26.0 → 0.27.0) | `feat(api)!: rename /identity to /people`   |
+| `docs:`                                               | none                        | `docs(ui): ratify Part VI`                  |
+| `chore:`                                              | none                        | `chore(deps): bump pytest`                  |
+| `refactor:`                                           | none                        | `refactor(identity): extract corpus loader` |
+| `test:`                                               | none                        | `test(home): cover empty-state copy`        |
+| `style:`                                              | none                        | `style: reformat config.yaml`               |
+| `build:`                                              | none                        | `build: drop amd64 from matrix`             |
+| `ci:`                                                 | none                        | `ci: switch to release-on-merge`            |
 
 A scope (`feat(identity): …`, `fix(ha-agent): …`) is optional and informational
 — the bump is decided by the prefix only.
@@ -47,7 +47,7 @@ Conventional Commits would chew through minor numbers fast and push us to
   version numbers
 - Map **`BREAKING CHANGE:`** (and `feat!:` / `fix!:` etc.) to **minor**,
   reserving major for an explicit, deliberate 1.0 cut
-- Use **`Release-As:`** when we *want* a minor or major bump for a
+- Use **`Release-As:`** when we _want_ a minor or major bump for a
   milestone release (see below)
 
 This keeps 0.x.y meaningful: patches accumulate normally, minor bumps mark
@@ -80,7 +80,7 @@ Use it sparingly — minor bumps should mark moments worth marking.
 
 ## Forcing a release on a non-release-worthy commit
 
-Rare, but: if you've made a series of `chore:`/`refactor:` commits that *do*
+Rare, but: if you've made a series of `chore:`/`refactor:` commits that _do_
 deserve a release (e.g., a code cleanup that meaningfully improves things),
 include a `Release-As:` footer in the latest commit:
 
@@ -103,11 +103,10 @@ prefix to begin with.
    Runs on every push and every PR.
 3. **release** (push to `main` only) — semantic-release runs the **full release
    sequence in one job**, with a critical ordering invariant: the version on
-   `main` only advances *after* the image at that version is already live in
+   `main` only advances _after_ the image at that version is already live in
    GHCR.
 
    In order, inside the release job:
-
    1. Analyze commits since the last `v*` tag → decide bump (or skip entirely).
    2. Generate release notes.
    3. Prepend a CHANGELOG entry (in workspace).
@@ -128,21 +127,21 @@ prefix to begin with.
    because the release job already builds (and pushes) authoritative images.
 
 If the release job is green, the new version is safe to install in HA — the
-verify step is *inside* the release job, so green = published + verified.
+verify step is _inside_ the release job, so green = published + verified.
 
 ## What happens on each commit type
 
-| Push to main | Validate | s6-scripts | Release | Effect |
-|---|---|---|---|---|
-| `feat:` / `fix:` / `perf:` / breaking | ✓ | ✓ | runs full sequence | New version published; HA can Update safely |
-| `chore:` / `docs:` / `refactor:` / `test:` / `style:` / `build:` / `ci:` | ✓ | ✓ | runs but exits early (`new_release_published=false`) | Nothing changes; CI confirms code still passes lint + structural checks |
-| Anything failing validate or s6-scripts | ✓ red | ✓ red | not reached | Nothing changes; fix and re-push |
-| Anything failing docker build or GHCR verify | ✓ | ✓ | red at the build step | Nothing on `main` changes; image at the failed version may be an orphan in GHCR (harmless). Fix and re-push. |
+| Push to main                                                             | Validate | s6-scripts | Release                                              | Effect                                                                                                       |
+| ------------------------------------------------------------------------ | -------- | ---------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `feat:` / `fix:` / `perf:` / breaking                                    | ✓        | ✓          | runs full sequence                                   | New version published; HA can Update safely                                                                  |
+| `chore:` / `docs:` / `refactor:` / `test:` / `style:` / `build:` / `ci:` | ✓        | ✓          | runs but exits early (`new_release_published=false`) | Nothing changes; CI confirms code still passes lint + structural checks                                      |
+| Anything failing validate or s6-scripts                                  | ✓ red    | ✓ red      | not reached                                          | Nothing changes; fix and re-push                                                                             |
+| Anything failing docker build or GHCR verify                             | ✓        | ✓          | red at the build step                                | Nothing on `main` changes; image at the failed version may be an orphan in GHCR (harmless). Fix and re-push. |
 
 ## Local checks before pushing
 
 There's no required local test pass for releases, but you can preview what
-semantic-release *would* do without actually releasing:
+semantic-release _would_ do without actually releasing:
 
 ```bash
 # Show planned bump + changelog entry for the commits on your branch.
@@ -159,7 +158,7 @@ npx --yes semantic-release --dry-run --no-ci --branches "$(git branch --show-cur
 - **Wrong version published** — never rewrite history. Push a `fix:` /
   `feat:` commit that adjusts behaviour going forward; let the next version
   supersede it.
-- **CI fails mid-release** — semantic-release commits the bump *before* the
+- **CI fails mid-release** — semantic-release commits the bump _before_ the
   image is built, so a build failure leaves `config.yaml` pointing at a
   version Supervisor can't pull. The next commit's CI run will retry the
   build. If that's not enough, manually re-trigger the workflow on the bump

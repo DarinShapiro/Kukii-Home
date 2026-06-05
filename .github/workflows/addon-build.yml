@@ -149,10 +149,10 @@ jobs:
     needs: s6-scripts
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
-      contents: write       # @semantic-release/git pushes bump commit + tag
-      issues: write         # @semantic-release/github (release comments)
-      pull-requests: write  # @semantic-release/github (PR comments)
-      packages: write       # docker push to ghcr.io
+      contents: write # @semantic-release/git pushes bump commit + tag
+      issues: write # @semantic-release/github (release comments)
+      pull-requests: write # @semantic-release/github (PR comments)
+      packages: write # docker push to ghcr.io
     outputs:
       new_release_published: ${{ steps.semantic.outputs.new_release_published }}
       new_release_version: ${{ steps.semantic.outputs.new_release_version }}
@@ -160,7 +160,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # semantic-release needs full history + tags
+          fetch-depth: 0 # semantic-release needs full history + tags
           persist-credentials: true
       - uses: actions/setup-node@v4
         with:

@@ -14,212 +14,182 @@
 
 ## [0.26.9](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.8...v0.26.9) (2026-06-05)
 
-
 ### Bug Fixes
 
-* **memory:** defensive scope coercion + play button fallback + drawer pop-out ([419b47e](https://github.com/DarinShapiro/Kukii-Home/commit/419b47e511e7d170345bd3efd5fe0cbb918872d9))
+- **memory:** defensive scope coercion + play button fallback + drawer pop-out ([419b47e](https://github.com/DarinShapiro/Kukii-Home/commit/419b47e511e7d170345bd3efd5fe0cbb918872d9))
 
 ## [0.26.8](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.7...v0.26.8) (2026-06-05)
 
-
 ### Bug Fixes
 
-* **memory:** drawer persistence across nav + escape alert-table src URLs ([1b5b6fa](https://github.com/DarinShapiro/Kukii-Home/commit/1b5b6face1c7a67d8b1a663c20bec90b97a6a942))
+- **memory:** drawer persistence across nav + escape alert-table src URLs ([1b5b6fa](https://github.com/DarinShapiro/Kukii-Home/commit/1b5b6face1c7a67d8b1a663c20bec90b97a6a942))
 
 ## [0.26.7](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.6...v0.26.7) (2026-06-05)
 
-
 ### Bug Fixes
 
-* **memory:** four self-audit findings — drawer close, history class, refine guard, diag perf ([f82002f](https://github.com/DarinShapiro/Kukii-Home/commit/f82002f46689557e1bc94415ac93935b2e50974b))
+- **memory:** four self-audit findings — drawer close, history class, refine guard, diag perf ([f82002f](https://github.com/DarinShapiro/Kukii-Home/commit/f82002f46689557e1bc94415ac93935b2e50974b))
 
 ## [0.26.6](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.5...v0.26.6) (2026-06-05)
 
-
 ### Bug Fixes
 
-* **memory:** drawer is page-specific — every page hosts it with current path as context ([eecbb5d](https://github.com/DarinShapiro/Kukii-Home/commit/eecbb5df75f6b27e7931b2ae5fd43d3b93620749))
+- **memory:** drawer is page-specific — every page hosts it with current path as context ([eecbb5d](https://github.com/DarinShapiro/Kukii-Home/commit/eecbb5df75f6b27e7931b2ae5fd43d3b93620749))
 
 ## [0.26.5](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.4...v0.26.5) (2026-06-05)
 
-
 ### Bug Fixes
 
-* **memory:** silence LLM-down banner until an actual failure is recorded ([f9b45bf](https://github.com/DarinShapiro/Kukii-Home/commit/f9b45bf62095c238dec85e8d476f22c6b4f67dc9))
+- **memory:** silence LLM-down banner until an actual failure is recorded ([f9b45bf](https://github.com/DarinShapiro/Kukii-Home/commit/f9b45bf62095c238dec85e8d476f22c6b4f67dc9))
 
 ## [0.26.4](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.3...v0.26.4) (2026-06-05)
 
-
 ### Features
 
-* **memory:** persistent header drawer trigger — open from any page ([87a3fcc](https://github.com/DarinShapiro/Kukii-Home/commit/87a3fccda24a6558c89f8a4dd9758ee3b148b44e))
+- **memory:** persistent header drawer trigger — open from any page ([87a3fcc](https://github.com/DarinShapiro/Kukii-Home/commit/87a3fccda24a6558c89f8a4dd9758ee3b148b44e))
 
 ## [0.26.3](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.2...v0.26.3) (2026-06-05)
 
-
 ### Features
 
-* **memory:** multi-turn dispatcher + tool calling + memory-layer tools (Part X §38, Part IX §26) ([e939505](https://github.com/DarinShapiro/Kukii-Home/commit/e939505d983eacadbdbe3723e79ffca36a6b58db))
+- **memory:** multi-turn dispatcher + tool calling + memory-layer tools (Part X §38, Part IX §26) ([e939505](https://github.com/DarinShapiro/Kukii-Home/commit/e939505d983eacadbdbe3723e79ffca36a6b58db))
 
 ## [0.26.2](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.1...v0.26.2) (2026-06-05)
 
-
 ### Bug Fixes
 
-* **web-ui:** batch UI fixups from user review (depth-aware base href, nav on alert page, identities default, clip fallback, drop activity nav) ([704adee](https://github.com/DarinShapiro/Kukii-Home/commit/704adeef95fd2b2bb6fe3c23c9ee0817c5f53053)), closes [#5](https://github.com/DarinShapiro/Kukii-Home/issues/5) [#6](https://github.com/DarinShapiro/Kukii-Home/issues/6) [#7](https://github.com/DarinShapiro/Kukii-Home/issues/7) [#8](https://github.com/DarinShapiro/Kukii-Home/issues/8) [#3](https://github.com/DarinShapiro/Kukii-Home/issues/3) [#1](https://github.com/DarinShapiro/Kukii-Home/issues/1) [#2](https://github.com/DarinShapiro/Kukii-Home/issues/2) [#4](https://github.com/DarinShapiro/Kukii-Home/issues/4) [#9](https://github.com/DarinShapiro/Kukii-Home/issues/9)
+- **web-ui:** batch UI fixups from user review (depth-aware base href, nav on alert page, identities default, clip fallback, drop activity nav) ([704adee](https://github.com/DarinShapiro/Kukii-Home/commit/704adeef95fd2b2bb6fe3c23c9ee0817c5f53053)), closes [#5](https://github.com/DarinShapiro/Kukii-Home/issues/5) [#6](https://github.com/DarinShapiro/Kukii-Home/issues/6) [#7](https://github.com/DarinShapiro/Kukii-Home/issues/7) [#8](https://github.com/DarinShapiro/Kukii-Home/issues/8) [#3](https://github.com/DarinShapiro/Kukii-Home/issues/3) [#1](https://github.com/DarinShapiro/Kukii-Home/issues/1) [#2](https://github.com/DarinShapiro/Kukii-Home/issues/2) [#4](https://github.com/DarinShapiro/Kukii-Home/issues/4) [#9](https://github.com/DarinShapiro/Kukii-Home/issues/9)
 
 ## [0.26.1](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.0...v0.26.1) (2026-06-05)
 
-
 ### Bug Fixes
 
-* **memory:** default model to gpt-oss-120b + tighten scope schema discipline ([115ac8f](https://github.com/DarinShapiro/Kukii-Home/commit/115ac8f4267a39537a8896ef69da324fffdbf4bb))
-
+- **memory:** default model to gpt-oss-120b + tighten scope schema discipline ([115ac8f](https://github.com/DarinShapiro/Kukii-Home/commit/115ac8f4267a39537a8896ef69da324fffdbf4bb))
 
 ### Miscellaneous Chores
 
-* **release:** slow version bumps — feat → patch, breaking → minor ([c066a83](https://github.com/DarinShapiro/Kukii-Home/commit/c066a83b1ef5af5e014d268c6d57d48f07ac1ad2))
+- **release:** slow version bumps — feat → patch, breaking → minor ([c066a83](https://github.com/DarinShapiro/Kukii-Home/commit/c066a83b1ef5af5e014d268c6d57d48f07ac1ad2))
 
 ## [0.26.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.25.0...v0.26.0) (2026-06-05)
 
-
 ### Features
 
-* **addon:** expose LLM endpoint config as add-on options ([f9fc4b0](https://github.com/DarinShapiro/Kukii-Home/commit/f9fc4b042d33eb2727be277e03aace68769b2d53))
+- **addon:** expose LLM endpoint config as add-on options ([f9fc4b0](https://github.com/DarinShapiro/Kukii-Home/commit/f9fc4b042d33eb2727be277e03aace68769b2d53))
 
 ## [0.25.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.24.0...v0.25.0) (2026-06-04)
 
-
 ### Features
 
-* **memory:** wire Cerebras LLM dispatcher + degraded-mode banner ([a9d8a33](https://github.com/DarinShapiro/Kukii-Home/commit/a9d8a33984a5246cd0401c8abe6741c7f8992184))
+- **memory:** wire Cerebras LLM dispatcher + degraded-mode banner ([a9d8a33](https://github.com/DarinShapiro/Kukii-Home/commit/a9d8a33984a5246cd0401c8abe6741c7f8992184))
 
 ## [0.24.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.23.0...v0.24.0) (2026-06-04)
 
-
 ### Features
 
-* **memory:** drift detection — suggest re-classification for stale guidance (Part X §39) ([1fb6e21](https://github.com/DarinShapiro/Kukii-Home/commit/1fb6e2163cafc11721f8c07e6116cc13ba6747c2))
+- **memory:** drift detection — suggest re-classification for stale guidance (Part X §39) ([1fb6e21](https://github.com/DarinShapiro/Kukii-Home/commit/1fb6e2163cafc11721f8c07e6116cc13ba6747c2))
 
 ## [0.23.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.22.0...v0.23.0) (2026-06-04)
 
-
 ### Features
 
-* **memory:** push-reply fragment-load — drawer opens contextualized on /alert/{id}[#drawer](https://github.com/DarinShapiro/Kukii-Home/issues/drawer) (Part X §40) ([4d6bf80](https://github.com/DarinShapiro/Kukii-Home/commit/4d6bf8067dbbde6aab8b367d2d9f2ef2189a2e7d))
+- **memory:** push-reply fragment-load — drawer opens contextualized on /alert/{id}[#drawer](https://github.com/DarinShapiro/Kukii-Home/issues/drawer) (Part X §40) ([4d6bf80](https://github.com/DarinShapiro/Kukii-Home/commit/4d6bf8067dbbde6aab8b367d2d9f2ef2189a2e7d))
 
 ## [0.22.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.21.0...v0.22.0) (2026-06-04)
 
-
 ### Features
 
-* **memory:** /system storage + privacy page + RetentionStore (Part IX §30) ([d360198](https://github.com/DarinShapiro/Kukii-Home/commit/d3601981a2d167b189ec117e9c67576bd1966020))
+- **memory:** /system storage + privacy page + RetentionStore (Part IX §30) ([d360198](https://github.com/DarinShapiro/Kukii-Home/commit/d3601981a2d167b189ec117e9c67576bd1966020))
 
 ## [0.21.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.20.0...v0.21.0) (2026-06-04)
 
-
 ### Features
 
-* **memory:** /identities expansion + per-identity detail (Part IX §29) ([6680bf9](https://github.com/DarinShapiro/Kukii-Home/commit/6680bf9b264f652b2dd4c95c3647a2ef4cd7980e)), closes [#292](https://github.com/DarinShapiro/Kukii-Home/issues/292)
+- **memory:** /identities expansion + per-identity detail (Part IX §29) ([6680bf9](https://github.com/DarinShapiro/Kukii-Home/commit/6680bf9b264f652b2dd4c95c3647a2ef4cd7980e)), closes [#292](https://github.com/DarinShapiro/Kukii-Home/issues/292)
 
 ## [0.20.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.19.0...v0.20.0) (2026-06-04)
 
-
 ### Features
 
-* **memory:** LLM dispatcher provider + composite fallback (Part X §35) ([35d2af2](https://github.com/DarinShapiro/Kukii-Home/commit/35d2af2c554c6506eda7725d7bd24ebb550b54b5))
+- **memory:** LLM dispatcher provider + composite fallback (Part X §35) ([35d2af2](https://github.com/DarinShapiro/Kukii-Home/commit/35d2af2c554c6506eda7725d7bd24ebb550b54b5))
 
 ## [0.19.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.18.0...v0.19.0) (2026-06-04)
 
-
 ### Features
 
-* **memory:** drawer skeleton + heuristic dispatcher + wired POST endpoints (Part X §34-35) ([4ca9365](https://github.com/DarinShapiro/Kukii-Home/commit/4ca9365c6a82960a4760be7597cf4025df500e8a))
-* **memory:** unified /memory browse — collapse /intent + /policies (Part IX §28) ([445a317](https://github.com/DarinShapiro/Kukii-Home/commit/445a317a0199ae9d73e804a0274fa6c7e0803f00))
+- **memory:** drawer skeleton + heuristic dispatcher + wired POST endpoints (Part X §34-35) ([4ca9365](https://github.com/DarinShapiro/Kukii-Home/commit/4ca9365c6a82960a4760be7597cf4025df500e8a))
+- **memory:** unified /memory browse — collapse /intent + /policies (Part IX §28) ([445a317](https://github.com/DarinShapiro/Kukii-Home/commit/445a317a0199ae9d73e804a0274fa6c7e0803f00))
 
 ## [0.18.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.17.0...v0.18.0) (2026-06-04)
 
-
 ### Features
 
-* **memory:** ProvenanceStore + commit_guidance dispatcher (Parts IX/X foundation) ([ff8564b](https://github.com/DarinShapiro/Kukii-Home/commit/ff8564b12d2bc90c970929adbd3471214245a03a)), closes [#2](https://github.com/DarinShapiro/Kukii-Home/issues/2)
+- **memory:** ProvenanceStore + commit_guidance dispatcher (Parts IX/X foundation) ([ff8564b](https://github.com/DarinShapiro/Kukii-Home/commit/ff8564b12d2bc90c970929adbd3471214245a03a)), closes [#2](https://github.com/DarinShapiro/Kukii-Home/issues/2)
 
 ## [0.17.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.16.0...v0.17.0) (2026-06-04)
 
-
 ### Features
 
-* **events:** trace audit chain on alert detail (Part III §22 extension) ([1c53788](https://github.com/DarinShapiro/Kukii-Home/commit/1c53788af50aea1c1e7a4492b8fc839a62fcabb5))
+- **events:** trace audit chain on alert detail (Part III §22 extension) ([1c53788](https://github.com/DarinShapiro/Kukii-Home/commit/1c53788af50aea1c1e7a4492b8fc839a62fcabb5))
 
 ## [0.16.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.15.0...v0.16.0) (2026-06-04)
 
-
 ### Features
 
-* **diagnostics:** live Part VIII page — system + stores + reasoner roll-up ([17a9a83](https://github.com/DarinShapiro/Kukii-Home/commit/17a9a83001f9c6e3b30a75a1b5656ab2264136d3))
+- **diagnostics:** live Part VIII page — system + stores + reasoner roll-up ([17a9a83](https://github.com/DarinShapiro/Kukii-Home/commit/17a9a83001f9c6e3b30a75a1b5656ab2264136d3))
 
 ## [0.15.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.14.0...v0.15.0) (2026-06-04)
 
-
 ### Features
 
-* **policies:** live Part VII page with PolicyStore + revoke ([bdbcad6](https://github.com/DarinShapiro/Kukii-Home/commit/bdbcad6d142800e460daf0ac659f342bd96c2693))
+- **policies:** live Part VII page with PolicyStore + revoke ([bdbcad6](https://github.com/DarinShapiro/Kukii-Home/commit/bdbcad6d142800e460daf0ac659f342bd96c2693))
 
 ## [0.14.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.13.0...v0.14.0) (2026-06-04)
 
-
 ### Features
 
-* **intent:** live Preferences section + PreferencesStore ([3970fa9](https://github.com/DarinShapiro/Kukii-Home/commit/3970fa9353baf2cfdf8703518e5fd40cd633e94d)), closes [#292](https://github.com/DarinShapiro/Kukii-Home/issues/292)
+- **intent:** live Preferences section + PreferencesStore ([3970fa9](https://github.com/DarinShapiro/Kukii-Home/commit/3970fa9353baf2cfdf8703518e5fd40cd633e94d)), closes [#292](https://github.com/DarinShapiro/Kukii-Home/issues/292)
 
 ## [0.13.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.12.0...v0.13.0) (2026-06-04)
 
-
 ### Features
 
-* **areas:** live Part V page with AreaStore + AttentionMode + camera assignment ([a725f45](https://github.com/DarinShapiro/Kukii-Home/commit/a725f45a9a6bd2116de9e1c4018b8e7d9a8b7662))
+- **areas:** live Part V page with AreaStore + AttentionMode + camera assignment ([a725f45](https://github.com/DarinShapiro/Kukii-Home/commit/a725f45a9a6bd2116de9e1c4018b8e7d9a8b7662))
 
 ## [0.12.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.11.0...v0.12.0) (2026-06-04)
 
-
 ### Features
 
-* **cameras:** live Part II page — list + detail + Task 10 whitelist editor ([e31d5d4](https://github.com/DarinShapiro/Kukii-Home/commit/e31d5d4bf680454d38681500474222948932fce4))
+- **cameras:** live Part II page — list + detail + Task 10 whitelist editor ([e31d5d4](https://github.com/DarinShapiro/Kukii-Home/commit/e31d5d4bf680454d38681500474222948932fce4))
 
 ## [0.11.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.10.0...v0.11.0) (2026-06-04)
 
-
 ### Features
 
-* **events:** event clip playback — preprocessor mux + ha-agent proxy ([1fc2ec3](https://github.com/DarinShapiro/Kukii-Home/commit/1fc2ec3d16e9aeec1cd36be1a9cfff724da79e5b))
+- **events:** event clip playback — preprocessor mux + ha-agent proxy ([1fc2ec3](https://github.com/DarinShapiro/Kukii-Home/commit/1fc2ec3d16e9aeec1cd36be1a9cfff724da79e5b))
 
 ## [0.10.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.9.0...v0.10.0) (2026-06-04)
 
-
 ### Features
 
-* **dispatcher:** perception + protective action runtime (classes 2 & 3) ([01e46d4](https://github.com/DarinShapiro/Kukii-Home/commit/01e46d49619bdba2db46e815cb934f9369122e38))
+- **dispatcher:** perception + protective action runtime (classes 2 & 3) ([01e46d4](https://github.com/DarinShapiro/Kukii-Home/commit/01e46d49619bdba2db46e815cb934f9369122e38))
 
 ## [0.9.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.8.0...v0.9.0) (2026-06-04)
 
-
 ### Features
 
-* **intent:** rules editor MVP — store + runtime + UI + CRUD + shortcut firing ([b9751ef](https://github.com/DarinShapiro/Kukii-Home/commit/b9751ef5248031e5a6c558a3d0a4e0c45620ab92))
+- **intent:** rules editor MVP — store + runtime + UI + CRUD + shortcut firing ([b9751ef](https://github.com/DarinShapiro/Kukii-Home/commit/b9751ef5248031e5a6c558a3d0a4e0c45620ab92))
 
 ## [0.8.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.7.0...v0.8.0) (2026-06-04)
 
-
 ### Features
 
-* **web-ui:** build real /activity page (Part IV depth + filters) ([55cd77f](https://github.com/DarinShapiro/Kukii-Home/commit/55cd77f197725dffc714698b325bcc0e43f50a6c))
-
+- **web-ui:** build real /activity page (Part IV depth + filters) ([55cd77f](https://github.com/DarinShapiro/Kukii-Home/commit/55cd77f197725dffc714698b325bcc0e43f50a6c))
 
 ### Bug Fixes
 
-* **web-ui:** friendly_time graduates with clock-time + tooltip ([016014b](https://github.com/DarinShapiro/Kukii-Home/commit/016014b04fc7c7579b41da52f4d04514a585cbfa))
-* **web-ui:** readable activity headlines, strip stream-quality suffixes ([198026a](https://github.com/DarinShapiro/Kukii-Home/commit/198026a08ba7c876183caa626ff3d11d5667d0e4))
-* **web-ui:** standardize thumbnail aspect-ratio containers + §17 corollary ([93a4b98](https://github.com/DarinShapiro/Kukii-Home/commit/93a4b98f208a49c0c113595ea2d9dd475ed1af73))
+- **web-ui:** friendly_time graduates with clock-time + tooltip ([016014b](https://github.com/DarinShapiro/Kukii-Home/commit/016014b04fc7c7579b41da52f4d04514a585cbfa))
+- **web-ui:** readable activity headlines, strip stream-quality suffixes ([198026a](https://github.com/DarinShapiro/Kukii-Home/commit/198026a08ba7c876183caa626ff3d11d5667d0e4))
+- **web-ui:** standardize thumbnail aspect-ratio containers + §17 corollary ([93a4b98](https://github.com/DarinShapiro/Kukii-Home/commit/93a4b98f208a49c0c113595ea2d9dd475ed1af73))
 
 ## 0.7.0 — 2026-06-04
 
@@ -238,7 +208,7 @@ What's there to try:
   most-recent incidents (passive vs action lanes, friendly relative times,
   no day boundaries); a small system stripe at the bottom.
 - **Activity, Areas, Intent, Policies, Cameras, Diagnostics** — credible
-  *Coming soon* skeletons so the navigation works end-to-end. Each tab
+  _Coming soon_ skeletons so the navigation works end-to-end. Each tab
   explains what'll go there. The Intent tab shows a sample of what
   natural-language rules will look like.
 - **Identities** — the same Review page you've been using, now under the
@@ -273,7 +243,7 @@ pet, and face as an always-embed identity signal.
 **Fix: Identity Review actions no longer show a false "action failed."**
 
 Labeling a track, **✗ not them**, and **Merge** sometimes reported "preprocessor
-unreachable or rejected it" even though the change *had* been saved — a stale
+unreachable or rejected it" even though the change _had_ been saved — a stale
 pooled connection to the preprocessor that the add-on didn't recover for writes
 (page loads, which retry automatically, were unaffected). The add-on now retires
 idle connections promptly and retries a write once on a transient blip, so the
@@ -296,7 +266,7 @@ Review lets you:
 
 - See the un-named people/pets the cameras captured, each with a crop.
 - **Label** one ("this is Alice", "this is Rex"). It's enrolled on the spot and
-  every past *and* future sighting is matched automatically — no re-processing
+  every past _and_ future sighting is matched automatically — no re-processing
   of old footage.
 - Fix mistakes: **✗ not them** clears a wrong match (it returns to the queue to
   re-label), and **Merge** combines two labels that are actually the same
