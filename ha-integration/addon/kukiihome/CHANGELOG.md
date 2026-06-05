@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.8](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.7...v0.26.8) (2026-06-05)
+
+
+### Bug Fixes
+
+* **memory:** drawer persistence across nav + escape alert-table src URLs ([1b5b6fa](https://github.com/DarinShapiro/Kukii-Home/commit/1b5b6face1c7a67d8b1a663c20bec90b97a6a942))
+
 ## [0.26.7](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.6...v0.26.7) (2026-06-05)
 
 
