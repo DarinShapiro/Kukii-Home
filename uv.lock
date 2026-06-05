@@ -1506,6 +1506,7 @@ source = { editable = "services/ha-agent" }
 dependencies = [
     { name = "aiohttp" },
     { name = "httpx" },
+    { name = "kukiihome-memory" },
     { name = "kukiihome-shared" },
     { name = "nats-py" },
     { name = "pydantic" },
@@ -1517,6 +1518,7 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.10.0" },
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "kukiihome-memory", editable = "services/memory" },
     { name = "kukiihome-shared", editable = "shared/lib-python" },
     { name = "nats-py", specifier = ">=2.9.0" },
     { name = "pydantic", specifier = ">=2.9.0" },

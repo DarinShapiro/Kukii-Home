@@ -80,11 +80,37 @@ RUN /app/.venv/bin/python -c "import kukiihome_shared.topology; \
 ARG ADDON_VERSION=unknown
 RUN echo "${ADDON_VERSION}" > /app/.kukiihome_addon_version
 
+# Epic 10.2: memory-graph Neo4j sidecar (OPTIONAL, default OFF).
+# Installs OpenJDK 17 + Neo4j Community so the add-on CAN run a local
+# graph DB when the operator sets `neo4j_enabled: true`. The whole block
+# is BEST-EFFORT / non-fatal: if the apt repo or aarch64 package isn't
+# available at build time, the build still succeeds and the add-on ships
+# WITHOUT the sidecar — the ha-agent's graph factory then falls back to
+# its in-process in-memory backend. So this never breaks the build for
+# the (default) users who never enable Neo4j. The s6 neo4j service also
+# checks the option flag + the binary's presence before starting, so a
+# skipped install degrades cleanly to in-memory at runtime too.
+RUN ( \
+        apt-get update \
+        && apt-get install -y --no-install-recommends \
+            gnupg openjdk-17-jre-headless wget \
+        && wget -qO /tmp/neo4j.gpg https://debian.neo4j.com/neotechnology.gpg.key \
+        && gpg --dearmor < /tmp/neo4j.gpg > /usr/share/keyrings/neo4j.gpg \
+        && echo "deb [signed-by=/usr/share/keyrings/neo4j.gpg] https://debian.neo4j.com stable 5" \
+            > /etc/apt/sources.list.d/neo4j.list \
+        && apt-get update \
+        && apt-get install -y --no-install-recommends neo4j \
+        && rm -rf /var/lib/apt/lists/* \
+        && echo "[build] Neo4j sidecar installed" \
+    ) || echo "[build] Neo4j sidecar install SKIPPED — add-on will use in-memory graph"
+
 # s6-overlay service definitions + cont-init scripts.
 # v0.1.11: only ha-agent runs under s6 in this build — the other five
 # services have no runtime daemons yet (in-process Python only), so
 # spinning them under s6 just produces noise. They re-enter when the
 # bus runtime wires up in Epic 10+.
+# Epic 10.2: a `neo4j` s6 service is added; it self-idles unless the
+# add-on option neo4j_enabled=true AND the neo4j binary is present.
 COPY rootfs /
 RUN chmod +x /etc/services.d/*/run /etc/cont-init.d/*
 

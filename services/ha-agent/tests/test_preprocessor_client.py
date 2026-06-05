@@ -102,6 +102,37 @@ async def test_get_frame_window_returns_none_when_unreachable():
     await client.close()
 
 
+# ─── healthz ────────────────────────────────────────────────────────
+
+
+async def test_healthz_true_on_2xx():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/healthz"
+        return httpx.Response(200, json={"status": "ok"})
+
+    client = _client_with_handler(handler)
+    assert (await client.healthz()) is True
+    await client.close()
+
+
+async def test_healthz_false_on_5xx():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="starting")
+
+    client = _client_with_handler(handler)
+    assert (await client.healthz()) is False
+    await client.close()
+
+
+async def test_healthz_false_when_unreachable():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    client = _client_with_handler(handler)
+    assert (await client.healthz()) is False
+    await client.close()
+
+
 # ─── fetch_frame_image ──────────────────────────────────────────────
 
 

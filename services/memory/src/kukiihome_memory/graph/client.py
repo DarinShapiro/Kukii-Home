@@ -75,6 +75,25 @@ class GraphClient(Protocol):
         """Fetch one actor by id. ``None`` if not enrolled."""
         ...
 
+    def find_similar_actors(
+        self, embedding: tuple[float, ...], *, k: int = 3,
+        min_similarity: float = 0.0,
+    ) -> list[tuple[KnownActor, float]]:
+        """Vector-search enrolled actors by face-embedding similarity.
+
+        Returns up to ``k`` ``(actor, cosine_similarity)`` pairs, highest
+        similarity first, filtered to ``>= min_similarity``. This is the
+        identity-resolution read path: given a freshly-observed face
+        embedding, find the closest enrolled KnownActors.
+
+        Neo4j backend uses the native ``actor_face_embedding`` vector
+        index; the in-memory backend brute-forces cosine over enrolled
+        actors (fine at home scale). Actors without an embedding are
+        skipped. Empty list when no actor is enrolled — the caller
+        decides what an empty/low-confidence result means (unknown
+        actor, enrollment prompt, etc.)."""
+        ...
+
     def write_vlm_decision(self, decision: VLMDecision) -> None:
         """Insert or update a VLMDecision node. Idempotent on
         ``decision.id``. Source endpoint for CITED edges."""
@@ -226,6 +245,21 @@ class InMemoryGraphClient:
 
     def read_known_actor(self, actor_id: str) -> KnownActor | None:
         return self._actors.get(actor_id)
+
+    def find_similar_actors(
+        self, embedding: tuple[float, ...], *, k: int = 3,
+        min_similarity: float = 0.0,
+    ) -> list[tuple[KnownActor, float]]:
+        query = tuple(float(x) for x in embedding)
+        scored: list[tuple[KnownActor, float]] = []
+        for actor in self._actors.values():
+            if not actor.face_embedding:
+                continue
+            sim = _cosine_similarity(query, actor.face_embedding)
+            if sim >= min_similarity:
+                scored.append((actor, sim))
+        scored.sort(key=lambda pair: pair[1], reverse=True)
+        return scored[: max(0, k)]
 
     def write_vlm_decision(self, decision: VLMDecision) -> None:
         self._decisions[decision.id] = decision
@@ -451,6 +485,43 @@ class Neo4jGraphClient:
             face_embedding=tuple(emb) if emb else None,
             access_profile=node.get("access_profile", "none"),
         )
+
+    def find_similar_actors(
+        self, embedding: tuple[float, ...], *, k: int = 3,
+        min_similarity: float = 0.0,
+    ) -> list[tuple[KnownActor, float]]:
+        # Native vector index ANN query (Neo4j 5.13+). The index
+        # `actor_face_embedding` is created in initialize_schema with
+        # cosine similarity. queryNodes returns (node, score) ordered by
+        # score desc; we filter by min_similarity + re-wrap as KnownActor.
+        out: list[tuple[KnownActor, float]] = []
+        with self.driver.session() as session:
+            records = session.run(
+                """
+                CALL db.index.vector.queryNodes(
+                    'actor_face_embedding', $k, $vec
+                ) YIELD node, score
+                WHERE score >= $min_sim
+                RETURN node, score
+                """,
+                k=max(1, k),
+                vec=list(embedding),
+                min_sim=min_similarity,
+            )
+            for r in records:
+                node = r["node"]
+                emb = node.get("face_embedding")
+                out.append((
+                    KnownActor(
+                        id=node["id"],
+                        name=node["name"],
+                        role=node["role"],
+                        face_embedding=tuple(emb) if emb else None,
+                        access_profile=node.get("access_profile", "none"),
+                    ),
+                    float(r["score"]),
+                ))
+        return out
 
     def write_vlm_decision(self, decision: VLMDecision) -> None:
         with self.driver.session() as session:
@@ -742,6 +813,23 @@ def _decode_dict(s: str | None) -> dict[str, str]:
             k, _, v = part.partition("=")
             out[k] = v
     return out
+
+
+def _cosine_similarity(a: tuple[float, ...], b: tuple[float, ...]) -> float:
+    """Cosine similarity of two equal-length vectors, in ``[-1, 1]``.
+
+    Used by :meth:`InMemoryGraphClient.find_similar_actors` to mirror
+    Neo4j's native ``'cosine'`` vector index so both backends rank
+    identically. Returns 0.0 for a zero-norm or length-mismatched input
+    (degenerate; treated as "no signal" rather than raising)."""
+    if len(a) != len(b) or not a:
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
 
 
 def _node_to_policy(node) -> Policy:

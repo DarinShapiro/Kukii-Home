@@ -236,6 +236,17 @@ class BootState:
     process. Drives the F4 (HA down) probe and backs the /health +
     /diagnostics endpoints (which the HA integration's health card reads).
     Built in main(); its watchdog runs as a background task."""
+    graph_client: Any | None = None
+    """Epic 10.2 (graph DB integration): the memory-graph substrate.
+    InMemoryGraphClient (Phase 1 shadow) or Neo4jGraphClient (Phase 2,
+    when a bolt URL is configured). Events + policies are mirrored here
+    via graph_mirror; /diagnostics reports its backend + node counts.
+    Never None after boot — the factory always returns at least the
+    in-memory backend."""
+    graph_backend: str = "in_memory"
+    """Which graph backend is live: ``"neo4j"`` or ``"in_memory"``.
+    Surfaced in /diagnostics so a Neo4j-configured-but-unreachable
+    fallback is visible to the operator."""
 
 
 _STATUS_PAGE = """<!doctype html>
@@ -2602,6 +2613,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             actions=getattr(boot, "action_store", None),
             areas=getattr(boot, "area_store", None),
             provenance=prov,
+            # Epic 10.2 Phase 1: mirror policy-family commits into the graph.
+            graph_client=getattr(boot, "graph_client", None),
         )
         try:
             gid = commit_guidance(
@@ -3178,6 +3191,8 @@ def _build_app(*, boot: BootState, alert_log: AlertLog, event_store: EventStore)
             ha_loops=list(getattr(boot, "ha_camera_loops", []) or []),
             alerts=alert_log.recent(500),
             now_ts=_time.time(),
+            graph_client=getattr(boot, "graph_client", None),
+            graph_backend=getattr(boot, "graph_backend", "in_memory"),
         )
         return _shell_response(request, "diagnostics", render_diagnostics_page(vm))
 
@@ -3635,6 +3650,19 @@ async def _run() -> None:
     # Iter 3 (Part IX §30): retention policy + admin audit log.
     from kukiihome_ha_agent.retention_store import RetentionStore
     boot.retention_store = RetentionStore(path="/data/kukiihome/retention.db")
+    # Epic 10.2 (graph DB integration, Phase 1+2): memory-graph substrate.
+    # In-memory shadow by default; connects to a Neo4j sidecar / bolt URL
+    # when KUKIIHOME_NEO4J_URL is set. The factory ALWAYS returns a usable
+    # client — a Neo4j misconfig falls back to in-memory so boot never
+    # fails because of the graph. Events + policies are mirrored into it
+    # (see graph_mirror); /diagnostics reports the backend + node counts.
+    from kukiihome_ha_agent.graph_runtime import make_graph_client
+    boot.graph_client, boot.graph_backend = make_graph_client(
+        neo4j_url=os.environ.get("KUKIIHOME_NEO4J_URL", ""),
+        neo4j_user=os.environ.get("KUKIIHOME_NEO4J_USER", "neo4j"),
+        neo4j_password=os.environ.get("KUKIIHOME_NEO4J_PASSWORD", ""),
+    )
+    logger.info("graph.substrate.ready", backend=boot.graph_backend)
     # Iter 3 (Part X §35): LLM-backed conversational dispatcher. Reads
     # endpoint config from env (KUKIIHOME_LLM_URL / _API_KEY / _MODEL).
     # When unconfigured, dispatcher = HeuristicDispatcherProvider directly
@@ -3685,6 +3713,15 @@ async def _run() -> None:
     event_store = EventStore(root=Path("/data/kukiihome/events"))
     alert_log.add_on_record(event_store.record_from_alert)
     boot.event_store = event_store
+
+    # Epic 10.2 Phase 1: mirror every fired alert into the memory graph as
+    # an Event node, alongside the EventStore write. Fire-and-forget — the
+    # mirror swallows its own errors so a graph hiccup can't break alert
+    # recording (the SQLite/EventStore path stays authoritative).
+    from kukiihome_ha_agent.graph_mirror import mirror_event_from_alert
+    alert_log.add_on_record(
+        lambda a: mirror_event_from_alert(boot.graph_client, a)
+    )
 
     # Epic 10.9: enrich alerts with preprocessor recognition. When a
     # preprocessor URL is configured, every recorded alert triggers an

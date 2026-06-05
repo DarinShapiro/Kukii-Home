@@ -70,6 +70,25 @@ class ReasonerStats:
 
 
 @dataclass
+class GraphSubstrateSnapshot:
+    """Epic 10.2: memory-graph substrate health + node counts.
+
+    ``backend`` is ``"neo4j"`` (durable sidecar / bolt URL) or
+    ``"in_memory"`` (Phase 1 shadow / Neo4j-unavailable fallback).
+    Counts let the operator watch the graph fill from real traffic
+    and confirm the dual-write seam is live."""
+
+    backend: str = "in_memory"
+    events: int = 0
+    policies: int = 0
+    actors: int = 0
+    vlm_decisions: int = 0
+    available: bool = True
+    """False only if even the count queries errored — surfaces a broken
+    substrate rather than silently showing zeros."""
+
+
+@dataclass
 class DiagnosticsViewModel:
     version: str
     preprocessor_ok: bool | None
@@ -80,6 +99,7 @@ class DiagnosticsViewModel:
     cameras: list[CameraHealthRow] = field(default_factory=list)
     action_runtime: ActionRuntimeStats = field(default_factory=ActionRuntimeStats)
     reasoner: ReasonerStats = field(default_factory=ReasonerStats)
+    graph: GraphSubstrateSnapshot = field(default_factory=GraphSubstrateSnapshot)
     now_ts: float | None = None
     legacy_status_url: str = "/"
 
@@ -135,6 +155,35 @@ def _stores_section(stores: StoresSnapshot) -> str:
         f"<b>{stores.policies_dismissals}</b> dismissals · "
         f"<b>{stores.policies_transient_intents}</b> transient intents"
         "</td></tr>"
+        "</tbody></table>"
+        "</section>"
+    )
+
+
+def _graph_section(g: GraphSubstrateSnapshot) -> str:
+    """Memory-graph substrate panel (Epic 10.2). Shows which backend is
+    live + the node counts so the dual-write seam is observable."""
+    if g.backend == "neo4j":
+        backend_chip = "<span class='chip cam-state ok'>Neo4j</span>"
+        backend_note = "<span class='muted'>durable + vector index</span>"
+    else:
+        backend_chip = "<span class='chip cam-state muted'>in-memory</span>"
+        backend_note = (
+            "<span class='muted'>shadow (non-persistent) — set "
+            "<code>KUKIIHOME_NEO4J_URL</code> for the durable sidecar"
+            "</span>"
+        )
+    if not g.available:
+        backend_chip = "<span class='chip cam-state bad'>error</span>"
+    return (
+        "<section class='card'>"
+        "<h2>Memory graph</h2>"
+        f"<div class='cam-row'><b>Backend:</b> {backend_chip} {backend_note}</div>"
+        "<table class='matrix-table'><tbody>"
+        f"<tr><td>Events</td><td><b>{g.events}</b></td></tr>"
+        f"<tr><td>Policies</td><td><b>{g.policies}</b></td></tr>"
+        f"<tr><td>Known actors</td><td><b>{g.actors}</b></td></tr>"
+        f"<tr><td>VLM decisions</td><td><b>{g.vlm_decisions}</b></td></tr>"
         "</tbody></table>"
         "</section>"
     )
@@ -238,6 +287,7 @@ def render_diagnostics_page(vm: DiagnosticsViewModel) -> str:
         "stream + roll-ups across stores + the dev loop dashboard.</div>"
         + _system_section(vm)
         + _stores_section(vm.stores)
+        + _graph_section(vm.graph)
         + _cameras_section(vm.cameras)
         + _action_runtime_section(vm.action_runtime)
         + _reasoner_section(vm.reasoner, now_ts=vm.now_ts)
@@ -263,6 +313,8 @@ def build_diagnostics_vm(
     ha_loops: list[Any],
     alerts: list[dict],
     now_ts: float,
+    graph_client: Any | None = None,
+    graph_backend: str = "in_memory",
 ) -> DiagnosticsViewModel:
     """Wires the live store contents into the view model. Each store is
     optional so older boot paths and tests can pass None."""
@@ -322,6 +374,19 @@ def build_diagnostics_vm(
             # Each store read is best-effort — a broken store shouldn't
             # blank the whole diagnostics page.
             _LOG.debug("diagnostics.store_read_failed", error=str(e))
+
+    # Graph substrate snapshot (Epic 10.2). All counts best-effort —
+    # a graph hiccup must not blank the diagnostics page.
+    graph = GraphSubstrateSnapshot(backend=graph_backend)
+    if graph_client is not None:
+        try:
+            graph.events = graph_client.count_events()
+            graph.policies = graph_client.count_policies()
+            graph.vlm_decisions = graph_client.count_vlm_decisions()
+            graph.actors = len(graph_client.list_all_known_actors())
+        except Exception as e:
+            graph.available = False
+            _LOG.debug("diagnostics.graph_count_failed", error=str(e))
 
     # Camera health rows
     cam_summaries = build_camera_summaries(
@@ -395,5 +460,6 @@ def build_diagnostics_vm(
             decisions_24h=decisions_24h, alerts_24h=alerts_24h,
             dismissed_24h=dismissed_24h, last_decision_ts=last_decision_ts,
         ),
+        graph=graph,
         now_ts=now_ts,
     )

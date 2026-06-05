@@ -1,0 +1,70 @@
+#!/usr/bin/with-contenv bash
+# Neo4j sidecar (Epic 10.2 — memory graph, Phase 2).
+#
+# This service runs the bundled Neo4j Community DB IN-CONTAINER, next to
+# the ha-agent, when the operator opts in via the add-on option
+# `neo4j_enabled: true`. The ha-agent connects at bolt://localhost:7687
+# and mirrors events + policies into it (durable, with a native vector
+# index for identity search).
+#
+# THREE layers of safety so this can never destabilize the add-on:
+#   1. Disabled by default — idles (sleep infinity) unless opted in, so
+#      s6 doesn't restart-loop an unwanted process.
+#   2. Binary-presence guard — if the best-effort build install was
+#      skipped, idles too. The ha-agent then uses its in-memory graph.
+#   3. The ha-agent's graph factory independently falls back to in-memory
+#      if it can't reach bolt, so even a crashing Neo4j won't break boot.
+set -u
+
+OPTIONS_FILE="/data/options.json"
+ENABLED="$(jq -r '.neo4j_enabled // false' "$OPTIONS_FILE" 2>/dev/null || echo false)"
+
+if [ "$ENABLED" != "true" ]; then
+    echo "[neo4j] disabled (neo4j_enabled=false) — idling; agent uses in-memory graph"
+    exec sleep infinity
+fi
+
+if ! command -v neo4j >/dev/null 2>&1; then
+    echo "[neo4j] binary not installed (build install skipped) — idling; agent uses in-memory graph"
+    exec sleep infinity
+fi
+
+# Persist under /data (the Supervisor volume) so the graph survives
+# add-on restarts + updates.
+NEO4J_HOME_DATA=/data/kukiihome/neo4j
+mkdir -p "${NEO4J_HOME_DATA}/data" "${NEO4J_HOME_DATA}/logs"
+
+# Apply our config to neo4j.conf ONCE, guarded by a marker so repeated
+# restarts don't append duplicate keys. Bolt + HTTP bind to localhost —
+# the sidecar only ever talks to the in-container agent, never the LAN.
+CONF=/etc/neo4j/neo4j.conf
+MARKER="# kukiihome-managed"
+if [ -f "$CONF" ] && ! grep -q "$MARKER" "$CONF"; then
+    {
+        echo ""
+        echo "$MARKER — appended by the Kukii-Home neo4j s6 service"
+        echo "server.directories.data=${NEO4J_HOME_DATA}/data"
+        echo "server.directories.logs=${NEO4J_HOME_DATA}/logs"
+        echo "server.default_listen_address=localhost"
+        echo "server.bolt.listen_address=localhost:7687"
+        echo "server.http.listen_address=localhost:7474"
+        # Home scale; keep the JVM heap modest so it co-exists with the
+        # ha-agent on a Pi CM5. Tune up if the optimizer moves Neo4j to a
+        # bigger host later.
+        echo "server.memory.heap.initial_size=256m"
+        echo "server.memory.heap.max_size=512m"
+        echo "server.memory.pagecache.size=256m"
+    } >> "$CONF"
+    echo "[neo4j] wrote kukiihome config to ${CONF}"
+fi
+
+# Set the initial admin password on first run (idempotent — Neo4j refuses
+# + we swallow the error if it's already set). Bootstrap exported
+# NEO4J_INITIAL_PASSWORD from the add-on option.
+if [ -n "${NEO4J_INITIAL_PASSWORD:-}" ]; then
+    neo4j-admin dbms set-initial-password "${NEO4J_INITIAL_PASSWORD}" >/dev/null 2>&1 \
+        || echo "[neo4j] initial password already set (ok)"
+fi
+
+echo "[neo4j] starting console (bolt://localhost:7687, data=${NEO4J_HOME_DATA})"
+exec neo4j console

@@ -57,6 +57,11 @@ class GuidanceStores:
     actions: ActionStore | None = None
     areas: AreaStore | None = None
     provenance: ProvenanceStore | None = None
+    graph_client: Any | None = None
+    """Epic 10.2 Phase 1: when set, policy-family commits are mirrored
+    into the memory graph as Policy nodes (fire-and-forget). None in
+    builds without the graph substrate wired — commit proceeds normally,
+    no mirror."""
 
 
 # ─── The write surface ─────────────────────────────────────────────
@@ -161,6 +166,18 @@ def commit_guidance(
         placement_reasoning=proposal.reasoning,
         user_confirmed_at=now,
     ))
+    # Epic 10.2 Phase 1: mirror policy-family commits into the memory
+    # graph as Policy nodes. Read the freshly-committed policy back from
+    # the SQLite store (it now has its assigned id) and translate. The
+    # mirror swallows its own errors — a graph failure never undoes the
+    # authoritative SQLite commit we just made.
+    if (
+        stores.graph_client is not None
+        and stores.policies is not None
+        and sc in ("transient_intent", "dismissal_policy", "situational_context")
+    ):
+        from kukiihome_ha_agent.graph_mirror import mirror_policy
+        mirror_policy(stores.graph_client, stores.policies.get(guidance_id))
     logger.info(
         "guidance.committed",
         storage_class=sc, guidance_id=guidance_id, origin=origin,

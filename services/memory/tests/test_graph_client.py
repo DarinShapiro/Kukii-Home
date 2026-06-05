@@ -130,6 +130,59 @@ def test_known_actor_without_embedding(graph_client: GraphClient):
     assert fetched.face_embedding is None
 
 
+# ─── Vector search (Epic 10.2 identity-resolution read path) ──────────
+
+
+def _unit_embedding(axis: int, dims: int = 128) -> tuple[float, ...]:
+    """A 128-d one-hot-ish unit vector along ``axis`` — matches the
+    vector index's configured dimensionality so both backends accept it."""
+    return tuple(1.0 if i == axis else 0.0 for i in range(dims))
+
+
+def test_find_similar_actors_ranks_closest_first(graph_client: GraphClient):
+    """Both backends rank enrolled actors by cosine similarity to the
+    query embedding — the in-memory brute force must agree with Neo4j's
+    native vector index."""
+    graph_client.write_known_actor(KnownActor(
+        id="actor_alice", name="Alice", role="resident",
+        face_embedding=_unit_embedding(0),
+    ))
+    graph_client.write_known_actor(KnownActor(
+        id="actor_bob", name="Bob", role="resident",
+        face_embedding=_unit_embedding(7),
+    ))
+    # Query close to Alice's axis.
+    query = tuple(
+        0.95 if i == 0 else (0.05 if i == 1 else 0.0) for i in range(128)
+    )
+    results = graph_client.find_similar_actors(query, k=2)
+    assert len(results) >= 1
+    assert results[0][0].id == "actor_alice"
+    # Score descending.
+    scores = [s for _, s in results]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_find_similar_actors_skips_unenrolled(graph_client: GraphClient):
+    """Actors without an embedding are never returned (Neo4j's vector
+    index simply doesn't index them; in-memory skips them explicitly)."""
+    graph_client.write_known_actor(KnownActor(
+        id="actor_has_emb", name="Has", role="resident",
+        face_embedding=_unit_embedding(3),
+    ))
+    graph_client.write_known_actor(KnownActor(
+        id="actor_no_emb", name="None", role="visitor", face_embedding=None,
+    ))
+    results = graph_client.find_similar_actors(_unit_embedding(3), k=5)
+    ids = {a.id for a, _ in results}
+    assert "actor_no_emb" not in ids
+    assert "actor_has_emb" in ids
+
+
+def test_find_similar_actors_empty_graph_returns_empty(graph_client: GraphClient):
+    assert graph_client.find_similar_actors(_unit_embedding(0), k=3) == []
+
+
 # ─── Citation edges ───────────────────────────────────────────────────
 
 

@@ -6,6 +6,21 @@
 
 ---
 
+## Status (2026-06-05): graph substrate wired into the add-on (Epic 10.2, Phase 1+2)
+
+The graph substrate is now **integrated into the running add-on**, not just the test harness. What actually ships:
+
+- **Storage strategy reconciled with reality.** The Epic-10 plan below assumed a docker-compose world (Postgres OLTP + Neo4j memory). The add-on instead ships as a **single HA container on SQLite**. The shipped reconciliation: **SQLite stays for OLTP/CRUD** (rules, areas, preferences, policies, provenance, retention) and the **graph is additive** for the genuinely relationship-/vector-shaped data (events, policies, and — as enrollment data lands — actors + citations). Postgres is not used; the "Postgres OLTP" row below is aspirational, not current.
+- **Two interchangeable backends behind one Protocol** (`kukiihome_memory.graph`): `InMemoryGraphClient` (Phase 1 default — process-local, non-persistent) and `Neo4jGraphClient` (Phase 2 — a Neo4j Community **sidecar**, an s6 process inside the add-on container persisting to `/data/kukiihome/neo4j`). Selected by `make_graph_client` from the `neo4j_enabled` / `KUKIIHOME_NEO4J_URL` options. **A Neo4j misconfig/outage falls back to in-memory — boot never fails because of the graph.**
+- **Dual-write seam is live.** Every fired alert mirrors to an `Event` node; every committed dismissal / transient-intent mirrors to a `Policy` node (fire-and-forget; the SQLite write stays authoritative). `/diagnostics` shows the live backend + node counts.
+- **Vector search wired** (`find_similar_actors`) on both backends — Neo4j's native cosine vector index + an in-memory brute-force that ranks identically. This is the identity-resolution read path; it returns empty until actors are enrolled with face embeddings (gated on the inference box / preprocessor).
+- **Sidecar placement is a config URL, not a constant** — `neo4j_url` defaults to `bolt://localhost:7687` (the bundled sidecar) but a future placement optimizer can repoint it at the inference box from runtime telemetry without code changes.
+- **Still gated on the inference box:** the Hebbian edge dynamics (CITED-edge reinforcement/decay) need VLM citations as their data source, and the VLM/inference box isn't running yet. The decay/habituation math (`dynamics.py`) + graph semantics are validated in the 105-test harness; wiring them to live citations is Phase 3.
+
+The Epic-10 status note below remains the canonical design intent for the node/edge taxonomy; the rows about Postgres + Qdrant describe the original plan, not the shipped single-container add-on.
+
+---
+
 ## Status (2026-05-27): Neo4j hybrid graph + vector substrate (Epic 10)
 
 Epic 10 (`planning/epics/10-identity-recognition.md`) locks in **Neo4j 5.x as the single hybrid graph + vector store** for all memory layers below. This replaces the "SQL + vector DB" split that was sketched in this doc. Postgres demotes to OLTP-only (HA config, alert log, audit log, structured outputs); Qdrant retires.

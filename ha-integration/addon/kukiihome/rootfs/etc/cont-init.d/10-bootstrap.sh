@@ -42,6 +42,32 @@ else
     echo "[bootstrap] LLM dispatcher: not configured (heuristic-only)"
 fi
 
+# Epic 10.2: memory graph (Neo4j sidecar). Only export KUKIIHOME_NEO4J_URL
+# when neo4j_enabled is true — an empty URL makes the agent's graph factory
+# use the in-process in-memory backend (the dual-write seam still runs,
+# just non-persistent). When enabled, the s6 neo4j service starts the
+# bundled sidecar and the agent connects at neo4j_url. The agent falls
+# back to in-memory if the sidecar isn't reachable, so this never blocks
+# boot. We never log the password value — only whether the graph is on.
+NEO4J_ENABLED="$(jq -r '.neo4j_enabled // false' "$OPTIONS_FILE")"
+NEO4J_URL="$(jq -r '.neo4j_url // "bolt://localhost:7687"' "$OPTIONS_FILE")"
+NEO4J_USER="$(jq -r '.neo4j_user // "neo4j"' "$OPTIONS_FILE")"
+NEO4J_PASSWORD="$(jq -r '.neo4j_password // "kukiihome"' "$OPTIONS_FILE")"
+if [ "$NEO4J_ENABLED" = "true" ]; then
+    echo "$NEO4J_URL"      > /var/run/s6/container_environment/KUKIIHOME_NEO4J_URL
+    echo "$NEO4J_USER"     > /var/run/s6/container_environment/KUKIIHOME_NEO4J_USER
+    echo "$NEO4J_PASSWORD" > /var/run/s6/container_environment/KUKIIHOME_NEO4J_PASSWORD
+    # The neo4j s6 service reads these to set the initial admin password +
+    # data dir. Written regardless of the agent-side vars above.
+    echo "$NEO4J_PASSWORD" > /var/run/s6/container_environment/NEO4J_INITIAL_PASSWORD
+    echo "[bootstrap] memory graph: Neo4j sidecar ENABLED (${NEO4J_URL}, password=set)"
+else
+    # Empty URL -> agent uses in-memory graph. Explicitly clear it so a
+    # stale value from a prior run can't leak in.
+    echo "" > /var/run/s6/container_environment/KUKIIHOME_NEO4J_URL
+    echo "[bootstrap] memory graph: in-memory (Neo4j sidecar disabled)"
+fi
+
 # When Supervisor injects a token, expose it under both the HA_TOKEN and
 # SUPERVISOR_TOKEN names so the topology loader and the ha-agent both
 # pick it up regardless of which one they look for.

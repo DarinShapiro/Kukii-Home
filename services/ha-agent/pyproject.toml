@@ -22,6 +22,14 @@ dependencies = [
     # Services. Removes the manual host/port entry from the install
     # flow. Tiny pure-Python dep (~150KB), aarch64-friendly.
     "zeroconf>=0.130.0",
+    # Epic 10.2 (graph DB integration Phase 1+2) — the add-on mirrors
+    # events + policies into the memory graph and (when a Neo4j sidecar /
+    # bolt URL is configured) reads them back. We depend on the
+    # kukiihome-memory package for its graph layer ONLY; its __init__
+    # guards the heavy SQL/Qdrant imports so this pulls in just the neo4j
+    # driver, not sqlalchemy/asyncpg/qdrant. (Fast-follow: split those
+    # into an optional `sql` extra so they're not even resolved here.)
+    "kukiihome-memory",
 ]
 
 [project.scripts]

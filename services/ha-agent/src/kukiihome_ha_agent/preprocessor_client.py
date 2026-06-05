@@ -54,6 +54,21 @@ class PreprocessorClient:
     async def close(self) -> None:
         await self._http.aclose()
 
+    async def healthz(self) -> bool:
+        """Fast liveness probe against the preprocessor's ``GET /healthz``.
+
+        Returns True only on a 2xx response, False on any error / non-2xx.
+        The /home + /diagnostics pages call this to render the preprocessor
+        reachability chip. (Previously this method was missing entirely,
+        so both pages logged an AttributeError + always showed the
+        preprocessor as unknown/down.)"""
+        try:
+            resp = await self._http.get(f"{self._base}/healthz")
+        except httpx.HTTPError as e:
+            logger.info("preprocessor_client.healthz_unreachable", error=str(e))
+            return False
+        return 200 <= resp.status_code < 300
+
     async def get_frame_window(
         self,
         *,
