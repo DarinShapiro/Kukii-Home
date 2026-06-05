@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.11](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.10...v0.26.11) (2026-06-05)
+
+
+### Bug Fixes
+
+* **web-ui:** alert page images/forms 404 under depth-aware base href ([f40e6e0](https://github.com/DarinShapiro/Kukii-Home/commit/f40e6e05bc80eb3f40155698e4fc96489ffd1405))
+
 ## [0.26.10](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.9...v0.26.10) (2026-06-05)
 
 
