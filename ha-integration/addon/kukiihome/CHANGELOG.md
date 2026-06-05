@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.2](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.1...v0.26.2) (2026-06-05)
+
+
+### Bug Fixes
+
+* **web-ui:** batch UI fixups from user review (depth-aware base href, nav on alert page, identities default, clip fallback, drop activity nav) ([704adee](https://github.com/DarinShapiro/Kukii-Home/commit/704adeef95fd2b2bb6fe3c23c9ee0817c5f53053)), closes [#5](https://github.com/DarinShapiro/Kukii-Home/issues/5) [#6](https://github.com/DarinShapiro/Kukii-Home/issues/6) [#7](https://github.com/DarinShapiro/Kukii-Home/issues/7) [#8](https://github.com/DarinShapiro/Kukii-Home/issues/8) [#3](https://github.com/DarinShapiro/Kukii-Home/issues/3) [#1](https://github.com/DarinShapiro/Kukii-Home/issues/1) [#2](https://github.com/DarinShapiro/Kukii-Home/issues/2) [#4](https://github.com/DarinShapiro/Kukii-Home/issues/4) [#9](https://github.com/DarinShapiro/Kukii-Home/issues/9)
+
 ## [0.26.1](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.0...v0.26.1) (2026-06-05)
 
 
