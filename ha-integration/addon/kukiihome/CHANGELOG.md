@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.3](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.2...v0.26.3) (2026-06-05)
+
+
+### Features
+
+* **memory:** multi-turn dispatcher + tool calling + memory-layer tools (Part X §38, Part IX §26) ([e939505](https://github.com/DarinShapiro/Kukii-Home/commit/e939505d983eacadbdbe3723e79ffca36a6b58db))
+
 ## [0.26.2](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.1...v0.26.2) (2026-06-05)
 
 
