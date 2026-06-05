@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.25.0...v0.26.0) (2026-06-05)
+
+
+### Features
+
+* **addon:** expose LLM endpoint config as add-on options ([f9fc4b0](https://github.com/DarinShapiro/Kukii-Home/commit/f9fc4b042d33eb2727be277e03aace68769b2d53))
+
 ## [0.25.0](https://github.com/DarinShapiro/Kukii-Home/compare/v0.24.0...v0.25.0) (2026-06-04)
 
 
