@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.14](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.13...v0.26.14) (2026-06-06)
+
+
+### Features
+
+* **web-ui:** ✨ button toggles the drawer (open AND close) ([c34d682](https://github.com/DarinShapiro/Kukii-Home/commit/c34d6828d36166cbfcd227fc0ef8cf70f733d71b))
+
 ## [0.26.13](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.12...v0.26.13) (2026-06-06)
 
 
