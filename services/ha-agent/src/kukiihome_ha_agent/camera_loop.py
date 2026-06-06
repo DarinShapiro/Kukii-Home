@@ -18,6 +18,7 @@ For now it's the proof-of-loop demo: "camera in → alert out."
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -267,6 +268,8 @@ class HACameraLoop:
         registry: CameraLoopRegistry,
         cooldown_seconds: float = 30.0,
         snapshot_dir: str = "/data/kukiihome/snapshots",
+        stale_snapshot_retry_delay_s: float = 4.0,
+        stale_snapshot_max_retries: int = 1,
     ) -> None:
         self._camera_id = camera_id
         self._camera_entity = camera_entity
@@ -276,6 +279,17 @@ class HACameraLoop:
         self._alert_log = alert_log
         self._cooldown_seconds = cooldown_seconds
         self._snapshot_dir = snapshot_dir
+        # Cloud cameras (Ring, Nest, …) have NO live RTSP frame — HA's
+        # camera_proxy serves their last *cached* snapshot, which updates
+        # on Ring's schedule / on a motion event a few seconds late. So
+        # consecutive alerts can fetch byte-identical, pre-event stills.
+        # When a fetched snapshot is byte-identical to the previous one we
+        # treat it as stale and retry after a short delay, giving the
+        # cloud time to push the event image. No-op for live cameras
+        # (their frames differ), so it adds zero latency there.
+        self._stale_snapshot_retry_delay_s = stale_snapshot_retry_delay_s
+        self._stale_snapshot_max_retries = stale_snapshot_max_retries
+        self._last_snapshot_hash: str | None = None
         self._status = CameraStreamStatus(camera_id=camera_id, rtsp_url=camera_entity)
         self._status.state = "subscribed"
         registry.register(self._status)
@@ -340,6 +354,64 @@ class HACameraLoop:
             received_at=received_at,
         )
 
+    async def _fetch_snapshot_skipping_stale(self) -> bytes | None:
+        """Fetch a snapshot via camera_proxy, retrying when the returned
+        bytes are byte-identical to the previous snapshot.
+
+        A duplicate means we grabbed a stale cloud-camera still (Ring/Nest
+        serve a cached frame that lags the motion event). We wait
+        ``_stale_snapshot_retry_delay_s`` and re-fetch up to
+        ``_stale_snapshot_max_retries`` times so the cloud can push the
+        event image. Live cameras return distinct frames every time, so
+        they never retry (zero added latency). Returns the freshest bytes
+        obtained — even if still a duplicate on the final attempt — or
+        None on fetch failure.
+        """
+        attempts = max(1, self._stale_snapshot_max_retries + 1)
+        snapshot_bytes: bytes | None = None
+        for attempt in range(attempts):
+            try:
+                snapshot_bytes = await self._client.fetch_camera_snapshot(self._camera_entity)
+                self._status.last_error = ""
+            except Exception as e:
+                err_msg = str(e)
+                logger.warning(
+                    "ha_camera_loop.snapshot_fetch_failed",
+                    camera=self._camera_entity,
+                    error=err_msg,
+                )
+                # Surface the error on the Cameras card so the user sees
+                # the diagnosis directly without checking logs.
+                self._status.last_error = f"snapshot fetch failed: {err_msg[:300]}"
+                return None
+            if snapshot_bytes is None:
+                return None
+            digest = hashlib.sha1(snapshot_bytes, usedforsecurity=False).hexdigest()
+            is_stale = digest == self._last_snapshot_hash
+            last_attempt = attempt == attempts - 1
+            # max_retries is the on/off switch (0 → attempts==1 → never
+            # loops here); delay is just how long to wait, and may be 0.
+            if is_stale and not last_attempt:
+                logger.info(
+                    "ha_camera_loop.stale_snapshot_retry",
+                    camera=self._camera_entity,
+                    attempt=attempt + 1,
+                    delay_s=self._stale_snapshot_retry_delay_s,
+                )
+                await asyncio.sleep(self._stale_snapshot_retry_delay_s)
+                continue
+            self._last_snapshot_hash = digest
+            if is_stale:
+                # Exhausted retries, still identical — likely a cloud cam
+                # without snapshot-on-motion (e.g. no Ring Protect). Note
+                # it so the symptom is explainable from the logs.
+                logger.info(
+                    "ha_camera_loop.snapshot_still_stale",
+                    camera=self._camera_entity,
+                )
+            return snapshot_bytes
+        return snapshot_bytes
+
     async def _capture_and_alert(
         self,
         *,
@@ -360,20 +432,7 @@ class HACameraLoop:
         # v0.3.19: wrap the fetch in timing so we can report
         # snapshot-fetch latency on each alert.
         snapshot_started_at = datetime.now(UTC)
-        snapshot_bytes: bytes | None = None
-        try:
-            snapshot_bytes = await self._client.fetch_camera_snapshot(self._camera_entity)
-            self._status.last_error = ""
-        except Exception as e:
-            err_msg = str(e)
-            logger.warning(
-                "ha_camera_loop.snapshot_fetch_failed",
-                camera=self._camera_entity,
-                error=err_msg,
-            )
-            # Surface the error on the Cameras card so the user sees the
-            # diagnosis directly without checking logs.
-            self._status.last_error = f"snapshot fetch failed: {err_msg[:300]}"
+        snapshot_bytes = await self._fetch_snapshot_skipping_stale()
         snapshot_completed_at = datetime.now(UTC)
 
         if snapshot_bytes is not None:
