@@ -66,6 +66,8 @@ header .drawer-toggle{display:inline-flex;align-items:center;justify-content:cen
   color:#cfd6df;text-decoration:none;font-size:14px;
   transition:background 100ms ease}
 header .drawer-toggle:hover{background:#2a3344;color:#e5edf7}
+/* Active = drawer is open; the ✨ doubles as the close control. */
+header .drawer-toggle.active{background:#5d8aa8;color:#0f1115}
 
 /* ─── content frame ────────────────────────────────────────────── */
 main{padding:18px;max-width:1100px;margin:0 auto}
@@ -486,6 +488,20 @@ def render_shell(
         f"<a class='{'active' if path == active else ''}' href='{path}{drawer_q}'>{_e(label)}</a>"
         for path, label in NAV_ITEMS
     )
+    # The ✨ header button is a TOGGLE: open when closed, close when open.
+    # Both targets are the current page (page_context preserved); the only
+    # difference is the ?drawer=1 signal. When open, it also carries the
+    # `drawer-close` class so the slide-out animation JS intercepts it for
+    # a smooth close (same path as the in-drawer "close" link).
+    toggle_path = _e((request_path or "/memory").lstrip("/")) or "memory"
+    if drawer_open:
+        toggle_href = toggle_path  # drop ?drawer=1 → closes
+        toggle_cls = "drawer-toggle drawer-close active"
+        toggle_title = "Close conversation"
+    else:
+        toggle_href = f"{toggle_path}?drawer=1"  # adds the signal → opens
+        toggle_cls = "drawer-toggle"
+        toggle_title = "Tell me what to watch for"
     flash_html = f"<div class='flash'>{_e(flash)}</div>" if flash else ""
     main_class = "with-drawer" if drawer_html else ""
     base_href = base_href_for_path(request_path) if request_path else "./"
@@ -529,10 +545,14 @@ def render_shell(
         # with base './' on /home went to <root>?drawer=1 (the add-on
         # landing page) not /home?drawer=1. Using the full relative path
         # avoids that entire class of issue.
+        #
+        # Toggle: open when closed, close (smoothly, via the drawer-close
+        # class the animation JS hooks) when open. See the toggle_*
+        # computation above.
         + (
-            "<a class='drawer-toggle' href='"
-            f"{_e((request_path or '/memory').lstrip('/')) or 'memory'}"
-            "?drawer=1' title='Tell me what to watch for'>✨</a>"
+            f"<a class='{toggle_cls}' href='{toggle_href}' "
+            f"title='{toggle_title}' "
+            f"aria-expanded='{'true' if drawer_open else 'false'}'>✨</a>"
         )
         + f"<span class='version'>{_e(version)}</span>"
         "</header>"

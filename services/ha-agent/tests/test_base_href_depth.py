@@ -248,3 +248,72 @@ def test_drawer_trigger_resolves_to_current_page_with_drawer_query():
         _resolve(base3, "areas/pool/edit?drawer=1", "/areas/pool/edit")
         == "/areas/pool/edit?drawer=1"
     )
+
+
+# ─── ✨ toggle: opens when closed, closes when open ───────────────
+
+
+def _toggle_anchor(html_out: str) -> str:
+    """Extract the ✨ drawer-toggle <a> tag from rendered shell HTML."""
+    import re
+
+    m = re.search(r"<a class='drawer-toggle[^>]*>✨</a>", html_out)
+    assert m, "drawer-toggle anchor not found"
+    return m.group(0)
+
+
+def test_toggle_opens_when_drawer_closed():
+    """Closed → the ✨ adds ?drawer=1 (open) and is not a close link."""
+    html_out = render_shell("home", "x", request_path="/home")
+    a = _toggle_anchor(html_out)
+    assert "href='home?drawer=1'" in a
+    assert "drawer-close" not in a
+    assert "aria-expanded='false'" in a
+
+
+def test_toggle_closes_when_drawer_open():
+    """Open → the ✨ drops ?drawer=1 (so it navigates to the bare page =
+    closed) AND carries the drawer-close class so the slide-out animation
+    JS intercepts it. This is what makes one button both open + close."""
+    html_out = render_shell(
+        "home",
+        "x",
+        request_path="/home",
+        drawer_html="<aside class='drawer'>x</aside>",
+    )
+    a = _toggle_anchor(html_out)
+    assert "href='home'" in a  # no ?drawer=1 → closes
+    assert "drawer-close" in a  # animation JS hooks this
+    assert "aria-expanded='true'" in a
+
+
+def test_toggle_close_target_resolves_to_current_page_without_drawer():
+    """Clicking the open ✨ must resolve to the SAME page minus the
+    drawer signal (i.e. closed), at any depth — RFC 3986 §5.3."""
+    # Depth-2 page, drawer open.
+    html_out = render_shell(
+        "cameras",
+        "x",
+        request_path="/cameras/pool",
+        drawer_html="<aside class='drawer'>x</aside>",
+    )
+    a = _toggle_anchor(html_out)
+    assert "href='cameras/pool'" in a
+    base = base_href_for_path("/cameras/pool")
+    assert _resolve(base, "cameras/pool", "/cameras/pool") == "/cameras/pool"
+
+
+def test_toggle_round_trip_open_then_close():
+    """Open from closed → ?drawer=1; then from the open render → bare
+    path. The two states are exact inverses on the same page."""
+    closed = _toggle_anchor(render_shell("memory", "x", request_path="/memory"))
+    assert "href='memory?drawer=1'" in closed
+    opened = _toggle_anchor(
+        render_shell(
+            "memory",
+            "x",
+            request_path="/memory",
+            drawer_html="<aside class='drawer'>x</aside>",
+        )
+    )
+    assert "href='memory'" in opened and "?drawer=1" not in opened
