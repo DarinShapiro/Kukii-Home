@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.13](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.12...v0.26.13) (2026-06-06)
+
+
+### Bug Fixes
+
+* **camera:** retry stale cloud-camera (Ring) snapshots so the alert frame matches the event ([ccff35d](https://github.com/DarinShapiro/Kukii-Home/commit/ccff35d90f384c8b78a3f1fbe8494f0143cbe5dc))
+
 ## [0.26.12](https://github.com/DarinShapiro/Kukii-Home/compare/v0.26.11...v0.26.12) (2026-06-05)
 
 
